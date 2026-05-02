@@ -160,11 +160,16 @@ Bonus shipped beyond the original Week 4 scope:
 This phase is the highest-risk in the project. The computation engine must be correct, well-tested, and configurable.
 
 #### Week 5 — Government contribution tables
-- Migrations + models (all `pas_` prefix; these are NEW tables — the LMS's empty `sm_hr_*` legacy is ignored): `pas_bir_tax_brackets`, `pas_sss_contributions`, `pas_philhealth_contributions`, `pas_pagibig_contributions`.
-- Effective-dating: each row has `effective_from` and `effective_to`. Lookups always pass a date.
-- Admin UI for the `super-admin` role to manage tables (create new effective-dated versions).
-- Seed v1 with rates current as of the project start. Document the source.
-- Unit tests covering boundary values, brackets, and effective-date selection.
+- [x] Migrations + models (all `pas_` prefix). Shipped as a **single unified `pas_statutory_contributions` table** with an `algorithm` discriminator + JSON `rules` payload (instead of 4 PH-specific tables). Future-friendly for additional jurisdictions / contribution types.
+- [x] Effective-dating: each row has `effective_from` and `effective_to`. `scopeForDate()` is the single date-filtering primitive (effective_to exclusive on the day-of-supersession boundary).
+- [x] Admin UI at `/admin/contribution-tables` for the `super-admin` role: list grouped by code, "Add new version" form with algorithm-aware subforms (BIR brackets, SSS bands, PhilHealth percent-with-cap, Pag-IBIG tiered). New version supersedes the prior row's `effective_to` in one transaction. Audit log fires on both rows.
+- [x] Seed v1 with rates current as of the project start. `StatutoryContributionSeeder` covers TRAIN-law BIR brackets (2023+), SSS January 2025 (61 bands), PhilHealth 2024 (5%, ₱10k floor / ₱100k ceiling), Pag-IBIG (HDMF Circular 460, Feb 2024). Sources cited in PHPDoc.
+- [x] Unit tests covering boundary values, brackets, and effective-date selection. **143 new tests this week**: 49 Money VO + 6 model effective-date + 56 strategy boundary tests + 7 seeder smoke tests + 25 admin controller tests.
+
+Bonus (added beyond original scope):
+- **`Money` value object** at `app/ValueObjects/Money.php` — immutable, integer centavos, banker's rounding via `dividedBy`. Foundation for all Phase 2 financial paths.
+- **Strategy pattern** for contribution algorithms (`BracketTable`, `SalaryBand`, `PercentageWithCap`, `TieredPercentage`) + `StatutoryContributionResolver`. Week 6's computation engine plugs in here.
+- **`auth.user.roles` shared Inertia data** + role-gated sidebar nav (resolves the prior backlog item from Phase 1).
 
 #### Week 6 — Computation engine
 - `PayrollComputationService` and underlying actions:

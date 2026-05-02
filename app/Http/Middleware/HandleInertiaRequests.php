@@ -35,11 +35,20 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                // Merge Spatie role names onto the standard auth.user payload so
+                // the React side can role-gate UI affordances (e.g. the Admin
+                // sidebar group). The user model is sent as-is otherwise; only
+                // adding `roles` keeps every existing page unchanged.
+                'user' => $user === null ? null : array_merge(
+                    $user->toArray(),
+                    ['roles' => $user->getRoleNames()->all()],
+                ),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

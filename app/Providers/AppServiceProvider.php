@@ -4,7 +4,14 @@ namespace App\Providers;
 
 use App\Listeners\AssignPayrollRoleOnLogin;
 use App\Models\Pas\EmployeeProfile;
+use App\Models\Pas\StatutoryContribution;
 use App\Policies\Pas\EmployeeProfilePolicy;
+use App\Policies\Pas\StatutoryContributionPolicy;
+use App\Services\Statutory\StatutoryContributionResolver;
+use App\Services\Statutory\Strategies\BracketTableStrategy;
+use App\Services\Statutory\Strategies\PercentageWithCapStrategy;
+use App\Services\Statutory\Strategies\SalaryBandStrategy;
+use App\Services\Statutory\Strategies\TieredPercentageStrategy;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Date;
@@ -21,7 +28,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(
+            StatutoryContributionResolver::class,
+            fn (): StatutoryContributionResolver => new StatutoryContributionResolver([
+                StatutoryContribution::ALGORITHM_BRACKET_TABLE => new BracketTableStrategy,
+                StatutoryContribution::ALGORITHM_SALARY_BAND => new SalaryBandStrategy,
+                StatutoryContribution::ALGORITHM_PERCENTAGE_WITH_CAP => new PercentageWithCapStrategy,
+                StatutoryContribution::ALGORITHM_TIERED_PERCENTAGE => new TieredPercentageStrategy,
+            ]),
+        );
     }
 
     /**
@@ -43,6 +58,7 @@ class AppServiceProvider extends ServiceProvider
     protected function registerPolicies(): void
     {
         Gate::policy(EmployeeProfile::class, EmployeeProfilePolicy::class);
+        Gate::policy(StatutoryContribution::class, StatutoryContributionPolicy::class);
     }
 
     /**

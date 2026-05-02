@@ -25,7 +25,14 @@
       "Bash(npx shadcn@latest add calendar popover --yes)",
       "Bash(npx shadcn@latest add calendar popover --yes --overwrite=false)",
       "Bash(npx shadcn@latest add calendar popover)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git push *)",
+      "Bash(git commit *)",
+      "Bash(vendor/bin/pint *)",
+      "Bash(grep -oE '\"error_details\":\\\\[.{0,500}' /Users/jdev/.claude/projects/-Users-jdev-www-laravel-payroll-payroll-system/ed0a1da5-ed05-45cf-8463-e6f0ac3290fa/tool-results/bwin3owzd.txt)",
+      "Bash(vendor/bin/phpstan analyse *)",
+      "Bash(php *)",
+      "Bash(git stash *)"
     ]
   }
 }
