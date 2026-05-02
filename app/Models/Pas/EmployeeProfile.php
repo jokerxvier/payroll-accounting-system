@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models\Pas;
 
+use App\Concerns\Auditable;
 use App\Models\Lms\Staff;
+use Database\Factories\EmployeeProfileFactory;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -24,11 +27,22 @@ use Illuminate\Database\Eloquent\Model;
  */
 final class EmployeeProfile extends Model
 {
+    use Auditable;
     use HasFactory;
 
     public const EMPLOYMENT_CLASSIFICATIONS = ['regular', 'probationary', 'contractual', 'part_time'];
 
     protected $table = 'pas_employee_profiles';
+
+    /**
+     * The factory lives at Database\Factories\EmployeeProfileFactory, which
+     * does not match Laravel's default resolver path for a model under the
+     * App\Models\Pas namespace. Explicitly point HasFactory at it.
+     */
+    protected static function newFactory(): Factory
+    {
+        return EmployeeProfileFactory::new();
+    }
 
     /**
      * @return list<array{value: string, label: string}>

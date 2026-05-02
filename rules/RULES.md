@@ -58,7 +58,8 @@ Non-negotiable rules that apply to ALL UI work.
 
 - WCAG AA contrast minimum (4.5:1 for body text). Tokens in `app.css` are pre-verified — don't introduce off-token combinations.
 - Touch targets: minimum `h-9` (36px) for all interactive elements.
-- Tables use semantic `<TableHeader>` / `<TableHead>`. Sortable columns get `aria-sort`.
+- Tables use the project `<DataTable>` component (`resources/js/components/ui/data-table.tsx`), which wraps the shadcn data-table pattern (https://ui.shadcn.com/docs/components/data-table) over `Table` primitives. Do not import from `@/components/ui/table` on a page — that primitive is for composition by `<DataTable>` only. Define columns with `ColumnDef<T>` and let the wrapper handle pagination, sort, and filter state.
+- The `<DataTable>` wrapper guarantees semantic `<thead>` / `<th>` markup and emits `aria-sort` on sortable columns. Pages do not manage these attributes directly.
 - Keyboard handling comes from shadcn primitives (Radix under the hood) — do not override.
 - Every `<Input>`, `<Textarea>`, `<Select>` is paired with a `<Label htmlFor>`.
 - Every `Dialog` and `Sheet` has a `<DialogTitle>` / `<SheetTitle>` (use `<VisuallyHidden>` if not visually shown).
@@ -402,16 +403,17 @@ DO NOT use for: payroll gross/net totals, invoice totals, account balances (alwa
 
 ### Table Money Cells — Always
 
-1. Right-align the column: `<TableCell className="text-right">`
-2. Right-align the header: `<TableHead className="text-right">`
-3. Wrap value in `<Money>`
+1. Set `meta: { align: 'right' }` on the column — `<DataTable>` propagates this to both `<TableHead>` and `<TableCell>` as `text-right tabular-nums`.
+2. Render the value via `<Money>` in `cell`.
 
 ```tsx
-<TableHead className="text-right">Amount</TableHead>
-...
-<TableCell className="text-right">
-  <Money amount={row.amount} />
-</TableCell>
+// Column definition — alignment is declared once via meta.align
+const amountColumn: ColumnDef<PayrollLine> = {
+  accessorKey: 'amount_centavos',
+  header: 'Amount',
+  meta: { align: 'right' },
+  cell: ({ row }) => <Money amount={row.original.amount_centavos / 100} />,
+};
 ```
 
 ### Ledger / Journal Tables
@@ -419,17 +421,42 @@ DO NOT use for: payroll gross/net totals, invoice totals, account balances (alwa
 Two-column money layout — `Debit` and `Credit`, both right-aligned, only one populated per row.
 
 ```tsx
-<TableRow>
-  <TableCell className="font-mono text-xs">{entry.account_code}</TableCell>
-  <TableCell>{entry.account_name}</TableCell>
-  <TableCell>{entry.memo}</TableCell>
-  <TableCell className="text-right">
-    {entry.debit > 0 ? <Money amount={entry.debit} /> : null}
-  </TableCell>
-  <TableCell className="text-right">
-    {entry.credit > 0 ? <Money amount={entry.credit} /> : null}
-  </TableCell>
-</TableRow>
+const ledgerColumns: ColumnDef<JournalLine>[] = [
+  {
+    accessorKey: 'account_code',
+    header: 'Code',
+    cell: ({ row }) => (
+      <span className="font-mono text-xs">{row.original.account_code}</span>
+    ),
+  },
+  { accessorKey: 'account_name', header: 'Account' },
+  { accessorKey: 'memo', header: 'Memo' },
+  {
+    accessorKey: 'debit_centavos',
+    header: 'Debit',
+    meta: { align: 'right' },
+    cell: ({ row }) =>
+      row.original.debit_centavos > 0 ? (
+        <Money amount={row.original.debit_centavos / 100} />
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
+    accessorKey: 'credit_centavos',
+    header: 'Credit',
+    meta: { align: 'right' },
+    cell: ({ row }) =>
+      row.original.credit_centavos > 0 ? (
+        <Money amount={row.original.credit_centavos / 100} />
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+];
+
+// Use the compact density for ledger/journal layouts:
+<DataTable columns={ledgerColumns} data={lines} density="compact" … />
 ```
 
 Account codes always use `font-mono text-xs`.
@@ -835,87 +862,91 @@ Bridge Inertia flash messages → sonner via a single `<FlashListener />` mounte
 
 ### Tables
 
-Standard table conventions:
+All tables route through the project `<DataTable>` component. Define columns
+once with `ColumnDef<T>` and let the wrapper own pagination, sort, filter, and
+empty-state rendering. Pages do not import shadcn `Table` primitives directly.
 
 ```tsx
-<Table>
-  <TableHeader>
-    <TableRow>
-      <TableHead>Account</TableHead>
-      <TableHead>Memo</TableHead>
-      <TableHead className="text-right">Amount</TableHead>
-      <TableHead className="w-12 text-right">{/* actions */}</TableHead>
-    </TableRow>
-  </TableHeader>
-  <TableBody>
-    {rows.length === 0 ? (
-      <TableRow>
-        <TableCell colSpan={4} className="text-center text-muted-foreground py-12">
-          No entries yet
-        </TableCell>
-      </TableRow>
-    ) : (
-      rows.map((row) => (
-        <TableRow
-          key={row.id}
-          className="cursor-pointer"
-          onClick={() => router.visit(route('entries.show', row.id))}
-        >
-          <TableCell className="font-mono text-xs">{row.account_code}</TableCell>
-          <TableCell>{row.memo}</TableCell>
-          <TableCell className="text-right">
-            <Money amount={row.amount} />
-          </TableCell>
-          <TableCell className="text-right">
-            <RowActions entry={row} />
-          </TableCell>
-        </TableRow>
-      ))
-    )}
-  </TableBody>
-</Table>
+import { DataTable } from '@/components/ui/data-table';
+import { DataTableColumnHeader } from '@/components/ui/data-table-column-header';
+import { Money } from '@/components/money';
+import type { ColumnDef } from '@tanstack/react-table';
+
+const columns: ColumnDef<JournalEntry>[] = [
+  {
+    accessorKey: 'account_code',
+    header: 'Account',
+    cell: ({ row }) => (
+      <span className="font-mono text-xs">{row.original.account_code}</span>
+    ),
+  },
+  { accessorKey: 'memo', header: 'Memo' },
+  {
+    accessorKey: 'amount_centavos',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" />,
+    enableSorting: true,
+    meta: { align: 'right' },
+    cell: ({ row }) => <Money amount={row.original.amount_centavos / 100} />,
+  },
+  {
+    id: 'actions',
+    meta: { align: 'right', className: 'w-12' },
+    cell: ({ row }) => <RowActions entry={row.original} />,
+  },
+];
+
+<DataTable
+  columns={columns}
+  data={entries.data}
+  paginator={entries}
+  sort={sort}
+  onPageChange={(page) => apply({ page })}
+  onSortChange={(s) => apply({ sort_by: s?.id, sort_dir: s?.desc ? 'desc' : 'asc' })}
+  empty={{ icon: FileText, title: 'No entries yet', description: 'Post a journal entry to get started.' }}
+  onRowClick={(row) => router.visit(route('entries.show', row.id))}
+/>
 ```
 
 #### Sortable headers
 
-Render the header as a ghost button with a trailing chevron:
-
-```tsx
-<Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => onSort('amount')}>
-  Amount
-  <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
-</Button>
-```
+Opt a column into sort with `enableSorting: true` and render its header via
+`<DataTableColumnHeader column={column} title="…" />`. The wrapper emits
+`aria-sort` and the chevron, and propagates state up through `onSortChange`.
 
 #### Row actions
 
-Use a `<DropdownMenu>` triggered by an icon button:
+Same `<DropdownMenu>` + icon-button trigger as before — placed inside the
+column's `cell:` renderer. Wrap the dropdown in a `<span onClick={(e) => e.stopPropagation()}>`
+so a clickable row (`onRowClick`) doesn't fire when the menu is opened.
 
 ```tsx
-<DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="ghost" size="icon">
-      <MoreHorizontal className="h-4 w-4" />
-    </Button>
-  </DropdownMenuTrigger>
-  <DropdownMenuContent align="end">
-    <DropdownMenuItem asChild>
-      <Link href={route('entries.edit', row.id)}>Edit</Link>
-    </DropdownMenuItem>
-    <DropdownMenuSeparator />
-    <DropdownMenuItem className="text-destructive" onClick={() => setVoidId(row.id)}>
-      Void
-    </DropdownMenuItem>
-  </DropdownMenuContent>
-</DropdownMenu>
-```
-
-Stop event propagation if the row itself is clickable:
-
-```tsx
-<TableCell onClick={(e) => e.stopPropagation()} className="text-right">
-  {/* dropdown here */}
-</TableCell>
+{
+  id: 'actions',
+  meta: { align: 'right', className: 'w-12' },
+  cell: ({ row }) => (
+    <span onClick={(e) => e.stopPropagation()}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link href={route('entries.edit', row.original.id)}>Edit</Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive"
+            onClick={() => setVoidId(row.original.id)}
+          >
+            Void
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </span>
+  ),
+}
 ```
 
 ### Select, Combobox, Command
@@ -967,6 +998,7 @@ shadcn primitives ship with Radix accessibility — KEEP IT.
 
 | Mistake | Fix |
 |---|---|
+| Importing `Table` / `TableHead` / `TableCell` directly on a page | Use `<DataTable>` with `ColumnDef<T>`. The shadcn primitives at `components/ui/table.tsx` are for composition by `<DataTable>` only. |
 | `<Button>` inside `<Link>` | `<Button asChild><Link>` |
 | `<form>` inside another `<form>` | Refactor — only one `<form>` per submission |
 | Dialog content outside `<DialogContent>` | All children render inside the portal |

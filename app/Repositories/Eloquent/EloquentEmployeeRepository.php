@@ -53,6 +53,21 @@ final class EloquentEmployeeRepository implements EmployeeRepositoryInterface
 
         $page = Paginator::resolveCurrentPage();
 
+        // Resolve sort. The FormRequest's SORTABLE_COLUMNS allowlist is the only
+        // authoritative source — a defensive check here catches direct callers that
+        // bypass the FormRequest. Falls back to the historical default (full_name asc).
+        $allowedSortColumns = ['staff_no', 'full_name'];
+        $sortColumn = 'full_name';
+        $sortDirection = 'asc';
+        if (
+            isset($filters['sort']['column'], $filters['sort']['direction'])
+            && in_array($filters['sort']['column'], $allowedSortColumns, true)
+            && in_array($filters['sort']['direction'], ['asc', 'desc'], true)
+        ) {
+            $sortColumn = (string) $filters['sort']['column'];
+            $sortDirection = (string) $filters['sort']['direction'];
+        }
+
         $staffQuery = Staff::query()
             ->when($allowlist !== [], fn ($q) => $q->whereIn('role_id', $allowlist))
             ->when(
@@ -70,7 +85,8 @@ final class EloquentEmployeeRepository implements EmployeeRepositoryInterface
                 isset($filters['department_id']),
                 fn ($q) => $q->where('department_id', (int) $filters['department_id'])
             )
-            ->orderBy('full_name');
+            ->orderBy($sortColumn, $sortDirection)
+            ->orderBy('id'); // deterministic tiebreaker
 
         /** @var LengthAwarePaginator $staffPage */
         $staffPage = $staffQuery->paginate($perPage, ['*'], 'page', $page);
@@ -142,6 +158,57 @@ final class EloquentEmployeeRepository implements EmployeeRepositoryInterface
         return EmployeeProfile::query()
             ->where('lms_staff_id', $staffId)
             ->first();
+    }
+
+    public function findDetailByStaffId(int $staffId): ?object
+    {
+        /** @var array<int, int> $allowlist */
+        $allowlist = (array) config('payroll.employee_role_allowlist', []);
+
+        // Step 1: load LMS staff with department / designation / role joined on
+        // the LMS connection. JOINs *within* a single connection are allowed —
+        // only cross-connection JOINs are banned (see the class docblock).
+        $staff = Staff::query()
+            ->with(['department', 'designation', 'role'])
+            ->whereKey($staffId)
+            ->when(
+                $allowlist !== [],
+                fn ($q) => $q->whereIn('role_id', $allowlist),
+            )
+            ->first();
+
+        if ($staff === null) {
+            return null;
+        }
+
+        // Step 2: lookup the payroll profile on the default (writable) connection.
+        $profile = EmployeeProfile::query()
+            ->where('lms_staff_id', $staffId)
+            ->first();
+
+        $department = $staff->department;
+        $designation = $staff->designation;
+        $role = $staff->role;
+
+        return (object) [
+            'lms_staff_id' => (int) $staff->id,
+            'staff_no' => $staff->staff_no !== null ? (string) $staff->staff_no : null,
+            'full_name' => $staff->full_name,
+            'email' => $staff->email,
+            'department' => $department === null ? null : (object) [
+                'id' => (int) $department->id,
+                'name' => (string) $department->name,
+            ],
+            'designation' => $designation === null ? null : (object) [
+                'id' => (int) $designation->id,
+                'title' => (string) $designation->title,
+            ],
+            'role' => $role === null ? null : (object) [
+                'id' => (int) $role->id,
+                'name' => (string) $role->name,
+            ],
+            'profile' => $profile,
+        ];
     }
 
     public function firstOrCreateForStaff(int $staffId, array $defaults = []): EmployeeProfile

@@ -153,3 +153,94 @@ it('rejects invalid filters', function () {
         ->get('/employees?status=garbage')
         ->assertSessionHasErrors('status');
 });
+
+it('sorts employees by staff_no ascending', function () {
+    $user = authAs('super-admin');
+
+    $this->actingAs($user)
+        ->get('/employees?sort_by=staff_no&sort_dir=asc')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('employees/index')
+            ->where('employees.data', function ($rows) {
+                $values = collect($rows)
+                    ->pluck('staff_no')
+                    ->filter(fn ($v) => $v !== null && $v !== '')
+                    ->values()
+                    ->all();
+                $sorted = $values;
+                sort($sorted, SORT_NATURAL);
+
+                return $values === $sorted;
+            })
+        );
+});
+
+it('sorts employees by full_name descending', function () {
+    $user = authAs('super-admin');
+
+    $this->actingAs($user)
+        ->get('/employees?sort_by=full_name&sort_dir=desc')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('employees/index')
+            ->where('employees.data', function ($rows) {
+                $values = collect($rows)
+                    ->pluck('full_name')
+                    ->filter(fn ($v) => $v !== null && $v !== '')
+                    ->values()
+                    ->all();
+
+                // MySQL's default collation is case-insensitive. Use strcasecmp
+                // to match its ordering rather than PHP's byte comparison.
+                for ($i = 1; $i < count($values); $i++) {
+                    if (strcasecmp($values[$i - 1], $values[$i]) < 0) {
+                        return false;
+                    }
+                }
+
+                return true;
+            })
+        );
+});
+
+it('defaults sort_dir to asc when sort_by is provided alone', function () {
+    $user = authAs('super-admin');
+
+    $this->actingAs($user)
+        ->get('/employees?sort_by=staff_no')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('employees/index'));
+});
+
+it('rejects an unknown sort_by column', function () {
+    $user = authAs('super-admin');
+
+    $this->actingAs($user)
+        ->get('/employees?sort_by=garbage_column')
+        ->assertSessionHasErrors('sort_by');
+});
+
+it('rejects sort_by basic_salary_centavos as a deferred column', function () {
+    $user = authAs('super-admin');
+
+    $this->actingAs($user)
+        ->get('/employees?sort_by=basic_salary_centavos')
+        ->assertSessionHasErrors('sort_by');
+});
+
+it('rejects sort_by employment_classification as a deferred column', function () {
+    $user = authAs('super-admin');
+
+    $this->actingAs($user)
+        ->get('/employees?sort_by=employment_classification')
+        ->assertSessionHasErrors('sort_by');
+});
+
+it('rejects an invalid sort_dir', function () {
+    $user = authAs('super-admin');
+
+    $this->actingAs($user)
+        ->get('/employees?sort_by=staff_no&sort_dir=sideways')
+        ->assertSessionHasErrors('sort_dir');
+});

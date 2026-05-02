@@ -123,27 +123,33 @@ If any assumption breaks, the timeline shifts. Track in the risk register (Secti
 
 #### Week 3 — Employee directory
 - [x] Paginated `Index` with filters: status, department, employment type, search.
-- [ ] URL-synced filters via `useTableFilters` hook.
+- [x] URL-synced filters via `useTableFilters` hook.
 - [x] Eager-loading and N+1 prevention verified.
-- [ ] `<PageHeader>`, `<StatCard>`, `<Money>` components shipped to project.
-- [ ] Empty state, loading skeleton, error state on the index.
+- [x] `<PageHeader>`, `<StatCard>`, `<Money>` components shipped to project.
+- [x] Empty state, loading skeleton, error state on the index.
 
 #### Week 4 — Employee profile + inline editing
-- `Show` page: identity (read from LMS), employment, salary configuration, deduction subscriptions.
-- `Edit` sheet for payroll-owned fields (does not write to LMS).
-- Inline edit of salary fields with optimistic UI + Inertia roll-back on error.
-- Salary configuration: basic salary (monthly), pay frequency (monthly / semi-monthly), tax status, government IDs.
-- Deduction subscriptions UI (employees can have N custom deductions; framework only at this point — actual deduction processing comes in Phase 2).
-- Phase 1 demo + sign-off.
+- [x] `Show` page: identity (read from LMS), employment, salary configuration, deduction subscriptions placeholder.
+- [x] `Edit` sheet for payroll-owned fields (does not write to LMS).
+- [x] Inline edit of salary fields with optimistic UI + Inertia roll-back on error.
+- [x] Salary configuration: basic salary, pay frequency (monthly / semi-monthly), tax status, government IDs.
+- [x] Deduction subscriptions UI (placeholder card on Show page; actual table + form land in Phase 2 / Week 7).
+- [ ] Phase 1 demo + sign-off.
+
+Bonus shipped beyond the original Week 4 scope:
+- Quick-edit dropdown per row → expanded into an inline editable row with section tabs (Salary, Status, Government IDs, Bank).
+- Reusable `<DatePicker>` (shadcn Popover + Calendar); `THEME.md` §5.8 added; native `<Input type="date">` retired across the app.
+- Inline salary editor with explicit ✓ / ✕ confirmation buttons (Enter / Esc keyboard parity).
+- JSON profile fragment endpoint (`employees.profile.json`) for lazy-fetch from the directory.
 
 **Phase 1 acceptance criteria**
 
 - [x] Auth + RBAC working in production, with at least the five roles seeded (dev only; production cutover pending)
 - [x] LMS read-only connection proven; writes to LMS tables raise an exception
-- [ ] Employee directory paginates, filters, and searches at least 20 records under 200ms
-- [ ] Employee profile saves payroll-only fields without affecting LMS data
-- [ ] Audit log captures every employee-profile mutation with actor, before, after
-- [ ] CI green on `main`; staging deployed automatically on push
+- [ ] Employee directory paginates, filters, and searches at least 20 records under 200ms (perf measurement still owed)
+- [x] Employee profile saves payroll-only fields without affecting LMS data (verified by `EmployeeProfileUpdateTest::it does not mutate any LMS-owned table`)
+- [x] Audit log captures every employee-profile mutation with actor, before, after (live DB at 2026-05-02 shows 30 rows: created/updated, actor_id + ip + user_agent populated, updated rows carry only changed columns)
+- [ ] CI green on `main`; staging deployed automatically on push (Forge envs not yet provisioned — client infra dependency)
 
 ---
 

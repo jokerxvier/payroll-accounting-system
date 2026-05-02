@@ -363,14 +363,32 @@ All inputs use `h-9` by default. Forms use the standard label-above pattern from
 
 ### 5.4 Table (data tables)
 
-Tables are the most-used component in payroll & accounting. Conventions:
+**All tables in this project must use the project `<DataTable>` component**
+(`resources/js/components/ui/data-table.tsx`). It composes the shadcn data-table
+pattern (https://ui.shadcn.com/docs/components/data-table) — TanStack Table
+running headlessly over the shadcn `Table` primitives, configured for
+server-side pagination, sorting, and filtering via Inertia.
+
+Do NOT hand-roll `<Table><TableHeader>…` markup on new pages. Define columns
+once with `ColumnDef<T>` and pass them to `<DataTable>`. The shadcn `Table`
+primitives at `components/ui/table.tsx` are for composition by `<DataTable>`
+only — pages should not import them directly.
+
+Visual conventions (expressed via column meta or the wrapper's defaults):
 
 - Header row: `bg-muted/40 text-muted-foreground text-xs uppercase tracking-wide`
 - Row hover: `hover:bg-muted/50`
 - Selected row: `data-[state=selected]:bg-accent`
-- Numeric columns: `text-right tabular-nums`
-- Action column: `text-right`, contains only ghost icon-buttons
-- Empty state: span all columns, `text-center text-muted-foreground py-12`
+- Numeric columns: `meta: { align: 'right' }` → cell + header get `text-right tabular-nums`
+- Action column: trailing `text-right`, ghost icon-buttons only
+- Empty state: rendered via the wrapper's `empty` prop (an `<EmptyState>`)
+
+Sortable columns use `<DataTableColumnHeader>` and opt in via `enableSorting: true`
+on the column def — the wrapper plumbs sort state through Inertia using the
+existing `useTableFilters` hook (`resources/js/hooks/use-table-filters.ts`).
+
+Density — defaults to `comfortable` (`px-4 py-2.5` body, `px-4 py-3` header).
+Use `density="compact"` for ledger/journal tables only.
 
 ### 5.5 Badge (status pills)
 
@@ -411,6 +429,36 @@ toast.error(flash.error);
 toast.warning(flash.warning);
 toast.info(flash.info);
 ```
+
+### 5.8 Date picker
+
+Every date field uses `<DatePicker>` from `resources/js/components/ui/date-picker.tsx`. **Do NOT use `<Input type="date">`** — its appearance is browser-dependent (Chrome ≠ Safari ≠ Firefox), tab order is awkward, and it ignores the warm cream/charcoal palette.
+
+The wrapper composes shadcn's `Popover` + `Calendar` per https://ui.shadcn.com/docs/components/date-picker.
+
+```tsx
+import { DatePicker } from '@/components/ui/date-picker';
+
+<div className="grid gap-2">
+    <Label htmlFor="date_hired">Date hired</Label>
+    <DatePicker
+        id="date_hired"
+        value={form.data.date_hired}                 // 'YYYY-MM-DD' or '' for empty
+        onChange={(v) => form.setData('date_hired', v)}
+        placeholder="Select date hired"
+        ariaInvalid={Boolean(form.errors.date_hired)}
+    />
+    <InputError message={form.errors.date_hired} />
+</div>
+```
+
+Conventions:
+- Form state holds the value as a `'YYYY-MM-DD'` string. Empty string `''` means "no date" (matches Inertia `useForm` initial `profile.date_hired ?? ''`).
+- Trigger renders a `<Button variant="outline">` with the formatted date (`MMM d, yyyy`) or the placeholder; calendar icon on the left.
+- Calendar pops `align="start"`, `sideOffset={4}`. Footer shows a "Clear" button when a value is set.
+- Pair with `<Label>` above and `<InputError>` below — same vertical rhythm as `<Input>`.
+- Pass `ariaInvalid={Boolean(form.errors.field)}` so the trigger picks up the destructive ring.
+- Date math uses `date-fns` (already a transitive dep of `react-day-picker`); never `Date.toISOString().slice(0,10)` (that converts to UTC and shifts on PHT users).
 
 ---
 
@@ -490,17 +538,44 @@ Used on dashboards for headline figures.
 
 ### 6.3 Ledger / journal table
 
-Two-column money layout: **Debit** and **Credit**, each right-aligned, only one populated per row.
+Two-column money layout: **Debit** and **Credit**, each right-aligned, only one populated per row. Account codes render in `font-mono` to align the hierarchy visually. Use `density="compact"` so the row rhythm matches expectations for ledger reading.
 
 ```tsx
-<TableHead className="text-right">Debit</TableHead>
-<TableHead className="text-right">Credit</TableHead>
-```
+const ledgerColumns: ColumnDef<JournalLine>[] = [
+  {
+    accessorKey: 'account_code',
+    header: 'Code',
+    cell: ({ row }) => (
+      <span className="font-mono text-xs">{row.original.account_code}</span>
+    ),
+  },
+  { accessorKey: 'account_name', header: 'Account' },
+  { accessorKey: 'memo', header: 'Memo' },
+  {
+    accessorKey: 'debit_centavos',
+    header: 'Debit',
+    meta: { align: 'right' },
+    cell: ({ row }) =>
+      row.original.debit_centavos > 0 ? (
+        <Money amount={row.original.debit_centavos / 100} />
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
+    accessorKey: 'credit_centavos',
+    header: 'Credit',
+    meta: { align: 'right' },
+    cell: ({ row }) =>
+      row.original.credit_centavos > 0 ? (
+        <Money amount={row.original.credit_centavos / 100} />
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+];
 
-Account codes use `font-mono` to align the hierarchy visually:
-
-```tsx
-<TableCell className="font-mono text-xs">{entry.account_code}</TableCell>
+<DataTable columns={ledgerColumns} data={lines} density="compact" … />
 ```
 
 ### 6.4 Payslip header
@@ -670,7 +745,7 @@ Non-negotiable, enforced in code review:
 3. **Semantic color is never the only signal.** A red number must also have a sign or label. A success badge must have text, not just color.
 4. **Touch targets:** minimum `h-9` (36px) for all interactive elements. Icon-only buttons use `size="icon"` which yields `h-9 w-9`.
 5. **Keyboard:** every interactive component (`Dialog`, `Sheet`, `Select`, `Combobox`) ships with shadcn's keyboard handling — do not override.
-6. **Tables** use proper `<TableHeader>` / `<TableHead>` semantics. Sortable columns have `aria-sort`.
+6. **Tables** route through the `<DataTable>` wrapper, which emits semantic `<thead>` / `<th>` markup and `aria-sort` on sortable columns automatically.
 
 ---
 

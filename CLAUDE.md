@@ -116,6 +116,29 @@ Do NOT include a `Co-Authored-By: Claude` (or any other Claude/Anthropic) traile
 ### Delegate substantial work to project subagents
 For any non-trivial task, prefer the project-specific subagents in `.claude/agents/` over generic ones. Match the task to the agent's domain (see the Subagents section above). When the routing isn't obvious, start with `project-manager` for a scope check; it will name the right next agent. Only do work directly when it's truly small (a typo, a single-line fix, an obvious rename) — anything that touches multiple files or multiple layers should be delegated.
 
+### Register every new page in the sidebar
+Every new authenticated Inertia page must have a corresponding entry in the sidebar nav. Add it to `mainNavItems` in `resources/js/components/app-sidebar.tsx`, importing the route helper from `@/routes/<resource>` (Wayfinder) and a Lucide icon. Public/auth pages (login, register, forgot password) and settings pages (already grouped under their own layout) are exempt. If a page should only appear for certain roles, gate it at the nav-item level via `auth.user` role checks rather than omitting it. The diff of `app-sidebar.tsx` is the audit trail of what's reachable.
+
+### Never wrap pages in AppLayout
+The global Inertia resolver in `resources/js/app.tsx` automatically wraps every authenticated page in `AppLayout`. Page components must NOT import or wrap with `<AppLayout>` themselves — doing so renders a second `SidebarProvider` inside the first, injecting a phantom 256 px gap that pushes all page content right by the sidebar width. The correct pattern is:
+
+```tsx
+export default function Page() {
+    return (
+        <>
+            <Head title="..." />
+            <div className="space-y-6 p-4">{/* content */}</div>
+        </>
+    );
+}
+
+Page.layout = {
+    breadcrumbs: [{ title: '...', href: '...' }],
+};
+```
+
+Settings pages are the only exception — they're routed through `[AppLayout, SettingsLayout]` and inherit the same rule (no manual `<AppLayout>` wrap). Reach for the static `Component.layout = { breadcrumbs }` to pass breadcrumbs into the resolved layout, mirroring `resources/js/pages/dashboard.tsx`.
+
 ===
 
 <laravel-boost-guidelines>
