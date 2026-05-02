@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__laravel-boost__database-schema",
+      "Bash(php artisan tinker '--execute= *)",
+      "Bash(sed -n '/^## Subagents/,/^## Project Rules/p' CLAUDE.md)",
+      "Bash(sed -n '/^## Workflow Rules/,$p' CLAUDE.md)",
+      "Bash(npm run *)",
+      "Bash(PAO_DISABLE=1 vendor/bin/phpstan analyse --memory-limit=2G --no-progress)",
+      "Bash(PAO_DISABLE=1 vendor/bin/phpstan analyse --memory-limit=2G --no-progress --generate-baseline=phpstan-baseline.neon)"
+    ]
+  }
+}
