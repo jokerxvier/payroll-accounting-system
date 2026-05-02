@@ -27,3 +27,13 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Local debug / agent artifacts (never commit)
+/.playwright-mcp
+/.claude/plans
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+/pnpm-lock.yaml
