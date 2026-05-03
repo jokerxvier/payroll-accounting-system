@@ -205,10 +205,10 @@ Bonus shipped beyond original scope:
 - **`ReferenceCasesTest`** grew from 10 to 15 hand-derived cases (cases 11–15 cover allowances, loans, adjustments, and termination + loan interaction).
 
 #### Week 8 — Real-time gross-to-net UI
-- Single-employee "preview" page: select employee + period, see live computation.
-- Each input change re-computes server-side via debounced Inertia request (no client-side payroll math).
-- Detailed breakdown view: gross, statutory deductions, custom deductions, adjustments, allowances, net.
-- Side-by-side comparison with prior period.
+- [x] Single-employee "preview" page: select employee + period, see live computation — `resources/js/pages/payroll/preview.tsx` + Stage A backend at `app/Http/Controllers/PayrollPreviewController.php`.
+- [x] Each input change re-computes server-side via debounced Inertia request (no client-side payroll math) — `resources/js/hooks/use-payroll-preview.ts` (debounce-collapse + isComputing lifecycle + unmount cleanup + explicit cancel covered by `use-payroll-preview.test.ts`, 4/4).
+- [x] Detailed breakdown view: gross, statutory deductions, custom deductions, adjustments, allowances, net — wire-shape pinned by `PayrollPreviewTest::it serializes audit lines with a stable wire shape` (canonical bucket + Money centavos/formatted).
+- [x] Side-by-side comparison with prior period — derivation rules pinned by the monthly + semi_monthly_first + semi_monthly_second + 2020-floor cases in `PayrollPreviewTest`.
 - Phase 2 demo + sign-off.
 
 **Phase 2 acceptance criteria**
@@ -216,7 +216,7 @@ Bonus shipped beyond original scope:
 - [x] Single-employee payroll computes correctly against a hand-calculated reference set (10 cases minimum) — `ReferenceCasesTest` ships 10 hand-derived cases against the rates seeded in 5D. Marked `REPLACE WITH CLIENT REFERENCE CASES` for replacement when the client provides theirs.
 - [x] All four statutory contributions match official tables to the centavo — verified at the strategy layer (5C, 56 boundary tests) and through the engine (6D, 140 centavo-exact assertions).
 - [x] Effective-dated contribution tables: changing a rate mid-test does not affect prior periods — verified in `PayrollComputationServiceTest::it picks the contribution row effective on period.end()`.
-- [ ] Real-time preview updates within 500ms of input change (Week 8 — UI not yet built)
+- [x] Real-time preview updates within 500ms of input change — pinned by `tests/Feature/PayrollPreviewPerformanceTest.php` against the server-compute budget at `rules/PLAN.md:336` (warm-up + 3 warm samples, each asserted < 500 ms; observed run 2026-05-03: 5.38 / 4.60 / 3.99 ms).
 - [x] Computation engine has 80%+ unit test coverage; every edge case in the test plan is covered — 63 new tests this week across all five actions, the service composer, and 10 reference cases.
 - [x] Zero floats in any payroll computation code path — automated by `tests/Architecture/PayrollFloatAuditTest.php` (Week 7 quick win)
 

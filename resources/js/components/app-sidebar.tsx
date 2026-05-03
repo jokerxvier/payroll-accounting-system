@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     BookOpen,
+    Calculator,
     FolderGit2,
     LayoutGrid,
     MinusCircle,
@@ -29,6 +30,7 @@ import { index as adminAllowancesIndex } from '@/routes/admin/allowances';
 import { index as adminContributionTablesIndex } from '@/routes/admin/contribution-tables';
 import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
 import { index as employeesIndex } from '@/routes/employees';
+import { show as payrollPreviewShow } from '@/routes/payroll/preview';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -41,6 +43,20 @@ const mainNavItems: NavItem[] = [
         title: 'Employees',
         href: employeesIndex(),
         icon: Users,
+    },
+];
+
+/**
+ * Payroll section. Mirrors the `payroll.preview` Gate envelope from
+ * {@see \App\Policies\PayrollPreviewPolicy} — visible to super-admin,
+ * payroll-officer, and hr roles. Auditor is intentionally excluded
+ * (auditors review the immutable record, not speculative figures).
+ */
+const payrollNavItems: NavItem[] = [
+    {
+        title: 'Preview',
+        href: payrollPreviewShow(),
+        icon: Calculator,
     },
 ];
 
@@ -75,9 +91,21 @@ const footerNavItems: NavItem[] = [
     },
 ];
 
+/**
+ * Roles allowed to see the Payroll preview entry. Mirrors
+ * {@see \App\Policies\PayrollPreviewPolicy::preview()}. Keep these in sync —
+ * the gate is the source of truth, this list is purely a UI affordance to
+ * avoid surfacing a link that would 403 on click.
+ */
+const PAYROLL_PREVIEW_ROLES = ['super-admin', 'payroll-officer', 'hr'] as const;
+
 export function AppSidebar() {
     const { auth } = usePage().props;
-    const isSuperAdmin = auth.user?.roles?.includes('super-admin') ?? false;
+    const userRoles = auth.user?.roles ?? [];
+    const isSuperAdmin = userRoles.includes('super-admin');
+    const canPreviewPayroll = PAYROLL_PREVIEW_ROLES.some((role) =>
+        userRoles.includes(role),
+    );
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -95,7 +123,12 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={mainNavItems} />
-                {isSuperAdmin && <AdminNav items={adminNavItems} />}
+                {canPreviewPayroll && (
+                    <SidebarSection label="Payroll" items={payrollNavItems} />
+                )}
+                {isSuperAdmin && (
+                    <SidebarSection label="Admin" items={adminNavItems} />
+                )}
             </SidebarContent>
 
             <SidebarFooter>
@@ -106,12 +139,12 @@ export function AppSidebar() {
     );
 }
 
-function AdminNav({ items }: { items: NavItem[] }) {
+function SidebarSection({ label, items }: { label: string; items: NavItem[] }) {
     const { isCurrentUrl } = useCurrentUrl();
 
     return (
         <SidebarGroup className="px-2 py-0">
-            <SidebarGroupLabel>Admin</SidebarGroupLabel>
+            <SidebarGroupLabel>{label}</SidebarGroupLabel>
             <SidebarMenu>
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>
