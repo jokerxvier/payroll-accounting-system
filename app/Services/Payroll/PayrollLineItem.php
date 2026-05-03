@@ -62,6 +62,20 @@ final readonly class PayrollLineItem
 
     public const CODE_PAGIBIG_EMPLOYER = 'PAGIBIG_EMPLOYER';
 
+    public const CODE_ALLOWANCE_TAXABLE = 'allowance_taxable';
+
+    public const CODE_ALLOWANCE_NON_TAXABLE = 'allowance_non_taxable';
+
+    public const CODE_LOAN_AMORTIZATION = 'loan_amortization';
+
+    public const CODE_CUSTOM_DEDUCTION = 'custom_deduction';
+
+    public const CODE_ADJUSTMENT_ADDITION = 'adjustment_addition';
+
+    public const CODE_ADJUSTMENT_DEDUCTION = 'adjustment_deduction';
+
+    public const CODE_UNPAID_DAYS = 'unpaid_days';
+
     /**
      * @param  ?array<string, mixed>  $meta
      *
