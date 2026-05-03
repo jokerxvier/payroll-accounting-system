@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Payroll system built on the Laravel React Starter Kit. Uses Laravel 13 + Inertia.js v3 + React 19 + TypeScript. Authentication is handled by Laravel Fortify (login, registration, 2FA, email verification, password reset). Served locally by Laravel Herd at `payroll-system.test`.
+Payroll system built on the Laravel React Starter Kit. Uses Laravel 13 + Inertia.js v3 + React 19 + TypeScript. Authentication is handled by Laravel Fortify (login, registration, 2FA, email verification, password reset). Authorization uses Spatie Permission, with payroll roles assigned on first login by mapping LMS roles via `config/payroll.php`. Served locally by Laravel Herd at `payroll-system.test`.
+
+Current phase: **Phase 2 (Computation Engine), Week 8**. See `rules/PLAN.md` for the 16-week roadmap and `MEMORY.md` for the latest project notes.
 
 ## Common Commands
 
@@ -41,23 +43,28 @@ php artisan make:controller ControllerName --no-interaction
 ### Backend (layered: Controller → FormRequest → Service → Repository → Model)
 - **Controllers** in `app/Http/Controllers/` — grouped by domain (e.g., `Settings/`); thin, delegate to services
 - **Form Requests** in `app/Http/Requests/` — mirror controller directory structure
-- **Services** in `app/Services/` — business logic, organized by bounded context (`Payroll/`, `Statutory/`); strategy pattern for statutory contributions (`Statutory/Strategies/`)
+- **Services** in `app/Services/` — business logic, organized by bounded context (`Payroll/`, `Statutory/`)
+  - **Payroll breakdowns** — `app/Services/Payroll/Breakdowns/` (Allowances, Deductions, Loans, Adjustments, UnpaidDaysReduction) compose into `PayrollComputationService` → `PayrollComputationResult`. Add new payroll components as breakdowns, not as inline service methods.
+  - **Statutory strategies** — `app/Services/Statutory/Strategies/` uses the strategy pattern (`SalaryBandStrategy`, `BracketTableStrategy`, `TieredPercentageStrategy`, `PercentageWithCapStrategy`) resolved via `StatutoryContributionResolver`. New contribution types ship as strategies in this directory.
 - **Repositories** in `app/Repositories/` — split into `Contracts/` (interfaces) and `Eloquent/` (implementations); bound in service providers
 - **Value Objects** in `app/ValueObjects/` — `Money` (integer centavos), `PayPeriodInput`; never use floats for money
-- **Models** in `app/Models/` — `Pas/` for app-owned tables, `Lms/` for read-only LMS tables, `User.php` at root
+- **Models** in `app/Models/` — `Pas/` for app-owned tables, `Lms/` for read-only LMS tables, `User.php` at root. LMS-connection models throw `app/Exceptions/LmsWriteException.php` on save/delete; the `tests/Feature/LmsReadOnlyTest.php` guardrail keeps this enforced.
 - **Policies** in `app/Policies/` — one per model (per coding standards)
 - **Concerns (Traits)** in `app/Concerns/` — shared validation rules (e.g., `ProfileValidationRules`, `PasswordValidationRules`)
 - **Actions** in `app/Actions/` — Fortify action classes for user creation, password reset
-- **Observers** in `app/Observers/` — model lifecycle hooks (e.g., audit logging)
+- **Observers** in `app/Observers/` — model lifecycle hooks (`AuditObserver` writes to the audit log)
+- **Listeners** in `app/Listeners/` — `AssignPayrollRoleOnLogin` maps LMS roles → payroll roles on first login (config in `config/payroll.php`)
 - **Providers** — `FortifyServiceProvider` configures auth views; repository bindings live in their own provider
-- **Middleware** — `HandleInertiaRequests` shares props globally; `HandleAppearance` manages theme
+- **Middleware** — `HandleInertiaRequests` shares props globally (including `auth.user.roles` for React-side gating); `HandleAppearance` manages theme
 
 ### Frontend
 - **Pages** in `resources/js/pages/` — Inertia page components, auto-resolved by Vite
 - **Layouts** in `resources/js/layouts/` — `AppLayout` (sidebar + header), `AuthLayout`, `SettingsLayout`
 - **Components** in `resources/js/components/` — Radix UI primitives styled with Tailwind (shadcn/ui pattern), using `class-variance-authority` for variants
-- **Hooks** in `resources/js/hooks/` — custom React hooks (`useAppearance`, etc.)
-- **Types** in `resources/js/types/` — shared TypeScript interfaces
+  - **Edit-sheet pattern** — `resources/js/components/edit-sheet.tsx` is the reusable CRUD sheet shell; domain wrappers (`allowance-edit-sheet.tsx`, etc.) compose it. Reach for it before building a new dialog/form from scratch.
+- **Hooks** in `resources/js/hooks/` — `use-clipboard`, `use-current-url`, `use-flash-toast`, `use-mobile-navigation`, `use-payroll-preview`, `use-table-filters`, `use-appearance`. Check here before writing a new hook.
+- **Types** in `resources/js/types/` — shared TypeScript interfaces (`auth`, `employee`, `payroll`, `payroll-preview`, `statutory-contribution`, `pagination`, `navigation`, `ui`). Reuse these before adding new ones.
+- **Role gating** — Spatie roles are merged into `auth.user.roles` on every render via `HandleInertiaRequests`. Gate UI by reading `auth.user.roles` from page props, not by refetching. Backend authorization still goes through Policies.
 - **Wayfinder** — auto-generated typed route functions in `resources/js/wayfinder/`; import from `@/actions/` (controllers) or `@/routes/` (named routes). The Vite plugin regenerates these on `vite dev` / `vite build`. If you add a backend route and TypeScript can't resolve it from `@/routes/...`, restart `npm run dev` (or run `npm run build`) to regenerate the bindings.
 
 ### Routes
@@ -69,18 +76,19 @@ php artisan make:controller ControllerName --no-interaction
 - MySQL (`payroll_db`) — shared with the existing LMS (read-only via the `lms` connection)
 - App-owned tables carry the `pas_` prefix; LMS tables (`sm_*`, `users`, `roles`, etc.) are read-only
 - Redis-backed sessions, cache, and queue (configured to avoid colliding with LMS framework tables)
-- Two guardrail tests enforce DB safety; do not weaken them: `tests/Feature/LmsReadOnlyTest.php` (no writes to LMS tables) and `tests/Feature/MigrationSafetyTest.php` (every migration is `pas_`-prefixed and reversible)
+- Two guardrail tests enforce DB safety; do not weaken or skip them, and run them after any migration or LMS-touching change: `tests/Feature/LmsReadOnlyTest.php` (no writes to LMS tables) and `tests/Feature/MigrationSafetyTest.php` (every migration is `pas_`-prefixed and reversible)
 - Never run `migrate:fresh` against the dev DB — it drops the LMS tables. Use incremental `migrate`, or `--env=testing` for a clean slate
+
+### Tests
+- `tests/` is split into `Architecture/`, `Feature/`, `Unit/`, and `Browser/` (Dusk). Feature tests are organized by domain (`Admin/`, `Auth/`, `Employees/`, `Migrations/`, `Models/`, `Services/`, `Settings/`).
+- `tests/Pest.php` configures the Pest base test case across `Feature` and `Browser`; `tests/TestCase.php` is the underlying TestCase.
+- Vitest config is at `vitest.config.ts`; setup file is `resources/js/__tests__/setup.ts` (jsdom + `@testing-library/jest-dom`). Frontend tests live next to their subjects under `resources/js/**/__tests__/`.
 
 ## Skills
 
-Domain-specific skills are installed in `.agents/skills/` and `.claude/skills/`. Activate the relevant skill when working in that domain.
+Domain-specific skills are installed in `.agents/skills/` and `.claude/skills/` (shadcn, vercel-react-best-practices, git-commit, frontend-design, etc.). Activate the relevant skill when working in that domain — Laravel Boost handles the general activation policy.
 
 Always activate `/frontend-design:frontend-design` when creating or modifying frontend UI pages and components.
-
-- `.agents/skills/shadcn/` — shadcn/ui CLI usage, component customization, composition patterns, styling rules, form patterns, icons, base vs Radix primitives
-- `.agents/skills/vercel-react-best-practices/` — React performance rules: re-render optimization, async patterns, bundle size, hydration, server components, derived state, memoization
-- `.agents/skills/git-commit/` — Git commit conventions
 
 ## Subagents
 
@@ -90,7 +98,7 @@ Project-specific subagents live in `.claude/agents/*.md` and are auto-loaded by 
 |---|---|---|
 | `project-manager` | "What's next?", scope checks, phase status, gate readiness, status summaries — read-only | Read, Grep, Glob, WebSearch |
 | `backend-developer` | Migrations, models, repositories, services, actions, FormRequests, policies, controllers, jobs, Pest tests | Read, Write, Edit, Grep, Glob, Bash |
-| `frontend-designer` | React pages, components, hooks, Zustand stores, TypeScript types, Tailwind/shadcn UI, Vitest tests | Read, Write, Edit, Grep, Glob, Bash |
+| `frontend-designer` | React pages, components, hooks, TypeScript types, Tailwind/shadcn UI, Vitest tests (no Zustand stores in repo today; reach for one only if local hook state stops scaling) | Read, Write, Edit, Grep, Glob, Bash |
 | `qa` | Writing tests, verifying acceptance criteria, regression analysis, performance/N+1/accessibility/security audits | Read, Write, Edit, Grep, Glob, Bash |
 | `git-expert` | Branches, commits, merges, rebases, conflicts, PRs, releases. Enforces "no Claude co-author trailer" | Read, Bash, Grep, Glob |
 
