@@ -2,7 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Models\Pas\Allowance;
+use App\Models\Pas\DeductionType;
+use App\Models\Pas\EmployeeAllowance;
+use App\Models\Pas\EmployeeDeduction;
+use App\Models\Pas\EmployeeLoan;
 use App\Models\Pas\EmployeeProfile;
+use App\Models\Pas\PayrollAdjustment;
 use App\Services\Payroll\PayrollComputationService;
 use App\ValueObjects\PayPeriodInput;
 use Database\Seeders\StatutoryContributionSeeder;
@@ -10,11 +16,15 @@ use Database\Seeders\StatutoryContributionSeeder;
 /*
  * REPLACE WITH CLIENT REFERENCE CASES on receipt (per rules/PLAN.md:345).
  *
- * Until the client provides hand-verified payroll cases, these 10 cases are
+ * Until the client provides hand-verified payroll cases, these 15 cases are
  * derived from the rates seeded in database/seeders/StatutoryContributionSeeder.php.
  * They prove the engine works against THOSE specific rates; client-supplied
  * cases will catch any drift between our seeded rates and the client's
  * actual table.
+ *
+ * Cases 1–10 cover the Week-6 statutory engine. Cases 11–15 (Week 7) cover
+ * the composition layer: allowances, custom deductions, loans, one-off
+ * adjustments, and pro-ration interaction with loans.
  *
  * Every expected value below was hand-computed from the source regulations
  * (BIR Revenue Regulation No. 8-2018, SSS Circular 2024-006, UHC Act,
@@ -620,4 +630,342 @@ it('case 10: Pag-IBIG cap (₱20,000)', function () {
         ->and($result->totalEmployeeDeductions->centavos())->toBe(170_000)
         ->and($result->totalEmployerContributions->centavos())->toBe(253_000)
         ->and($result->netPay->centavos())->toBe(1_830_000);
+});
+
+/**
+ * Case 11: Rice subsidy (non-taxable) + HMO deduction (non-taxable employee).
+ *
+ * Profile: ₱30,000/month, monthly, hired 2024-01-01, active.
+ * Period:  monthly(2026, 5).
+ * Allowance: rice subsidy ₱1,500, non-taxable, de-minimis (cap=null = no clamp).
+ * Deduction: HMO ₱500, non-taxable, fixed, employee-source.
+ *
+ * Hand-computed expected values:
+ *
+ *   Basic / earnings:
+ *     basic       = 3_000_000 (₱30,000)
+ *     allowanceNT = 150_000   (rice subsidy)
+ *     gross       = 3_000_000 + 150_000 = 3_150_000 (₱31,500)
+ *
+ *   SSS (band MSC ₱30,000; lower=2_975_000, upper=3_025_000):
+ *     ee = round(3_000_000 × 500 / 10_000) = 150_000 (₱1,500)
+ *     er = round(3_000_000 × 900 / 10_000) = 270_000 (₱2,700)
+ *     ec = 3_000 (MSC > ₱14,500 → ₱30.00)
+ *     contribution_base = 3_000_000
+ *
+ *   PhilHealth (5%, in [floor=10_000, ceiling=100_000], 50/50):
+ *     total = 3_000_000 × 500 / 10_000 = 150_000
+ *     ee    = 75_000 (₱750)
+ *     er    = 75_000 (₱750)
+ *
+ *   Pag-IBIG (above ₱1,500 threshold → upper rates 2%/2%; capped at 1_000_000):
+ *     ee = 1_000_000 × 200 / 10_000 = 20_000 (₱200)
+ *     er = 20_000 (₱200)
+ *
+ *   Custom employee deductions (HMO non-taxable, fixed, employee):
+ *     employee=50_000, employer=0, taxableImpact=0 (non-taxable)
+ *
+ *   Taxable income (non-taxable allowance excluded; non-taxable HMO
+ *   excluded from BIR base):
+ *     = basic + 0 (taxableAllowance) + 0 (taxableAdjAdd)
+ *       − 150_000 − 75_000 − 20_000 − 0 (customTaxableImpact)
+ *     = 3_000_000 − 245_000 = 2_755_000 (₱27,550.00)
+ *
+ *   BIR (monthly bracket 2: lower=2_083_300, upper=3_333_300, base=0, rate=1500bp):
+ *     excess = 2_755_000 − 2_083_300 = 671_700
+ *     excessTax = 671_700 × 1500 / 10_000 = 1_007_550_000 / 10_000.
+ *       intdiv = 100_755. remainder = 0. → 100_755 (exact).
+ *     tax = 0 + 100_755 = 100_755 (₱1,007.55).
+ *
+ *   Totals:
+ *     totalEmployeeDeductions    = 150_000 + 75_000 + 20_000 + 100_755 + 50_000 + 0 + 0 = 395_755
+ *     totalEmployerContributions = 270_000 +  3_000 + 75_000 + 20_000 + 0               = 368_000
+ *     netPay                     = 3_150_000 − 395_755                                  = 2_754_245 (₱27,542.45)
+ */
+it('case 11: rice subsidy + HMO deduction (non-taxable on both ends)', function () {
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'pay_frequency' => 'monthly',
+        'basic_salary_centavos' => 3_000_000,
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+    ]);
+
+    $rice = Allowance::factory()->riceSubsidy()->create();
+    EmployeeAllowance::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'allowance_id' => $rice->id,
+        'amount_centavos' => 150_000, // ₱1,500
+        'schedule' => 'every_run',
+        'effective_from' => '2024-01-01',
+        'effective_to' => null,
+    ]);
+
+    $hmo = DeductionType::factory()->hmo()->create();
+    EmployeeDeduction::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'deduction_type_id' => $hmo->id,
+        'amount_centavos' => 50_000, // ₱500
+        'percent_basis_points' => null,
+        'schedule' => 'every_run',
+        'effective_from' => '2024-01-01',
+        'effective_to' => null,
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    expect($result->basicPay->centavos())->toBe(3_000_000)
+        ->and($result->allowancesTaxable->centavos())->toBe(0)
+        ->and($result->allowancesNonTaxable->centavos())->toBe(150_000)
+        ->and($result->grossPay->centavos())->toBe(3_150_000)
+        ->and($result->sssEmployee->centavos())->toBe(150_000)
+        ->and($result->sssEmployer->centavos())->toBe(270_000)
+        ->and($result->sssEmployerEc->centavos())->toBe(3_000)
+        ->and($result->philhealthEmployee->centavos())->toBe(75_000)
+        ->and($result->philhealthEmployer->centavos())->toBe(75_000)
+        ->and($result->pagibigEmployee->centavos())->toBe(20_000)
+        ->and($result->pagibigEmployer->centavos())->toBe(20_000)
+        ->and($result->customDeductionsEmployee->centavos())->toBe(50_000)
+        ->and($result->customDeductionsEmployer->centavos())->toBe(0)
+        ->and($result->birWithholdingTax->centavos())->toBe(100_755)
+        ->and($result->taxableIncome->centavos())->toBe(2_755_000)
+        ->and($result->totalEmployeeDeductions->centavos())->toBe(395_755)
+        ->and($result->totalEmployerContributions->centavos())->toBe(368_000)
+        ->and($result->netPay->centavos())->toBe(2_754_245);
+});
+
+/**
+ * Case 12: Mid-life loan amortization (₱45,000 monthly, ₱5,000 amortization).
+ *
+ * Profile: ₱45,000/month, monthly, hired 2024-01-01, active.
+ * Loan:    principal ₱60,000, outstanding ₱45,000, monthly_amortization ₱5,000.
+ * Period:  monthly(2026, 5).
+ *
+ * The Week-6 baseline at ₱45k (Case 2) gave:
+ *   basic=4_500_000, gross=4_500_000, sssEE=175_000, phEE=112_500, pagEE=20_000,
+ *   bir=359_340, taxable=4_192_500, totalEE=666_840, netPay=3_833_160.
+ *
+ * Adding the loan:
+ *   amortization = min(500_000, 4_500_000) = 500_000.
+ *   loanDeductions = 500_000.
+ *   taxable income UNCHANGED (loans never reduce the BIR base).
+ *   totalEE = 666_840 + 500_000 = 1_166_840.
+ *   netPay = 4_500_000 − 1_166_840 = 3_333_160.
+ *
+ * The action is read-only at compute time — the loan's
+ * outstanding_balance_centavos is NOT decremented during compute.
+ */
+it('case 12: mid-life loan amortization (₱5,000/month)', function () {
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'pay_frequency' => 'monthly',
+        'basic_salary_centavos' => 4_500_000,
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+    ]);
+
+    $loan = EmployeeLoan::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'principal_centavos' => 6_000_000,
+        'outstanding_balance_centavos' => 4_500_000,
+        'monthly_amortization_centavos' => 500_000,
+        'schedule' => 'every_run',
+        'started_on' => '2025-01-01',
+        'closed_on' => null,
+        'lock_version' => 0,
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    expect($result->basicPay->centavos())->toBe(4_500_000)
+        ->and($result->grossPay->centavos())->toBe(4_500_000)
+        ->and($result->sssEmployee->centavos())->toBe(175_000)
+        ->and($result->philhealthEmployee->centavos())->toBe(112_500)
+        ->and($result->pagibigEmployee->centavos())->toBe(20_000)
+        ->and($result->birWithholdingTax->centavos())->toBe(359_340)
+        ->and($result->taxableIncome->centavos())->toBe(4_192_500)
+        ->and($result->loanDeductions->centavos())->toBe(500_000)
+        ->and($result->totalEmployeeDeductions->centavos())->toBe(1_166_840)
+        ->and($result->totalEmployerContributions->centavos())->toBe(450_500)
+        ->and($result->netPay->centavos())->toBe(3_333_160);
+
+    // Read-only at compute time: the loan row is unmutated.
+    $loan->refresh();
+    expect($loan->outstanding_balance_centavos)->toBe(4_500_000)
+        ->and($loan->lock_version)->toBe(0);
+});
+
+/**
+ * Case 13: One-off taxable bonus adjustment (₱45,000 monthly, ₱10,000 bonus).
+ *
+ * Profile:    ₱45,000/month, monthly, hired 2024-01-01, active.
+ * Adjustment: addition, taxable, ₱10,000, applies_on=2026-05-15.
+ * Period:     monthly(2026, 5).
+ *
+ * Compute:
+ *   basic     = 4_500_000
+ *   adjTaxAdd = 1_000_000
+ *   gross     = 4_500_000 + 1_000_000 = 5_500_000 (₱55,000)
+ *
+ *   Statutory @ ₱45k basis (UNCHANGED — bases don't widen with the bonus):
+ *     ssEE=175_000, phEE=112_500, pagEE=20_000.
+ *
+ *   Taxable income = basic + 0 (taxAllowance) + 1_000_000 (taxAdjAdd)
+ *                    − 175_000 − 112_500 − 20_000 − 0
+ *                  = 5_500_000 − 307_500 = 5_192_500 (₱51,925.00)
+ *
+ *   BIR (monthly bracket 3: lower=3_333_300, base=187_500, rate=2000bp):
+ *     excess = 5_192_500 − 3_333_300 = 1_859_200
+ *     excessTax = 1_859_200 × 2000 / 10_000 = 3_718_400_000 / 10_000 = 371_840 (exact)
+ *     tax = 187_500 + 371_840 = 559_340 (₱5,593.40)
+ *
+ *   Totals:
+ *     totalEE = 175_000 + 112_500 + 20_000 + 559_340 + 0 + 0 + 0 = 866_840
+ *     totalER = 315_000 + 3_000 + 112_500 + 20_000 + 0          = 450_500
+ *     netPay  = 5_500_000 − 866_840                              = 4_633_160 (₱46,331.60)
+ */
+it('case 13: one-off taxable bonus adjustment', function () {
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'pay_frequency' => 'monthly',
+        'basic_salary_centavos' => 4_500_000,
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+    ]);
+
+    PayrollAdjustment::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'kind' => PayrollAdjustment::KIND_ADDITION,
+        'is_taxable' => true,
+        'amount_centavos' => 1_000_000,
+        'applies_on' => '2026-05-15',
+        'label' => 'Mid-year bonus',
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    expect($result->basicPay->centavos())->toBe(4_500_000)
+        ->and($result->adjustmentTaxableAdditions->centavos())->toBe(1_000_000)
+        ->and($result->adjustmentNonTaxableAdditions->centavos())->toBe(0)
+        ->and($result->adjustmentDeductions->centavos())->toBe(0)
+        ->and($result->grossPay->centavos())->toBe(5_500_000)
+        ->and($result->sssEmployee->centavos())->toBe(175_000)
+        ->and($result->philhealthEmployee->centavos())->toBe(112_500)
+        ->and($result->pagibigEmployee->centavos())->toBe(20_000)
+        ->and($result->birWithholdingTax->centavos())->toBe(559_340)
+        ->and($result->taxableIncome->centavos())->toBe(5_192_500)
+        ->and($result->totalEmployeeDeductions->centavos())->toBe(866_840)
+        ->and($result->totalEmployerContributions->centavos())->toBe(450_500)
+        ->and($result->netPay->centavos())->toBe(4_633_160);
+});
+
+/**
+ * Case 14: Loan amortization clamped to remaining balance (read-only preview).
+ *
+ * Profile:    ₱45,000/month, monthly, hired 2024-01-01, active.
+ * Loan:       outstanding ₱2,000, monthly_amortization ₱5,000.
+ * Period:     monthly(2026, 5).
+ *
+ * The action clamps amortization to outstanding via
+ * `min(monthly_amortization, outstanding_balance)`. So:
+ *   loanDeductions = min(500_000, 200_000) = 200_000.
+ *
+ * Everything else mirrors Case 2 baseline + the 200_000 loan addition:
+ *   totalEE = 666_840 + 200_000 = 866_840.
+ *   netPay  = 4_500_000 − 866_840 = 3_633_160.
+ *
+ * Crucially the loan row is NOT touched at compute time; the actual
+ * decrement happens in the Week-9 batch persistence path.
+ */
+it('case 14: loan amortization clamped to outstanding balance', function () {
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'pay_frequency' => 'monthly',
+        'basic_salary_centavos' => 4_500_000,
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+    ]);
+
+    $loan = EmployeeLoan::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'principal_centavos' => 6_000_000,
+        'outstanding_balance_centavos' => 200_000, // ₱2,000 remaining
+        'monthly_amortization_centavos' => 500_000, // ₱5,000 nominal
+        'schedule' => 'every_run',
+        'started_on' => '2024-01-01',
+        'closed_on' => null,
+        'lock_version' => 5,
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    expect($result->loanDeductions->centavos())->toBe(200_000) // clamped
+        ->and($result->taxableIncome->centavos())->toBe(4_192_500) // unchanged
+        ->and($result->totalEmployeeDeductions->centavos())->toBe(866_840)
+        ->and($result->netPay->centavos())->toBe(3_633_160);
+
+    // Read-only at compute time.
+    $loan->refresh();
+    expect($loan->outstanding_balance_centavos)->toBe(200_000)
+        ->and($loan->lock_version)->toBe(5);
+});
+
+/**
+ * Case 15: Terminated mid-period with active loan (Case 7 + loan).
+ *
+ * Profile: ₱60,000/month, monthly, hired 2024-01-01, terminated 2026-05-20.
+ * Loan:    outstanding ₱10,000, monthly_amortization ₱5,000.
+ * Period:  monthly(2026, 5).
+ *
+ * The Week-6 baseline at this profile (Case 7) gave:
+ *   basic=3_870_968 (pro-rated 20/31 days), gross=3_870_968,
+ *   sssEE=175_000, phEE=150_000, pagEE=20_000, bir=226_034,
+ *   taxable=3_525_968, totalEE=571_034, netPay=3_299_934.
+ *
+ * Per Decision 3 the loan applies even when the employee is terminated mid-
+ * period — the compute path is read-only and has no termination-aware skip
+ * rule. A future Week-9 batch run may add post-termination skip logic.
+ *
+ * Adding the loan:
+ *   loanDeductions = min(500_000, 1_000_000) = 500_000.
+ *   totalEE        = 571_034 + 500_000 = 1_071_034.
+ *   netPay         = 3_870_968 − 1_071_034 = 2_799_934.
+ */
+it('case 15: terminated mid-period with active loan', function () {
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'pay_frequency' => 'monthly',
+        'basic_salary_centavos' => 6_000_000,
+        'date_hired' => '2024-01-01',
+        'date_terminated' => '2026-05-20',
+    ]);
+
+    EmployeeLoan::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'principal_centavos' => 6_000_000,
+        'outstanding_balance_centavos' => 1_000_000, // ₱10,000 remaining
+        'monthly_amortization_centavos' => 500_000,  // ₱5,000
+        'schedule' => 'every_run',
+        'started_on' => '2025-01-01',
+        'closed_on' => null,
+        'lock_version' => 0,
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    expect($result->basicPay->centavos())->toBe(3_870_968) // pro-rated 20/31
+        ->and($result->grossPay->centavos())->toBe(3_870_968)
+        ->and($result->sssEmployee->centavos())->toBe(175_000)
+        ->and($result->philhealthEmployee->centavos())->toBe(150_000)
+        ->and($result->pagibigEmployee->centavos())->toBe(20_000)
+        ->and($result->birWithholdingTax->centavos())->toBe(226_034)
+        ->and($result->taxableIncome->centavos())->toBe(3_525_968)
+        ->and($result->loanDeductions->centavos())->toBe(500_000)
+        ->and($result->totalEmployeeDeductions->centavos())->toBe(1_071_034)
+        ->and($result->netPay->centavos())->toBe(2_799_934);
 });

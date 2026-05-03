@@ -44,6 +44,21 @@ final readonly class PayrollComputationResult
         public Money $totalEmployerContributions,
         public Money $taxableIncome,
         public Money $netPay,
+        // Week 7 — allowances split.
+        public Money $allowancesTaxable,
+        public Money $allowancesNonTaxable,
+        // Week 7 — custom deductions split by source.
+        public Money $customDeductionsEmployee,
+        public Money $customDeductionsEmployer,
+        // Week 7 — loans (read-only preview at compute time).
+        public Money $loanDeductions,
+        // Week 7 — one-off adjustments split by kind × taxability.
+        public Money $adjustmentTaxableAdditions,
+        public Money $adjustmentNonTaxableAdditions,
+        public Money $adjustmentDeductions,
+        // Week 7 — unpaid leave reduction applied to basic pay.
+        public Money $unpaidDaysReduction,
+        public int $unpaidDaysCount,
         public array $auditLines,
     ) {}
 
@@ -76,6 +91,16 @@ final readonly class PayrollComputationResult
             totalEmployerContributions: $zero,
             taxableIncome: $zero,
             netPay: $zero,
+            allowancesTaxable: $zero,
+            allowancesNonTaxable: $zero,
+            customDeductionsEmployee: $zero,
+            customDeductionsEmployer: $zero,
+            loanDeductions: $zero,
+            adjustmentTaxableAdditions: $zero,
+            adjustmentNonTaxableAdditions: $zero,
+            adjustmentDeductions: $zero,
+            unpaidDaysReduction: $zero,
+            unpaidDaysCount: 0,
             auditLines: [],
         );
     }
