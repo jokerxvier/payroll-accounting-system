@@ -188,13 +188,21 @@ Bonus shipped beyond original scope:
 - **`PayPeriodInput` value object** (`app/ValueObjects/PayPeriodInput.php`) — immutable, factories for `monthly` / `semiMonthlyFirst` / `semiMonthlySecond` / `custom`, validates day-count vs frequency. Engine takes this instead of a `pas_pay_periods` row, so the Week 6 engine doesn't depend on Week 9 work.
 
 #### Week 7 — Deductions, loans, allowances
-- `pas_deduction_types` (taxable / non-taxable, percent / fixed, employee / employer source).
-- `pas_employee_deductions` (subscriptions with amount, schedule, optional end date).
-- `pas_employee_loans` (lightweight: principal, balance, monthly amortization). Full loan ledger is out of scope; this captures enough to deduct correctly.
-- `pas_payroll_adjustments` (one-off additions or deductions per payroll run: penalties, bonuses, refunds).
-- Allowances framework: taxable vs non-taxable allowances, applied per-period.
-- Absence handling: leave types from LMS read in; unpaid-day reduction logic.
-- Service composes deductions, loans, adjustments, and allowances into the final payslip lines.
+- [x] `pas_deduction_types` (taxable / non-taxable, percent / fixed, employee / employer source).
+- [x] `pas_employee_deductions` (subscriptions with amount, schedule, optional end date).
+- [x] `pas_employee_loans` (lightweight: principal, balance, monthly amortization). Full loan ledger is out of scope; this captures enough to deduct correctly.
+- [x] `pas_payroll_adjustments` (one-off additions or deductions per payroll run: penalties, bonuses, refunds).
+- [x] Allowances framework: taxable vs non-taxable allowances, applied per-period — `pas_allowances` + `pas_employee_allowances`, de-minimis cap column shipped (cap value pending client per Q3).
+- [ ] Absence handling: leave types from LMS read in; unpaid-day reduction logic. **Partial — `ApplyUnpaidDays` action is wired into the engine but returns zero pending the LMS leave-bridge contract (no `is_paid` / approval-status signal in `sm_leave_requests`). Engine path is plumbed; flipping the stub to a real implementation requires no engine change. Tracked in the action's PHPDoc TODO and `rules/PLAN.md:393` (Q3) + a new follow-up requesting the unpaid-leave classification rule.**
+- [x] Service composes deductions, loans, adjustments, and allowances into the final payslip lines — verified by `tests/Feature/Services/Payroll/Week7CompositionTest.php` (16 audit lines, 34 centavo-exact assertions in one end-to-end fixture).
+
+Bonus shipped beyond original scope:
+- **Five new actions in `app/Actions/Payroll/`** (`ApplyAllowances`, `ApplyEmployeeDeductions`, `ApplyEmployeeLoans`, `ApplyPayrollAdjustments`, `ApplyUnpaidDays`) with 5 colocated breakdown VOs in `app/Services/Payroll/Breakdowns/`. Mirrors Week-6's 5-action seam; engine stays thin.
+- **Admin UI for `DeductionType` + `Allowance`** under super-admin gate, mirroring Week-5 visuals. Sidebar entries gated on the role.
+- **Employee Show-page integration**: 4 live cards (deductions, allowances, loans, adjustments) replacing the placeholder, with matching edit sheets following the `edit-sheet.tsx` template + nested resource controllers.
+- **`tests/Architecture/PayrollFloatAuditTest.php`** — Pest arch test that grep-scans `app/Actions/Payroll/` and `app/Services/Payroll/` for `(float)`, `floatval`, bare `round(`, and `: float` / `float $param` declarations. Closes the open Phase 2 acceptance criterion at line 213.
+- **`PayrollLineItem` extended** with seven new codes (`CODE_ALLOWANCE_TAXABLE`, `CODE_ALLOWANCE_NON_TAXABLE`, `CODE_LOAN_AMORTIZATION`, `CODE_CUSTOM_DEDUCTION`, `CODE_ADJUSTMENT_ADDITION`, `CODE_ADJUSTMENT_DEDUCTION`, `CODE_UNPAID_DAYS`); `PayrollComputationResult` extended with 12 new fields + `unpaidDaysCount`.
+- **`ReferenceCasesTest`** grew from 10 to 15 hand-derived cases (cases 11–15 cover allowances, loans, adjustments, and termination + loan interaction).
 
 #### Week 8 — Real-time gross-to-net UI
 - Single-employee "preview" page: select employee + period, see live computation.
