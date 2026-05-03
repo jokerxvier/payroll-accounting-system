@@ -1,8 +1,26 @@
 import { useForm } from '@inertiajs/react';
-import { Banknote, IdCard, Loader2, ToggleRight, Wallet } from 'lucide-react';
+import {
+    Banknote,
+    IdCard,
+    Landmark,
+    Loader2,
+    MinusCircle,
+    PlusCircle,
+    Sliders,
+    ToggleRight,
+    Wallet,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ComponentType, FormEvent } from 'react';
 import { toast } from 'sonner';
+import { AdjustmentEditSheet } from '@/components/employees/adjustment-edit-sheet';
+import { AdjustmentsCard } from '@/components/employees/adjustments-card';
+import { AllowanceEditSheet } from '@/components/employees/allowance-edit-sheet';
+import { AllowancesCard } from '@/components/employees/allowances-card';
+import { DeductionEditSheet } from '@/components/employees/deduction-edit-sheet';
+import { DeductionsCard } from '@/components/employees/deductions-card';
+import { LoanEditSheet } from '@/components/employees/loan-edit-sheet';
+import { LoansCard } from '@/components/employees/loans-card';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -23,19 +41,49 @@ import {
     update as profileUpdate,
 } from '@/routes/employees/profile';
 import type {
+    AllowanceRef,
+    DeductionTypeRef,
+    EmployeeAllowanceRow,
+    EmployeeDeductionRow,
+    EmployeeLoanRow,
     EmployeeProfile,
     EmploymentClassification,
     EmploymentTypeOption,
     PayFrequency,
+    PayrollAdjustmentRow,
 } from '@/types';
 
-type Section = 'salary' | 'status' | 'gov_ids' | 'bank';
+type Section =
+    | 'salary'
+    | 'status'
+    | 'gov_ids'
+    | 'bank'
+    | 'deductions'
+    | 'allowances'
+    | 'loans'
+    | 'adjustments';
 
 interface EmployeeRowEditorProps {
     staffId: number;
     fullName: string | null;
     employmentTypeOptions: EmploymentTypeOption[];
     onClose: () => void;
+}
+
+/**
+ * Shape of `/employees/{staffId}/profile/json`. Mirrors EmployeeController::profileJson
+ * and `pages/employees/show.tsx` so the inline row editor can render the same
+ * four subscription cards (deductions, allowances, loans, adjustments) without
+ * navigating to the Show page.
+ */
+interface ProfileJsonResponse {
+    profile: EmployeeProfile | null;
+    deductions: EmployeeDeductionRow[];
+    allowances: EmployeeAllowanceRow[];
+    loans: EmployeeLoanRow[];
+    pendingAdjustments: PayrollAdjustmentRow[];
+    deductionTypeOptions: DeductionTypeRef[];
+    allowanceOptions: AllowanceRef[];
 }
 
 const SECTIONS: {
@@ -47,6 +95,10 @@ const SECTIONS: {
     { id: 'status', label: 'Status', icon: ToggleRight },
     { id: 'gov_ids', label: 'Government IDs', icon: IdCard },
     { id: 'bank', label: 'Bank account', icon: Wallet },
+    { id: 'deductions', label: 'Deductions', icon: MinusCircle },
+    { id: 'allowances', label: 'Allowances', icon: PlusCircle },
+    { id: 'loans', label: 'Loans', icon: Landmark },
+    { id: 'adjustments', label: 'Adjustments', icon: Sliders },
 ];
 
 const PAY_FREQUENCY_OPTIONS: { value: PayFrequency; label: string }[] = [
@@ -81,14 +133,37 @@ export function EmployeeRowEditor({
     onClose,
 }: EmployeeRowEditorProps) {
     const [activeTab, setActiveTab] = useState<Section>('salary');
-    const [profile, setProfile] = useState<EmployeeProfile | null | undefined>(
-        undefined,
-    );
+    const [profileData, setProfileData] = useState<
+        ProfileJsonResponse | null | undefined
+    >(undefined);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
+    // Sheet state for the four Week 7 subscription tables. Each sheet has an
+    // `open` flag plus the row currently being edited (undefined → create
+    // mode). Mirrors the pattern in `pages/employees/show.tsx`.
+    const [deductionSheetOpen, setDeductionSheetOpen] = useState(false);
+    const [editingDeduction, setEditingDeduction] = useState<
+        EmployeeDeductionRow | undefined
+    >(undefined);
+
+    const [allowanceSheetOpen, setAllowanceSheetOpen] = useState(false);
+    const [editingAllowance, setEditingAllowance] = useState<
+        EmployeeAllowanceRow | undefined
+    >(undefined);
+
+    const [loanSheetOpen, setLoanSheetOpen] = useState(false);
+    const [editingLoan, setEditingLoan] = useState<EmployeeLoanRow | undefined>(
+        undefined,
+    );
+
+    const [adjustmentSheetOpen, setAdjustmentSheetOpen] = useState(false);
+    const [editingAdjustment, setEditingAdjustment] = useState<
+        PayrollAdjustmentRow | undefined
+    >(undefined);
+
     useEffect(() => {
-        if (profile !== undefined) {
+        if (profileData !== undefined) {
             return;
         }
 
@@ -106,13 +181,11 @@ export function EmployeeRowEditor({
                     throw new Error(`HTTP ${res.status}`);
                 }
 
-                return (await res.json()) as {
-                    profile: EmployeeProfile | null;
-                };
+                return (await res.json()) as ProfileJsonResponse;
             })
             .then((data) => {
                 if (!cancelled) {
-                    setProfile(data.profile);
+                    setProfileData(data);
                 }
             })
             .catch((err: unknown) => {
@@ -133,18 +206,44 @@ export function EmployeeRowEditor({
         return () => {
             cancelled = true;
         };
-    }, [profile, staffId]);
+    }, [profileData, staffId]);
 
     const handleSaved = () => {
-        // Invalidate the cached profile so reopening fetches fresh data.
-        setProfile(undefined);
-        onClose();
+        // Invalidate the cached profile so the row refetches and shows the
+        // newly-saved values. Do NOT auto-close the row — the user closes
+        // manually via the X button so they can edit multiple tabs in one
+        // session without re-expanding.
+        setProfileData(undefined);
     };
 
     const retryFetch = () => {
-        setProfile(undefined);
+        setProfileData(undefined);
         setFetchError(null);
     };
+
+    /**
+     * Wrap the sheet's onOpenChange so the row editor refetches its profile
+     * payload whenever a sheet closes. The sheets ship with `preserveState`
+     * and don't expose an explicit onSuccess callback, so we conservatively
+     * refetch on every close. Cancel-without-changes triggers a small extra
+     * GET — acceptable trade-off vs. modifying the shared edit-sheet contracts.
+     */
+    const wrapSheetOpenChange =
+        (
+            setOpen: (open: boolean) => void,
+            clearEditing: () => void,
+        ): ((open: boolean) => void) =>
+        (open) => {
+            setOpen(open);
+
+            if (!open) {
+                clearEditing();
+                setProfileData(undefined);
+            }
+        };
+
+    const loadedData = profileData ?? null;
+    const profile = loadedData?.profile ?? null;
 
     return (
         <div className="rounded-md border bg-background">
@@ -213,45 +312,212 @@ export function EmployeeRowEditor({
                     </div>
                 )}
 
-                {profile === null && !loading && fetchError === null && (
-                    <p className="text-sm text-muted-foreground">
-                        No payroll profile to edit yet.
-                    </p>
-                )}
+                {loadedData !== null &&
+                    profile === null &&
+                    !loading &&
+                    fetchError === null && (
+                        <p className="text-sm text-muted-foreground">
+                            No payroll profile to edit yet.
+                        </p>
+                    )}
 
-                {profile !== undefined &&
+                {loadedData !== null &&
                     profile !== null &&
                     !loading &&
-                    fetchError === null &&
-                    (activeTab === 'salary' ? (
-                        <SalaryForm
-                            profile={profile}
+                    fetchError === null && (
+                        <ProfileTabContent
+                            activeTab={activeTab}
                             staffId={staffId}
+                            profile={profile}
+                            data={loadedData}
                             employmentTypeOptions={employmentTypeOptions}
                             onSaved={handleSaved}
+                            onAddDeduction={() => {
+                                setEditingDeduction(undefined);
+                                setDeductionSheetOpen(true);
+                            }}
+                            onEditDeduction={(row) => {
+                                setEditingDeduction(row);
+                                setDeductionSheetOpen(true);
+                            }}
+                            onAddAllowance={() => {
+                                setEditingAllowance(undefined);
+                                setAllowanceSheetOpen(true);
+                            }}
+                            onEditAllowance={(row) => {
+                                setEditingAllowance(row);
+                                setAllowanceSheetOpen(true);
+                            }}
+                            onAddLoan={() => {
+                                setEditingLoan(undefined);
+                                setLoanSheetOpen(true);
+                            }}
+                            onEditLoan={(row) => {
+                                setEditingLoan(row);
+                                setLoanSheetOpen(true);
+                            }}
+                            onAddAdjustment={() => {
+                                setEditingAdjustment(undefined);
+                                setAdjustmentSheetOpen(true);
+                            }}
+                            onEditAdjustment={(row) => {
+                                setEditingAdjustment(row);
+                                setAdjustmentSheetOpen(true);
+                            }}
                         />
-                    ) : activeTab === 'status' ? (
-                        <StatusForm
-                            profile={profile}
-                            staffId={staffId}
-                            onSaved={handleSaved}
-                        />
-                    ) : activeTab === 'gov_ids' ? (
-                        <GovIdsForm
-                            profile={profile}
-                            staffId={staffId}
-                            onSaved={handleSaved}
-                        />
-                    ) : (
-                        <BankForm
-                            profile={profile}
-                            staffId={staffId}
-                            onSaved={handleSaved}
-                        />
-                    ))}
+                    )}
             </div>
+
+            {loadedData !== null && profile !== null && (
+                <>
+                    <DeductionEditSheet
+                        open={deductionSheetOpen}
+                        onOpenChange={wrapSheetOpenChange(
+                            setDeductionSheetOpen,
+                            () => setEditingDeduction(undefined),
+                        )}
+                        lmsStaffId={staffId}
+                        deduction={editingDeduction}
+                        deductionTypeOptions={loadedData.deductionTypeOptions}
+                    />
+                    <AllowanceEditSheet
+                        open={allowanceSheetOpen}
+                        onOpenChange={wrapSheetOpenChange(
+                            setAllowanceSheetOpen,
+                            () => setEditingAllowance(undefined),
+                        )}
+                        lmsStaffId={staffId}
+                        allowance={editingAllowance}
+                        allowanceOptions={loadedData.allowanceOptions}
+                    />
+                    <LoanEditSheet
+                        open={loanSheetOpen}
+                        onOpenChange={wrapSheetOpenChange(
+                            setLoanSheetOpen,
+                            () => setEditingLoan(undefined),
+                        )}
+                        lmsStaffId={staffId}
+                        loan={editingLoan}
+                    />
+                    <AdjustmentEditSheet
+                        open={adjustmentSheetOpen}
+                        onOpenChange={wrapSheetOpenChange(
+                            setAdjustmentSheetOpen,
+                            () => setEditingAdjustment(undefined),
+                        )}
+                        lmsStaffId={staffId}
+                        adjustment={editingAdjustment}
+                    />
+                </>
+            )}
         </div>
     );
+}
+
+interface ProfileTabContentProps {
+    activeTab: Section;
+    staffId: number;
+    profile: EmployeeProfile;
+    data: ProfileJsonResponse;
+    employmentTypeOptions: EmploymentTypeOption[];
+    onSaved: () => void;
+    onAddDeduction: () => void;
+    onEditDeduction: (row: EmployeeDeductionRow) => void;
+    onAddAllowance: () => void;
+    onEditAllowance: (row: EmployeeAllowanceRow) => void;
+    onAddLoan: () => void;
+    onEditLoan: (row: EmployeeLoanRow) => void;
+    onAddAdjustment: () => void;
+    onEditAdjustment: (row: PayrollAdjustmentRow) => void;
+}
+
+function ProfileTabContent({
+    activeTab,
+    staffId,
+    profile,
+    data,
+    employmentTypeOptions,
+    onSaved,
+    onAddDeduction,
+    onEditDeduction,
+    onAddAllowance,
+    onEditAllowance,
+    onAddLoan,
+    onEditLoan,
+    onAddAdjustment,
+    onEditAdjustment,
+}: ProfileTabContentProps) {
+    switch (activeTab) {
+        case 'salary':
+            return (
+                <SalaryForm
+                    profile={profile}
+                    staffId={staffId}
+                    employmentTypeOptions={employmentTypeOptions}
+                    onSaved={onSaved}
+                />
+            );
+        case 'status':
+            return (
+                <StatusForm
+                    profile={profile}
+                    staffId={staffId}
+                    onSaved={onSaved}
+                />
+            );
+        case 'gov_ids':
+            return (
+                <GovIdsForm
+                    profile={profile}
+                    staffId={staffId}
+                    onSaved={onSaved}
+                />
+            );
+        case 'bank':
+            return (
+                <BankForm
+                    profile={profile}
+                    staffId={staffId}
+                    onSaved={onSaved}
+                />
+            );
+        case 'deductions':
+            return (
+                <DeductionsCard
+                    deductions={data.deductions}
+                    className="lg:col-span-1"
+                    onAdd={onAddDeduction}
+                    onEdit={onEditDeduction}
+                />
+            );
+        case 'allowances':
+            return (
+                <AllowancesCard
+                    allowances={data.allowances}
+                    className="lg:col-span-1"
+                    onAdd={onAddAllowance}
+                    onEdit={onEditAllowance}
+                />
+            );
+        case 'loans':
+            return (
+                <LoansCard
+                    loans={data.loans}
+                    className="lg:col-span-1"
+                    onAdd={onAddLoan}
+                    onEdit={onEditLoan}
+                />
+            );
+        case 'adjustments':
+            return (
+                <AdjustmentsCard
+                    adjustments={data.pendingAdjustments}
+                    className="lg:col-span-1"
+                    onAdd={onAddAdjustment}
+                    onEdit={onEditAdjustment}
+                />
+            );
+    }
 }
 
 function SectionSkeleton() {
