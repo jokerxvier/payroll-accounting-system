@@ -210,7 +210,7 @@ Bonus shipped beyond original scope:
 - [x] Effective-dated contribution tables: changing a rate mid-test does not affect prior periods — verified in `PayrollComputationServiceTest::it picks the contribution row effective on period.end()`.
 - [ ] Real-time preview updates within 500ms of input change (Week 8 — UI not yet built)
 - [x] Computation engine has 80%+ unit test coverage; every edge case in the test plan is covered — 63 new tests this week across all five actions, the service composer, and 10 reference cases.
-- [ ] Zero floats in any payroll computation code path (audited via grep + review)
+- [x] Zero floats in any payroll computation code path — automated by `tests/Architecture/PayrollFloatAuditTest.php` (Week 7 quick win)
 
 ---
 
