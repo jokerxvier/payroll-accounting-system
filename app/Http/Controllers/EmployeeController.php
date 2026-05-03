@@ -216,13 +216,31 @@ class EmployeeController extends Controller
             Gate::authorize('viewAny', EmployeeProfile::class);
         }
 
+        $profile = $detail->profile;
+
         return response()->json([
             'employee' => [
                 'lms_staff_id' => $detail->lms_staff_id,
                 'full_name' => $detail->full_name,
                 'staff_no' => $detail->staff_no,
             ],
-            'profile' => $detail->profile,
+            'profile' => $profile,
+            // Week 7 — mirror the Show page payload so the directory's inline
+            // row editor can render the same four subscription cards (and the
+            // create/edit sheets) without a second round-trip. Shape matches
+            // `show()` exactly; the frontend reuses its TypeScript interfaces.
+            'deductions' => $this->loadDeductions($profile),
+            'allowances' => $this->loadAllowances($profile),
+            'loans' => $this->loadLoans($profile),
+            'pendingAdjustments' => $this->loadPendingAdjustments($profile),
+            'deductionTypeOptions' => DeductionType::query()
+                ->active()
+                ->orderBy('name')
+                ->get(['id', 'code', 'name', 'is_taxable', 'calc_method', 'source']),
+            'allowanceOptions' => Allowance::query()
+                ->active()
+                ->orderBy('name')
+                ->get(['id', 'code', 'name', 'is_taxable', 'is_de_minimis', 'de_minimis_cap_centavos', 'default_amount_centavos']),
         ]);
     }
 }
