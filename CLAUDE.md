@@ -23,6 +23,12 @@ vendor/bin/pint --dirty --format agent   # Format modified PHP files (run before
 npm run lint                             # ESLint fix
 npm run format                           # Prettier fix
 npm run types:check                      # TypeScript type checking
+vendor/bin/phpstan analyse               # Larastan v3 — configured but NOT in ci:check; run manually
+composer ci:check                        # Full gate: lint, format, types, tests (run before pushing)
+
+# Frontend tests (Vitest)
+npm test                                 # Run all Vitest tests
+npm run test:watch                       # Watch mode
 
 # Scaffolding (always pass --no-interaction)
 php artisan make:model ModelName --no-interaction
@@ -32,12 +38,18 @@ php artisan make:controller ControllerName --no-interaction
 
 ## Architecture
 
-### Backend
-- **Controllers** in `app/Http/Controllers/` — grouped by domain (e.g., `Settings/`)
+### Backend (layered: Controller → FormRequest → Service → Repository → Model)
+- **Controllers** in `app/Http/Controllers/` — grouped by domain (e.g., `Settings/`); thin, delegate to services
 - **Form Requests** in `app/Http/Requests/` — mirror controller directory structure
+- **Services** in `app/Services/` — business logic, organized by bounded context (`Payroll/`, `Statutory/`); strategy pattern for statutory contributions (`Statutory/Strategies/`)
+- **Repositories** in `app/Repositories/` — split into `Contracts/` (interfaces) and `Eloquent/` (implementations); bound in service providers
+- **Value Objects** in `app/ValueObjects/` — `Money` (integer centavos), `PayPeriodInput`; never use floats for money
+- **Models** in `app/Models/` — `Pas/` for app-owned tables, `Lms/` for read-only LMS tables, `User.php` at root
+- **Policies** in `app/Policies/` — one per model (per coding standards)
 - **Concerns (Traits)** in `app/Concerns/` — shared validation rules (e.g., `ProfileValidationRules`, `PasswordValidationRules`)
 - **Actions** in `app/Actions/` — Fortify action classes for user creation, password reset
-- **Providers** — `FortifyServiceProvider` configures auth views and customizations
+- **Observers** in `app/Observers/` — model lifecycle hooks (e.g., audit logging)
+- **Providers** — `FortifyServiceProvider` configures auth views; repository bindings live in their own provider
 - **Middleware** — `HandleInertiaRequests` shares props globally; `HandleAppearance` manages theme
 
 ### Frontend
@@ -46,7 +58,7 @@ php artisan make:controller ControllerName --no-interaction
 - **Components** in `resources/js/components/` — Radix UI primitives styled with Tailwind (shadcn/ui pattern), using `class-variance-authority` for variants
 - **Hooks** in `resources/js/hooks/` — custom React hooks (`useAppearance`, etc.)
 - **Types** in `resources/js/types/` — shared TypeScript interfaces
-- **Wayfinder** — auto-generated typed route functions in `resources/js/wayfinder/`; import from `@/actions/` (controllers) or `@/routes/` (named routes)
+- **Wayfinder** — auto-generated typed route functions in `resources/js/wayfinder/`; import from `@/actions/` (controllers) or `@/routes/` (named routes). The Vite plugin regenerates these on `vite dev` / `vite build`. If you add a backend route and TypeScript can't resolve it from `@/routes/...`, restart `npm run dev` (or run `npm run build`) to regenerate the bindings.
 
 ### Routes
 - `routes/web.php` — main routes (welcome, dashboard)
@@ -57,6 +69,8 @@ php artisan make:controller ControllerName --no-interaction
 - MySQL (`payroll_db`) — shared with the existing LMS (read-only via the `lms` connection)
 - App-owned tables carry the `pas_` prefix; LMS tables (`sm_*`, `users`, `roles`, etc.) are read-only
 - Redis-backed sessions, cache, and queue (configured to avoid colliding with LMS framework tables)
+- Two guardrail tests enforce DB safety; do not weaken them: `tests/Feature/LmsReadOnlyTest.php` (no writes to LMS tables) and `tests/Feature/MigrationSafetyTest.php` (every migration is `pas_`-prefixed and reversible)
+- Never run `migrate:fresh` against the dev DB — it drops the LMS tables. Use incremental `migrate`, or `--env=testing` for a clean slate
 
 ## Skills
 
@@ -97,7 +111,7 @@ See `.claude/agents/README.md` for the full routing table and document hierarchy
 
 ## Project Rules
 
-Before making changes, read the relevant rule files in `rules/`:
+Before making changes, read the relevant rule files in `rules/`. Also see `AGENTS.md` at the repo root for the agent-facing condensed handbook (delegation routing, guardrails, working agreements) — it overlaps with this file but is the canonical reference for non-Claude agents.
 
 - `rules/PLAN.md` — 16-week phased delivery plan: scope and non-goals, phase breakdown (Foundation → Computation Engine → Batch Processing → Reports/Launch), acceptance gates, client dependencies, risk register, and what's deferred to v2 (general ledger, e-filing, year-end annualization)
 - `rules/CODING_STANDARDS_LARAVEL.md` — Backend architecture: Repository + Service + Action layered pattern, money as integer centavos via `Money` value object, double-entry accounting invariants, domain integrity (period locks, voiding instead of deleting), `declare(strict_types=1)` on every PHP file, Policy per model
