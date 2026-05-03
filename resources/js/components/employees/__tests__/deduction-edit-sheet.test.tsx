@@ -1,10 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DeductionEditSheet } from '@/components/employees/deduction-edit-sheet';
-import type {
-    DeductionTypeRef,
-    EmployeeDeductionRow,
-} from '@/types';
+import type { DeductionTypeRef, EmployeeDeductionRow } from '@/types';
 
 /**
  * Inertia's `useForm` keeps its own internal state. We swap it for a small

@@ -129,9 +129,7 @@ export function AdjustmentEditSheet({
         event.preventDefault();
 
         const onSuccess = () => {
-            toast.success(
-                isEdit ? 'Adjustment updated.' : 'Adjustment added.',
-            );
+            toast.success(isEdit ? 'Adjustment updated.' : 'Adjustment added.');
             onOpenChange(false);
         };
 
@@ -175,8 +173,7 @@ export function AdjustmentEditSheet({
                         {isEdit ? 'Edit adjustment' : 'Add adjustment'}
                     </SheetTitle>
                     <SheetDescription>
-                        One-off bonus, single deduction, or back-pay
-                        correction.
+                        One-off bonus, single deduction, or back-pay correction.
                     </SheetDescription>
                 </SheetHeader>
 
@@ -215,8 +212,8 @@ export function AdjustmentEditSheet({
                             <div className="space-y-0.5">
                                 <Label htmlFor="is_taxable">Taxable</Label>
                                 <p className="text-xs text-muted-foreground">
-                                    When ON, this adjustment folds into the
-                                    BIR taxable base.
+                                    When ON, this adjustment folds into the BIR
+                                    taxable base.
                                 </p>
                             </div>
                             <Switch
@@ -263,9 +260,7 @@ export function AdjustmentEditSheet({
                                     required
                                 />
                             </div>
-                            <InputError
-                                message={form.errors.amount_centavos}
-                            />
+                            <InputError message={form.errors.amount_centavos} />
                         </div>
 
                         <div className="grid gap-2">
@@ -273,9 +268,7 @@ export function AdjustmentEditSheet({
                             <DatePicker
                                 id="applies_on"
                                 value={form.data.applies_on}
-                                onChange={(v) =>
-                                    form.setData('applies_on', v)
-                                }
+                                onChange={(v) => form.setData('applies_on', v)}
                                 placeholder="Select calendar date"
                                 ariaInvalid={Boolean(form.errors.applies_on)}
                             />

@@ -149,7 +149,7 @@ export function LoanEditSheet({
         form.clearErrors();
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setPrincipalStr(centavosToPesos(next.principal_centavos));
-         
+
         setAmortStr(centavosToPesos(next.monthly_amortization_centavos));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rowKey]);
@@ -343,10 +343,7 @@ export function LoanEditSheet({
                                     )
                                 }
                             >
-                                <SelectTrigger
-                                    id="schedule"
-                                    className="w-full"
-                                >
+                                <SelectTrigger id="schedule" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -374,9 +371,7 @@ export function LoanEditSheet({
                                         form.errors.started_on,
                                     )}
                                 />
-                                <InputError
-                                    message={form.errors.started_on}
-                                />
+                                <InputError message={form.errors.started_on} />
                             </div>
                         )}
 
@@ -432,9 +427,7 @@ function ReadOnlyLoanContext({ loan }: { loan: EmployeeLoanRow }) {
             </p>
             <dl className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                    <dt className="text-xs text-muted-foreground">
-                        Principal
-                    </dt>
+                    <dt className="text-xs text-muted-foreground">Principal</dt>
                     <dd className="tabular-nums">
                         <Money amount={loan.principal_centavos / 100} />
                     </dd>

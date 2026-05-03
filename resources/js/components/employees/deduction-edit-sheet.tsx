@@ -170,7 +170,7 @@ export function DeductionEditSheet({
         form.clearErrors();
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setAmountStr(centavosToPesos(next.amount_centavos));
-         
+
         setPercentStr(percentFromBasisPoints(next.percent_basis_points));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rowKey]);
@@ -190,11 +190,11 @@ export function DeductionEditSheet({
 
         if (next?.calc_method === 'fixed') {
             form.setData('percent_basis_points', null);
-             
+
             setPercentStr('');
         } else if (next?.calc_method === 'percent') {
             form.setData('amount_centavos', null);
-             
+
             setAmountStr('');
         }
     };
@@ -388,10 +388,7 @@ export function DeductionEditSheet({
                                     )
                                 }
                             >
-                                <SelectTrigger
-                                    id="schedule"
-                                    className="w-full"
-                                >
+                                <SelectTrigger id="schedule" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -420,9 +417,7 @@ export function DeductionEditSheet({
                                     form.errors.effective_from,
                                 )}
                             />
-                            <InputError
-                                message={form.errors.effective_from}
-                            />
+                            <InputError message={form.errors.effective_from} />
                         </div>
 
                         <div className="grid gap-2">

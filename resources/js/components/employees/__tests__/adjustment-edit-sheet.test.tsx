@@ -101,8 +101,12 @@ describe('AdjustmentEditSheet', () => {
         // Open the Radix Select to expose its options in the DOM.
         fireEvent.click(screen.getByRole('combobox', { name: /kind/i }));
 
-        expect(screen.getByRole('option', { name: 'Addition' })).toBeInTheDocument();
-        expect(screen.getByRole('option', { name: 'Deduction' })).toBeInTheDocument();
+        expect(
+            screen.getByRole('option', { name: 'Addition' }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole('option', { name: 'Deduction' }),
+        ).toBeInTheDocument();
     });
 
     it('keeps is_taxable independent of kind — a non-taxable addition is allowed', () => {

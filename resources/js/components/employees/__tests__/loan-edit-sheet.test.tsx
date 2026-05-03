@@ -17,8 +17,9 @@ const lastSubmit: {
     transformedData: Record<string, unknown> | null;
 } = { method: null, url: null, transformedData: null };
 
-let lastTransform: ((data: Record<string, unknown>) => Record<string, unknown>) | null =
-    null;
+let lastTransform:
+    | ((data: Record<string, unknown>) => Record<string, unknown>)
+    | null = null;
 
 vi.mock('@inertiajs/react', async () => {
     const { useState } = await import('react');
@@ -137,16 +138,14 @@ describe('LoanEditSheet', () => {
 
         // The editable input would carry id="principal_centavos"; the
         // read-only context only renders <Money> inside a <dd>.
-        expect(
-            screen.queryByLabelText('Principal'),
-        ).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Principal')).not.toBeInTheDocument();
 
         // The read-only context block is present.
         expect(screen.getByText('Read-only')).toBeInTheDocument();
         // Both Principal and Outstanding read-only labels are visible.
-        expect(
-            screen.getAllByText(/Principal/).length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText(/Principal/).length).toBeGreaterThanOrEqual(
+            1,
+        );
         expect(screen.getByText(/Outstanding/)).toBeInTheDocument();
     });
 
@@ -154,9 +153,7 @@ describe('LoanEditSheet', () => {
         renderSheet({ loan: SAMPLE_LOAN });
 
         // The DatePicker would expose id="started_on" via getByLabelText.
-        expect(
-            screen.queryByLabelText('Started on'),
-        ).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Started on')).not.toBeInTheDocument();
 
         // The started_on date is still surfaced in the read-only block.
         expect(screen.getByText('Started on')).toBeInTheDocument();

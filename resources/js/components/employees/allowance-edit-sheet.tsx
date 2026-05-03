@@ -281,9 +281,7 @@ export function AllowanceEditSheet({
                                     className="pl-7 text-right tabular-nums"
                                 />
                             </div>
-                            <InputError
-                                message={form.errors.amount_centavos}
-                            />
+                            <InputError message={form.errors.amount_centavos} />
                         </div>
 
                         <div className="grid gap-2">
@@ -297,10 +295,7 @@ export function AllowanceEditSheet({
                                     )
                                 }
                             >
-                                <SelectTrigger
-                                    id="schedule"
-                                    className="w-full"
-                                >
+                                <SelectTrigger id="schedule" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -329,9 +324,7 @@ export function AllowanceEditSheet({
                                     form.errors.effective_from,
                                 )}
                             />
-                            <InputError
-                                message={form.errors.effective_from}
-                            />
+                            <InputError message={form.errors.effective_from} />
                         </div>
 
                         <div className="grid gap-2">
