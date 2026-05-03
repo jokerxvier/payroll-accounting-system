@@ -3,9 +3,21 @@
 namespace App\Providers;
 
 use App\Listeners\AssignPayrollRoleOnLogin;
+use App\Models\Pas\Allowance;
+use App\Models\Pas\DeductionType;
+use App\Models\Pas\EmployeeAllowance;
+use App\Models\Pas\EmployeeDeduction;
+use App\Models\Pas\EmployeeLoan;
 use App\Models\Pas\EmployeeProfile;
+use App\Models\Pas\PayrollAdjustment;
 use App\Models\Pas\StatutoryContribution;
+use App\Policies\Pas\AllowancePolicy;
+use App\Policies\Pas\DeductionTypePolicy;
+use App\Policies\Pas\EmployeeAllowancePolicy;
+use App\Policies\Pas\EmployeeDeductionPolicy;
+use App\Policies\Pas\EmployeeLoanPolicy;
 use App\Policies\Pas\EmployeeProfilePolicy;
+use App\Policies\Pas\PayrollAdjustmentPolicy;
 use App\Policies\Pas\StatutoryContributionPolicy;
 use App\Services\Statutory\StatutoryContributionResolver;
 use App\Services\Statutory\Strategies\BracketTableStrategy;
@@ -59,6 +71,14 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::policy(EmployeeProfile::class, EmployeeProfilePolicy::class);
         Gate::policy(StatutoryContribution::class, StatutoryContributionPolicy::class);
+
+        // Week 7 — deductions, loans, allowances, adjustments
+        Gate::policy(DeductionType::class, DeductionTypePolicy::class);
+        Gate::policy(Allowance::class, AllowancePolicy::class);
+        Gate::policy(EmployeeDeduction::class, EmployeeDeductionPolicy::class);
+        Gate::policy(EmployeeAllowance::class, EmployeeAllowancePolicy::class);
+        Gate::policy(EmployeeLoan::class, EmployeeLoanPolicy::class);
+        Gate::policy(PayrollAdjustment::class, PayrollAdjustmentPolicy::class);
     }
 
     /**
