@@ -38,6 +38,16 @@ export interface DeductionTypeRef {
     source: DeductionSource;
 }
 
+/**
+ * Full `pas_deduction_types` row. Superset of `DeductionTypeRef` — adds the
+ * admin-only fields (`is_active`, `notes`) that the catalog index/edit pages
+ * surface but per-employee subscription rows don't carry.
+ */
+export interface DeductionTypeRow extends DeductionTypeRef {
+    is_active: boolean;
+    notes: string | null;
+}
+
 /** Catalog reference embedded inside an `EmployeeAllowanceRow`. */
 export interface AllowanceRef {
     id: number;
@@ -47,6 +57,17 @@ export interface AllowanceRef {
     is_de_minimis: boolean;
     /** Null cap = no de-minimis limit; defer to BIR rules at compute time. */
     de_minimis_cap_centavos: number | null;
+}
+
+/**
+ * Full `pas_allowances` row. Superset of `AllowanceRef` — adds the
+ * admin-only fields (`default_amount_centavos`, `is_active`, `notes`).
+ */
+export interface AllowanceRow extends AllowanceRef {
+    /** Hint amount surfaced when creating new EmployeeAllowance subscriptions. */
+    default_amount_centavos: number | null;
+    is_active: boolean;
+    notes: string | null;
 }
 
 /**

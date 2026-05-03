@@ -3,6 +3,8 @@ import {
     BookOpen,
     FolderGit2,
     LayoutGrid,
+    MinusCircle,
+    PlusCircle,
     ShieldCheck,
     Users,
 } from 'lucide-react';
@@ -23,7 +25,9 @@ import {
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { dashboard } from '@/routes';
+import { index as adminAllowancesIndex } from '@/routes/admin/allowances';
 import { index as adminContributionTablesIndex } from '@/routes/admin/contribution-tables';
+import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
 import { index as employeesIndex } from '@/routes/employees';
 import type { NavItem } from '@/types';
 
@@ -45,6 +49,16 @@ const adminNavItems: NavItem[] = [
         title: 'Contribution tables',
         href: adminContributionTablesIndex(),
         icon: ShieldCheck,
+    },
+    {
+        title: 'Deduction types',
+        href: adminDeductionTypesIndex(),
+        icon: MinusCircle,
+    },
+    {
+        title: 'Allowances',
+        href: adminAllowancesIndex(),
+        icon: PlusCircle,
     },
 ];
 
