@@ -12,8 +12,8 @@ use App\Models\User;
  * Per-employee deduction CRUD endpoints (Week 7, Chunk 6).
  *
  * Pinned behaviors:
- *  - Auth + role gates: super-admin / payroll-officer / hr can store/update;
- *    only super-admin can destroy. Auditor + employee always 403 on writes.
+ *  - Auth + role gates: super-admin / payroll-officer / hr can store/update
+ *    AND destroy. Auditor + employee always 403 on writes (including destroy).
  *  - Validation: missing required fields produce 422 field errors.
  *  - Cross-field: amount vs percent flips based on the resolved DeductionType's
  *    calc_method (fixed → amount required + percent forbidden, and vice versa).
@@ -244,8 +244,59 @@ it('super-admin can destroy a deduction', function () {
     expect(EmployeeDeduction::query()->whereKey($row->id)->exists())->toBeFalse();
 });
 
-it('forbids hr from destroying a deduction', function () {
+it('allows hr to destroy a deduction', function () {
     $user = authDeductionAs('hr');
+    [$staff, $profile] = deductionStaffAndProfile();
+
+    $row = EmployeeDeduction::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/deductions/'.$row->id)
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect(EmployeeDeduction::query()->whereKey($row->id)->exists())->toBeFalse();
+});
+
+it('allows payroll-officer to destroy a deduction', function () {
+    $user = authDeductionAs('payroll-officer');
+    [$staff, $profile] = deductionStaffAndProfile();
+
+    $row = EmployeeDeduction::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/deductions/'.$row->id)
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect(EmployeeDeduction::query()->whereKey($row->id)->exists())->toBeFalse();
+});
+
+it('forbids the auditor role from destroying a deduction', function () {
+    $user = authDeductionAs('auditor');
+    [$staff, $profile] = deductionStaffAndProfile();
+
+    $row = EmployeeDeduction::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/deductions/'.$row->id)
+        ->assertForbidden();
+
+    expect(EmployeeDeduction::query()->whereKey($row->id)->exists())->toBeTrue();
+});
+
+it('forbids the employee role from destroying a deduction', function () {
+    // The owning-employee carve-out only extends to `view`; an employee may
+    // see their own subscription but never delete it. A bare `employee`
+    // without a profile is the same shape (the policy short-circuits on
+    // role match before the profile check).
+    $user = authDeductionAs('employee');
     [$staff, $profile] = deductionStaffAndProfile();
 
     $row = EmployeeDeduction::factory()->create([

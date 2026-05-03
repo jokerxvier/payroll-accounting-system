@@ -11,17 +11,14 @@ use App\Models\User;
  * Authorization for per-employee allowance subscriptions.
  *
  * Same role matrix as `EmployeeDeductionPolicy`: super-admin / payroll-officer
- * / hr manage; an `employee` can view their own row; only super-admin can
- * delete (defense-in-depth for the audit trail — close via `effective_to`
- * instead).
+ * / hr manage (including delete); an `employee` can view their own row but
+ * cannot delete it. End-dating via `effective_to` remains the preferred
+ * close-out path because it preserves history for back-dated payslips.
  */
 final class EmployeeAllowancePolicy
 {
     /** @var list<string> */
     private const MANAGE_ROLES = ['super-admin', 'payroll-officer', 'hr'];
-
-    /** @var list<string> */
-    private const DELETE_ROLES = ['super-admin'];
 
     public function viewAny(User $user): bool
     {
@@ -49,6 +46,6 @@ final class EmployeeAllowancePolicy
 
     public function delete(User $user, EmployeeAllowance $row): bool
     {
-        return $user->hasAnyRole(self::DELETE_ROLES);
+        return $user->hasAnyRole(self::MANAGE_ROLES);
     }
 }

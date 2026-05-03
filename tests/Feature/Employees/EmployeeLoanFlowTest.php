@@ -11,8 +11,8 @@ use App\Models\User;
  * Per-employee loan CRUD endpoints (Week 7, Chunk 6).
  *
  * Pinned behaviors:
- *  - Auth + role gates: super-admin / payroll-officer / hr can store/update;
- *    only super-admin can destroy.
+ *  - Auth + role gates: super-admin / payroll-officer / hr can store/update
+ *    AND destroy. Auditor + employee always 403 on writes (including destroy).
  *  - Server-controlled fields: outstanding_balance_centavos initialises from
  *    principal at create time and is NOT editable via update; lock_version is
  *    initialised to 0 and is NOT editable via update. The update FormRequest
@@ -170,8 +170,57 @@ it('super-admin can destroy a loan', function () {
     expect(EmployeeLoan::query()->whereKey($row->id)->exists())->toBeFalse();
 });
 
-it('forbids payroll-officer from destroying a loan', function () {
+it('allows payroll-officer to destroy a loan', function () {
     $user = authLoanAs('payroll-officer');
+    [$staff, $profile] = loanStaffAndProfile();
+
+    $row = EmployeeLoan::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/loans/'.$row->id)
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect(EmployeeLoan::query()->whereKey($row->id)->exists())->toBeFalse();
+});
+
+it('allows hr to destroy a loan', function () {
+    $user = authLoanAs('hr');
+    [$staff, $profile] = loanStaffAndProfile();
+
+    $row = EmployeeLoan::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/loans/'.$row->id)
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect(EmployeeLoan::query()->whereKey($row->id)->exists())->toBeFalse();
+});
+
+it('forbids the auditor role from destroying a loan', function () {
+    $user = authLoanAs('auditor');
+    [$staff, $profile] = loanStaffAndProfile();
+
+    $row = EmployeeLoan::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/loans/'.$row->id)
+        ->assertForbidden();
+
+    expect(EmployeeLoan::query()->whereKey($row->id)->exists())->toBeTrue();
+});
+
+it('forbids the employee role from destroying a loan', function () {
+    // The owning-employee carve-out only extends to `view`; an employee may
+    // see their own loan but never delete it.
+    $user = authLoanAs('employee');
     [$staff, $profile] = loanStaffAndProfile();
 
     $row = EmployeeLoan::factory()->create([

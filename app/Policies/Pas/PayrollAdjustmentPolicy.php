@@ -11,19 +11,16 @@ use App\Models\User;
  * Authorization for one-off payroll adjustments.
  *
  * Same role matrix as the other per-employee Pas policies: super-admin /
- * payroll-officer / hr manage; an `employee` can view their own adjustment;
- * only super-admin can delete. Adjustments are typically corrected with a
- * reversing entry rather than deleted, but super-admin retains the escape
- * hatch for genuinely erroneous rows that have not yet been included in a
- * payroll run.
+ * payroll-officer / hr manage (including delete); an `employee` can view
+ * their own adjustment but cannot delete it. Adjustments that have already
+ * shipped on a payroll run should be corrected with a reversing entry, but
+ * managers retain delete as the escape hatch for genuinely erroneous rows
+ * that have not yet been included in a run.
  */
 final class PayrollAdjustmentPolicy
 {
     /** @var list<string> */
     private const MANAGE_ROLES = ['super-admin', 'payroll-officer', 'hr'];
-
-    /** @var list<string> */
-    private const DELETE_ROLES = ['super-admin'];
 
     public function viewAny(User $user): bool
     {
@@ -51,6 +48,6 @@ final class PayrollAdjustmentPolicy
 
     public function delete(User $user, PayrollAdjustment $row): bool
     {
-        return $user->hasAnyRole(self::DELETE_ROLES);
+        return $user->hasAnyRole(self::MANAGE_ROLES);
     }
 }

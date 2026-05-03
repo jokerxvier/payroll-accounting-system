@@ -160,8 +160,57 @@ it('super-admin can destroy an allowance', function () {
     expect(EmployeeAllowance::query()->whereKey($row->id)->exists())->toBeFalse();
 });
 
-it('forbids hr from destroying an allowance', function () {
+it('allows hr to destroy an allowance', function () {
     $user = authAllowanceAs('hr');
+    [$staff, $profile] = allowanceStaffAndProfile();
+
+    $row = EmployeeAllowance::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/allowances/'.$row->id)
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect(EmployeeAllowance::query()->whereKey($row->id)->exists())->toBeFalse();
+});
+
+it('allows payroll-officer to destroy an allowance', function () {
+    $user = authAllowanceAs('payroll-officer');
+    [$staff, $profile] = allowanceStaffAndProfile();
+
+    $row = EmployeeAllowance::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/allowances/'.$row->id)
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect(EmployeeAllowance::query()->whereKey($row->id)->exists())->toBeFalse();
+});
+
+it('forbids the auditor role from destroying an allowance', function () {
+    $user = authAllowanceAs('auditor');
+    [$staff, $profile] = allowanceStaffAndProfile();
+
+    $row = EmployeeAllowance::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/allowances/'.$row->id)
+        ->assertForbidden();
+
+    expect(EmployeeAllowance::query()->whereKey($row->id)->exists())->toBeTrue();
+});
+
+it('forbids the employee role from destroying an allowance', function () {
+    // The owning-employee carve-out only extends to `view`; an employee may
+    // see their own subscription but never delete it.
+    $user = authAllowanceAs('employee');
     [$staff, $profile] = allowanceStaffAndProfile();
 
     $row = EmployeeAllowance::factory()->create([

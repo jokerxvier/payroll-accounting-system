@@ -12,8 +12,8 @@ use App\Models\User;
  *
  * One-off adjustments (bonus, ad-hoc deduction, back-pay correction) — flat
  * shape with no catalog FK. Authorization mirrors the other Employees/*
- * controllers: super-admin / payroll-officer / hr write, super-admin only
- * destroys, auditor + employee always 403 on writes.
+ * controllers: super-admin / payroll-officer / hr can store, update, AND
+ * destroy; auditor + employee always 403 on writes (including destroy).
  */
 
 function authAdjustmentAs(string $payrollRole): User
@@ -168,8 +168,57 @@ it('super-admin can destroy an adjustment', function () {
     expect(PayrollAdjustment::query()->whereKey($row->id)->exists())->toBeFalse();
 });
 
-it('forbids hr from destroying an adjustment', function () {
+it('allows hr to destroy an adjustment', function () {
     $user = authAdjustmentAs('hr');
+    [$staff, $profile] = adjustmentStaffAndProfile();
+
+    $row = PayrollAdjustment::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/adjustments/'.$row->id)
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect(PayrollAdjustment::query()->whereKey($row->id)->exists())->toBeFalse();
+});
+
+it('allows payroll-officer to destroy an adjustment', function () {
+    $user = authAdjustmentAs('payroll-officer');
+    [$staff, $profile] = adjustmentStaffAndProfile();
+
+    $row = PayrollAdjustment::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/adjustments/'.$row->id)
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect(PayrollAdjustment::query()->whereKey($row->id)->exists())->toBeFalse();
+});
+
+it('forbids the auditor role from destroying an adjustment', function () {
+    $user = authAdjustmentAs('auditor');
+    [$staff, $profile] = adjustmentStaffAndProfile();
+
+    $row = PayrollAdjustment::factory()->create([
+        'employee_profile_id' => $profile->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete('/employees/'.$staff->id.'/adjustments/'.$row->id)
+        ->assertForbidden();
+
+    expect(PayrollAdjustment::query()->whereKey($row->id)->exists())->toBeTrue();
+});
+
+it('forbids the employee role from destroying an adjustment', function () {
+    // The owning-employee carve-out only extends to `view`; an employee may
+    // see their own adjustment but never delete it.
+    $user = authAdjustmentAs('employee');
     [$staff, $profile] = adjustmentStaffAndProfile();
 
     $row = PayrollAdjustment::factory()->create([
