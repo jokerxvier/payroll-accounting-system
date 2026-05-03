@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RoleSeeder::class,
             StatutoryContributionSeeder::class,
+            Week7CatalogSeeder::class,
         ]);
     }
 }
