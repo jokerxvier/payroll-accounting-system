@@ -1,16 +1,11 @@
 import { format, parseISO } from 'date-fns';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { SCHEDULE_LABEL } from '@/components/employees/schedule-label';
 import { EmptyState } from '@/components/empty-state';
 import { Money } from '@/components/money';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { EmployeeLoanRow } from '@/types';
@@ -20,6 +15,7 @@ interface LoansCardProps {
     className?: string;
     onAdd?: () => void;
     onEdit?: (loan: EmployeeLoanRow) => void;
+    onDelete?: (loan: EmployeeLoanRow) => void;
 }
 
 /**
@@ -32,6 +28,7 @@ export function LoansCard({
     className,
     onAdd,
     onEdit,
+    onDelete,
 }: LoansCardProps) {
     return (
         <Card className={cn('lg:col-span-2', className)}>
@@ -60,7 +57,11 @@ export function LoansCard({
                         {loans.map((loan, index) => (
                             <li key={loan.id}>
                                 {index > 0 && <Separator className="sr-only" />}
-                                <LoanListItem loan={loan} onEdit={onEdit} />
+                                <LoanListItem
+                                    loan={loan}
+                                    onEdit={onEdit}
+                                    onDelete={onDelete}
+                                />
                             </li>
                         ))}
                     </ul>
@@ -73,11 +74,13 @@ export function LoansCard({
 interface LoanListItemProps {
     loan: EmployeeLoanRow;
     onEdit?: (loan: EmployeeLoanRow) => void;
+    onDelete?: (loan: EmployeeLoanRow) => void;
 }
 
-function LoanListItem({ loan, onEdit }: LoanListItemProps) {
+function LoanListItem({ loan, onEdit, onDelete }: LoanListItemProps) {
     const isClosed = loan.closed_on !== null;
     const percentPaid = computePercentPaid(loan);
+    const hasActions = Boolean(onEdit) || Boolean(onDelete);
 
     return (
         <div className="group space-y-3 py-3">
@@ -98,7 +101,9 @@ function LoanListItem({ loan, onEdit }: LoanListItemProps) {
                 </div>
 
                 <div className="text-sm tabular-nums sm:text-right">
-                    <p className="text-xs text-muted-foreground">Amortization</p>
+                    <p className="text-xs text-muted-foreground">
+                        Amortization
+                    </p>
                     <Money amount={loan.monthly_amortization_centavos / 100} />
                 </div>
 
@@ -111,18 +116,32 @@ function LoanListItem({ loan, onEdit }: LoanListItemProps) {
                     {SCHEDULE_LABEL[loan.schedule]}
                 </div>
 
-                {onEdit && (
-                    <div className="flex justify-end sm:justify-center">
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onEdit(loan)}
-                            aria-label={`Edit loan ${loan.code}`}
-                            className="h-8 w-8 p-0 opacity-60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                        >
-                            <Pencil className="h-3.5 w-3.5" />
-                        </Button>
+                {hasActions && (
+                    <div className="flex justify-end gap-1 sm:justify-center">
+                        {onEdit && (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => onEdit(loan)}
+                                aria-label={`Edit loan ${loan.code}`}
+                                className="h-8 w-8 p-0 opacity-60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                            >
+                                <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                        )}
+                        {onDelete && (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => onDelete(loan)}
+                                aria-label={`Delete loan ${loan.code}`}
+                                className="h-8 w-8 p-0 text-destructive opacity-60 transition-opacity group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100"
+                            >
+                                <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                        )}
                     </div>
                 )}
             </div>

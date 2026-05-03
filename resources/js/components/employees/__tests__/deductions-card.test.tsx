@@ -1,10 +1,7 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { DeductionsCard } from '@/components/employees/deductions-card';
-import type {
-    DeductionTypeRef,
-    EmployeeDeductionRow,
-} from '@/types';
+import type { DeductionTypeRef, EmployeeDeductionRow } from '@/types';
 
 function makeFixedDeductionType(
     overrides: Partial<DeductionTypeRef> = {},
@@ -34,7 +31,9 @@ function makePercentDeductionType(
     };
 }
 
-function makeRow(overrides: Partial<EmployeeDeductionRow>): EmployeeDeductionRow {
+function makeRow(
+    overrides: Partial<EmployeeDeductionRow>,
+): EmployeeDeductionRow {
     return {
         id: 1,
         employee_profile_id: 1,
@@ -85,5 +84,32 @@ describe('DeductionsCard', () => {
         expect(screen.getByText('Cooperative savings')).toBeInTheDocument();
         expect(screen.getByText('2.50%')).toBeInTheDocument();
         expect(screen.getByText('Monthly · first run')).toBeInTheDocument();
+    });
+
+    it('renders the Trash button when onDelete is provided and fires the callback with the row', () => {
+        const onDelete = vi.fn();
+        const row = makeRow({});
+
+        render(<DeductionsCard deductions={[row]} onDelete={onDelete} />);
+
+        const trash = screen.getByRole('button', {
+            name: /Delete deduction HMO premium/i,
+        });
+        expect(trash).toBeInTheDocument();
+
+        fireEvent.click(trash);
+
+        expect(onDelete).toHaveBeenCalledTimes(1);
+        expect(onDelete).toHaveBeenCalledWith(row);
+    });
+
+    it('omits the Trash button when onDelete is undefined', () => {
+        const row = makeRow({});
+
+        render(<DeductionsCard deductions={[row]} />);
+
+        expect(
+            screen.queryByRole('button', { name: /Delete deduction/i }),
+        ).not.toBeInTheDocument();
     });
 });

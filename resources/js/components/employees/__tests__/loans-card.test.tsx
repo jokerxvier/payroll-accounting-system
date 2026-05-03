@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { LoansCard } from '@/components/employees/loans-card';
 import type { EmployeeLoanRow } from '@/types';
 
@@ -70,5 +70,32 @@ describe('LoansCard', () => {
             name: 'Loan progress',
         });
         expect(progressbar).toHaveAttribute('aria-valuenow', '0');
+    });
+
+    it('renders the Trash button when onDelete is provided and fires the callback with the loan', () => {
+        const onDelete = vi.fn();
+        const loan = makeLoan({});
+
+        render(<LoansCard loans={[loan]} onDelete={onDelete} />);
+
+        const trash = screen.getByRole('button', {
+            name: /Delete loan SSS-2026-001/i,
+        });
+        expect(trash).toBeInTheDocument();
+
+        fireEvent.click(trash);
+
+        expect(onDelete).toHaveBeenCalledTimes(1);
+        expect(onDelete).toHaveBeenCalledWith(loan);
+    });
+
+    it('omits the Trash button when onDelete is undefined', () => {
+        const loan = makeLoan({});
+
+        render(<LoansCard loans={[loan]} />);
+
+        expect(
+            screen.queryByRole('button', { name: /Delete loan/i }),
+        ).not.toBeInTheDocument();
     });
 });

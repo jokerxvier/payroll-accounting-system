@@ -29,6 +29,9 @@ vi.mock('@inertiajs/react', async () => {
 
     return {
         Head: () => null,
+        router: {
+            delete: vi.fn(),
+        },
         useForm: <T extends Record<string, unknown>>(initial: T) => {
             const [data, setData] = useState<T>(initial);
 
@@ -351,5 +354,40 @@ describe('EmployeeRowEditor', () => {
         );
 
         expect(screen.getByTestId('adjustment-edit-sheet')).toBeInTheDocument();
+    });
+
+    it('opens the AlertDialog with deduction identity when the Trash button is clicked on a deduction row', async () => {
+        render(
+            <EmployeeRowEditor
+                staffId={42}
+                fullName="Maria Cruz"
+                employmentTypeOptions={EMPLOYMENT_TYPES}
+                onClose={vi.fn()}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByLabelText(/Basic salary/i)).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('tab', { name: /Deductions/i }));
+
+        // Click the trash on the HMO row.
+        fireEvent.click(
+            screen.getByRole('button', {
+                name: /Delete deduction HMO premium/i,
+            }),
+        );
+
+        // The shared AlertDialog opens with the deduction-specific copy.
+        expect(
+            screen.getByRole('alertdialog', {
+                name: /Delete custom deduction\?/i,
+            }),
+        ).toBeInTheDocument();
+        // The deduction's display name surfaces inside the description.
+        expect(
+            screen.getAllByText('HMO premium').length,
+        ).toBeGreaterThanOrEqual(1);
     });
 });

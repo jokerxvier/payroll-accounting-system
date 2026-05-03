@@ -1,4 +1,4 @@
-import { useForm } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
 import {
     Banknote,
     IdCard,
@@ -11,8 +11,12 @@ import {
     Wallet,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { ComponentType, FormEvent } from 'react';
+import type { ComponentType, FormEvent, ReactNode } from 'react';
 import { toast } from 'sonner';
+import { destroy as allowanceDestroy } from '@/actions/App/Http/Controllers/Employees/EmployeeAllowanceController';
+import { destroy as deductionDestroy } from '@/actions/App/Http/Controllers/Employees/EmployeeDeductionController';
+import { destroy as loanDestroy } from '@/actions/App/Http/Controllers/Employees/EmployeeLoanController';
+import { destroy as adjustmentDestroy } from '@/actions/App/Http/Controllers/Employees/PayrollAdjustmentController';
 import { AdjustmentEditSheet } from '@/components/employees/adjustment-edit-sheet';
 import { AdjustmentsCard } from '@/components/employees/adjustments-card';
 import { AllowanceEditSheet } from '@/components/employees/allowance-edit-sheet';
@@ -22,6 +26,17 @@ import { DeductionsCard } from '@/components/employees/deductions-card';
 import { LoanEditSheet } from '@/components/employees/loan-edit-sheet';
 import { LoansCard } from '@/components/employees/loans-card';
 import InputError from '@/components/input-error';
+import { Money } from '@/components/money';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
@@ -106,6 +121,12 @@ const PAY_FREQUENCY_OPTIONS: { value: PayFrequency; label: string }[] = [
     { value: 'semi_monthly', label: 'Semi-monthly' },
 ];
 
+type PendingDelete =
+    | { kind: 'deduction'; row: EmployeeDeductionRow }
+    | { kind: 'allowance'; row: EmployeeAllowanceRow }
+    | { kind: 'loan'; row: EmployeeLoanRow }
+    | { kind: 'adjustment'; row: PayrollAdjustmentRow };
+
 function centavosToPesos(centavos: number): string {
     return (centavos / 100).toFixed(2);
 }
@@ -161,6 +182,43 @@ export function EmployeeRowEditor({
     const [editingAdjustment, setEditingAdjustment] = useState<
         PayrollAdjustmentRow | undefined
     >(undefined);
+
+    // Single shared delete-confirmation state. Mirrors the pattern in
+    // `pages/employees/show.tsx` so all four card types route through one
+    // <AlertDialog>. After a successful delete, the lazy profile JSON is
+    // invalidated so the cards re-render with the row removed.
+    const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
+        null,
+    );
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleConfirmDelete = (): void => {
+        if (pendingDelete === null) {
+            return;
+        }
+
+        const url = resolveDestroyUrl(staffId, pendingDelete);
+        const successMessage = resolveDeleteSuccessMessage(pendingDelete);
+        const errorMessage = resolveDeleteErrorMessage(pendingDelete);
+
+        setIsDeleting(true);
+
+        router.delete(url, {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success(successMessage);
+                setPendingDelete(null);
+                // Invalidate the cached profile so the cards refetch.
+                setProfileData(undefined);
+            },
+            onError: () => {
+                toast.error(errorMessage);
+            },
+            onFinish: () => {
+                setIsDeleting(false);
+            },
+        });
+    };
 
     useEffect(() => {
         if (profileData !== undefined) {
@@ -364,6 +422,18 @@ export function EmployeeRowEditor({
                                 setEditingAdjustment(row);
                                 setAdjustmentSheetOpen(true);
                             }}
+                            onDeleteDeduction={(row) =>
+                                setPendingDelete({ kind: 'deduction', row })
+                            }
+                            onDeleteAllowance={(row) =>
+                                setPendingDelete({ kind: 'allowance', row })
+                            }
+                            onDeleteLoan={(row) =>
+                                setPendingDelete({ kind: 'loan', row })
+                            }
+                            onDeleteAdjustment={(row) =>
+                                setPendingDelete({ kind: 'adjustment', row })
+                            }
                         />
                     )}
             </div>
@@ -410,6 +480,46 @@ export function EmployeeRowEditor({
                     />
                 </>
             )}
+
+            <AlertDialog
+                open={pendingDelete !== null}
+                onOpenChange={(open) => {
+                    if (!open && !isDeleting) {
+                        setPendingDelete(null);
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            {pendingDelete
+                                ? resolveDeleteTitle(pendingDelete)
+                                : ''}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-2 text-sm text-muted-foreground">
+                                {pendingDelete &&
+                                    resolveDeleteDescription(pendingDelete)}
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                handleConfirmDelete();
+                            }}
+                            disabled={isDeleting}
+                        >
+                            {isDeleting ? 'Deleting…' : 'Delete'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
@@ -429,6 +539,10 @@ interface ProfileTabContentProps {
     onEditLoan: (row: EmployeeLoanRow) => void;
     onAddAdjustment: () => void;
     onEditAdjustment: (row: PayrollAdjustmentRow) => void;
+    onDeleteDeduction: (row: EmployeeDeductionRow) => void;
+    onDeleteAllowance: (row: EmployeeAllowanceRow) => void;
+    onDeleteLoan: (row: EmployeeLoanRow) => void;
+    onDeleteAdjustment: (row: PayrollAdjustmentRow) => void;
 }
 
 function ProfileTabContent({
@@ -446,6 +560,10 @@ function ProfileTabContent({
     onEditLoan,
     onAddAdjustment,
     onEditAdjustment,
+    onDeleteDeduction,
+    onDeleteAllowance,
+    onDeleteLoan,
+    onDeleteAdjustment,
 }: ProfileTabContentProps) {
     switch (activeTab) {
         case 'salary':
@@ -488,6 +606,7 @@ function ProfileTabContent({
                     className="lg:col-span-1"
                     onAdd={onAddDeduction}
                     onEdit={onEditDeduction}
+                    onDelete={onDeleteDeduction}
                 />
             );
         case 'allowances':
@@ -497,6 +616,7 @@ function ProfileTabContent({
                     className="lg:col-span-1"
                     onAdd={onAddAllowance}
                     onEdit={onEditAllowance}
+                    onDelete={onDeleteAllowance}
                 />
             );
         case 'loans':
@@ -506,6 +626,7 @@ function ProfileTabContent({
                     className="lg:col-span-1"
                     onAdd={onAddLoan}
                     onEdit={onEditLoan}
+                    onDelete={onDeleteLoan}
                 />
             );
         case 'adjustments':
@@ -515,6 +636,7 @@ function ProfileTabContent({
                     className="lg:col-span-1"
                     onAdd={onAddAdjustment}
                     onEdit={onEditAdjustment}
+                    onDelete={onDeleteAdjustment}
                 />
             );
     }
@@ -954,4 +1076,130 @@ function BankForm({ profile, staffId, onSaved }: BankFormProps) {
             </div>
         </form>
     );
+}
+
+function resolveDestroyUrl(staffId: number, pending: PendingDelete): string {
+    switch (pending.kind) {
+        case 'deduction':
+            return deductionDestroy({
+                staffId,
+                employeeDeduction: pending.row.id,
+            }).url;
+        case 'allowance':
+            return allowanceDestroy({
+                staffId,
+                employeeAllowance: pending.row.id,
+            }).url;
+        case 'loan':
+            return loanDestroy({
+                staffId,
+                employeeLoan: pending.row.id,
+            }).url;
+        case 'adjustment':
+            return adjustmentDestroy({
+                staffId,
+                payrollAdjustment: pending.row.id,
+            }).url;
+    }
+}
+
+function resolveDeleteTitle(pending: PendingDelete): string {
+    switch (pending.kind) {
+        case 'deduction':
+            return 'Delete custom deduction?';
+        case 'allowance':
+            return 'Delete allowance?';
+        case 'loan':
+            return 'Delete loan?';
+        case 'adjustment':
+            return 'Delete adjustment?';
+    }
+}
+
+function resolveDeleteDescription(pending: PendingDelete): ReactNode {
+    switch (pending.kind) {
+        case 'deduction':
+            return (
+                <p>
+                    This removes{' '}
+                    <span className="font-medium text-foreground">
+                        {pending.row.deduction_type.name}
+                    </span>{' '}
+                    from this employee's payroll. The history is preserved in
+                    the audit log.
+                </p>
+            );
+        case 'allowance':
+            return (
+                <p>
+                    This removes{' '}
+                    <span className="font-medium text-foreground">
+                        {pending.row.allowance.name}
+                    </span>{' '}
+                    from this employee's payroll. The history is preserved in
+                    the audit log.
+                </p>
+            );
+        case 'loan':
+            return (
+                <>
+                    <p>
+                        This removes loan{' '}
+                        <span className="font-mono text-foreground">
+                            {pending.row.code}
+                        </span>{' '}
+                        from this employee's payroll. The history is preserved
+                        in the audit log.
+                    </p>
+                    {pending.row.outstanding_balance_centavos > 0 && (
+                        <p className="text-warning">
+                            <Money
+                                amount={
+                                    pending.row.outstanding_balance_centavos /
+                                    100
+                                }
+                            />{' '}
+                            is still outstanding on this loan.
+                        </p>
+                    )}
+                </>
+            );
+        case 'adjustment':
+            return (
+                <p>
+                    This removes the adjustment{' '}
+                    <span className="font-medium text-foreground">
+                        {pending.row.label}
+                    </span>{' '}
+                    from this employee's payroll. The history is preserved in
+                    the audit log.
+                </p>
+            );
+    }
+}
+
+function resolveDeleteSuccessMessage(pending: PendingDelete): string {
+    switch (pending.kind) {
+        case 'deduction':
+            return `Removed ${pending.row.deduction_type.name}.`;
+        case 'allowance':
+            return `Removed ${pending.row.allowance.name}.`;
+        case 'loan':
+            return `Removed loan ${pending.row.code}.`;
+        case 'adjustment':
+            return `Removed ${pending.row.label}.`;
+    }
+}
+
+function resolveDeleteErrorMessage(pending: PendingDelete): string {
+    switch (pending.kind) {
+        case 'deduction':
+            return 'Could not delete this deduction.';
+        case 'allowance':
+            return 'Could not delete this allowance.';
+        case 'loan':
+            return 'Could not delete this loan.';
+        case 'adjustment':
+            return 'Could not delete this adjustment.';
+    }
 }

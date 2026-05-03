@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { AllowancesCard } from '@/components/employees/allowances-card';
 import type { AllowanceRef, EmployeeAllowanceRow } from '@/types';
 
@@ -63,8 +63,33 @@ describe('AllowancesCard', () => {
         render(<AllowancesCard allowances={[row]} />);
 
         expect(screen.queryByText('De-minimis')).not.toBeInTheDocument();
+        expect(screen.getByText('Communication allowance')).toBeInTheDocument();
+    });
+
+    it('renders the Trash button when onDelete is provided and fires the callback with the row', () => {
+        const onDelete = vi.fn();
+        const row = makeRow({});
+
+        render(<AllowancesCard allowances={[row]} onDelete={onDelete} />);
+
+        const trash = screen.getByRole('button', {
+            name: /Delete allowance Rice subsidy/i,
+        });
+        expect(trash).toBeInTheDocument();
+
+        fireEvent.click(trash);
+
+        expect(onDelete).toHaveBeenCalledTimes(1);
+        expect(onDelete).toHaveBeenCalledWith(row);
+    });
+
+    it('omits the Trash button when onDelete is undefined', () => {
+        const row = makeRow({});
+
+        render(<AllowancesCard allowances={[row]} />);
+
         expect(
-            screen.getByText('Communication allowance'),
-        ).toBeInTheDocument();
+            screen.queryByRole('button', { name: /Delete allowance/i }),
+        ).not.toBeInTheDocument();
     });
 });

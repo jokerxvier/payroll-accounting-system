@@ -1,16 +1,11 @@
 import { format, parseISO } from 'date-fns';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { SCHEDULE_LABEL } from '@/components/employees/schedule-label';
 import { EmptyState } from '@/components/empty-state';
 import { Money } from '@/components/money';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { EmployeeDeductionRow } from '@/types';
@@ -22,6 +17,8 @@ interface DeductionsCardProps {
     onAdd?: () => void;
     /** When provided, renders a pencil icon button next to each row. */
     onEdit?: (row: EmployeeDeductionRow) => void;
+    /** When provided, renders a trash icon button next to the edit button. */
+    onDelete?: (row: EmployeeDeductionRow) => void;
 }
 
 /**
@@ -34,6 +31,7 @@ export function DeductionsCard({
     className,
     onAdd,
     onEdit,
+    onDelete,
 }: DeductionsCardProps) {
     return (
         <Card className={cn('lg:col-span-2', className)}>
@@ -67,6 +65,7 @@ export function DeductionsCard({
                                 <DeductionListItem
                                     row={row}
                                     onEdit={onEdit}
+                                    onDelete={onDelete}
                                 />
                             </li>
                         ))}
@@ -80,9 +79,12 @@ export function DeductionsCard({
 interface DeductionListItemProps {
     row: EmployeeDeductionRow;
     onEdit?: (row: EmployeeDeductionRow) => void;
+    onDelete?: (row: EmployeeDeductionRow) => void;
 }
 
-function DeductionListItem({ row, onEdit }: DeductionListItemProps) {
+function DeductionListItem({ row, onEdit, onDelete }: DeductionListItemProps) {
+    const hasActions = Boolean(onEdit) || Boolean(onDelete);
+
     return (
         <div className="group grid grid-cols-1 gap-2 py-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] sm:items-center sm:gap-4">
             <div className="space-y-1">
@@ -112,18 +114,32 @@ function DeductionListItem({ row, onEdit }: DeductionListItemProps) {
                 )}
             </div>
 
-            {onEdit && (
-                <div className="flex justify-end sm:justify-center">
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onEdit(row)}
-                        aria-label={`Edit ${row.deduction_type.name}`}
-                        className="h-8 w-8 p-0 opacity-60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                    >
-                        <Pencil className="h-3.5 w-3.5" />
-                    </Button>
+            {hasActions && (
+                <div className="flex justify-end gap-1 sm:justify-center">
+                    {onEdit && (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onEdit(row)}
+                            aria-label={`Edit ${row.deduction_type.name}`}
+                            className="h-8 w-8 p-0 opacity-60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        >
+                            <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                    )}
+                    {onDelete && (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onDelete(row)}
+                            aria-label={`Delete deduction ${row.deduction_type.name}`}
+                            className="h-8 w-8 p-0 text-destructive opacity-60 transition-opacity group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100"
+                        >
+                            <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                    )}
                 </div>
             )}
         </div>

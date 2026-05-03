@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { AdjustmentsCard } from '@/components/employees/adjustments-card';
 import type { PayrollAdjustmentRow } from '@/types';
 
@@ -59,5 +59,32 @@ describe('AdjustmentsCard', () => {
 
         expect(screen.getByText('Performance bonus')).toBeInTheDocument();
         expect(screen.getByText('Taxable')).toBeInTheDocument();
+    });
+
+    it('renders the Trash button when onDelete is provided and fires the callback with the row', () => {
+        const onDelete = vi.fn();
+        const row = makeAdjustment({});
+
+        render(<AdjustmentsCard adjustments={[row]} onDelete={onDelete} />);
+
+        const trash = screen.getByRole('button', {
+            name: /Delete adjustment Performance bonus/i,
+        });
+        expect(trash).toBeInTheDocument();
+
+        fireEvent.click(trash);
+
+        expect(onDelete).toHaveBeenCalledTimes(1);
+        expect(onDelete).toHaveBeenCalledWith(row);
+    });
+
+    it('omits the Trash button when onDelete is undefined', () => {
+        const row = makeAdjustment({});
+
+        render(<AdjustmentsCard adjustments={[row]} />);
+
+        expect(
+            screen.queryByRole('button', { name: /Delete adjustment/i }),
+        ).not.toBeInTheDocument();
     });
 });
