@@ -19,6 +19,7 @@ use App\Policies\Pas\EmployeeLoanPolicy;
 use App\Policies\Pas\EmployeeProfilePolicy;
 use App\Policies\Pas\PayrollAdjustmentPolicy;
 use App\Policies\Pas\StatutoryContributionPolicy;
+use App\Policies\PayrollPreviewPolicy;
 use App\Services\Statutory\StatutoryContributionResolver;
 use App\Services\Statutory\Strategies\BracketTableStrategy;
 use App\Services\Statutory\Strategies\PercentageWithCapStrategy;
@@ -79,6 +80,10 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(EmployeeAllowance::class, EmployeeAllowancePolicy::class);
         Gate::policy(EmployeeLoan::class, EmployeeLoanPolicy::class);
         Gate::policy(PayrollAdjustment::class, PayrollAdjustmentPolicy::class);
+
+        // Week 8 — real-time gross-to-net preview. Class-level Gate (no
+        // underlying model), so it lives outside Gate::policy() registrations.
+        Gate::define('payroll.preview', [PayrollPreviewPolicy::class, 'preview']);
     }
 
     /**

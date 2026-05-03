@@ -5,6 +5,7 @@ use App\Http\Controllers\Employees\EmployeeAllowanceController;
 use App\Http\Controllers\Employees\EmployeeDeductionController;
 use App\Http\Controllers\Employees\EmployeeLoanController;
 use App\Http\Controllers\Employees\PayrollAdjustmentController;
+use App\Http\Controllers\PayrollPreviewController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 
@@ -59,6 +60,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->whereNumber('staffId')->whereNumber('payrollAdjustment')->name('employees.adjustments.update');
     Route::delete('employees/{staffId}/adjustments/{payrollAdjustment}', [PayrollAdjustmentController::class, 'destroy'])
         ->whereNumber('staffId')->whereNumber('payrollAdjustment')->name('employees.adjustments.destroy');
+
+    // Week 8 — real-time gross-to-net payroll preview. Both endpoints render
+    // the same Inertia page; compute() round-trips a populated computation
+    // result and prior-period comparison via the same component.
+    Route::prefix('payroll')->name('payroll.')->group(function () {
+        Route::get('/preview', [PayrollPreviewController::class, 'show'])
+            ->name('preview.show');
+        Route::post('/preview/compute', [PayrollPreviewController::class, 'compute'])
+            ->name('preview.compute');
+    });
 });
 
 require __DIR__.'/settings.php';

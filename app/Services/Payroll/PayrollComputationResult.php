@@ -104,4 +104,73 @@ final readonly class PayrollComputationResult
             auditLines: [],
         );
     }
+
+    /**
+     * Wire-shape serialisation for Inertia / JSON consumers.
+     *
+     * Every Money field is exposed as `{centavos: int, formatted: string}`
+     * so the frontend never has to choose between precision (centavos) and
+     * presentation (formatted). The integer is authoritative; the formatted
+     * string is render-ready.
+     *
+     * The `period` block surfaces the cutoff window as ISO-8601 dates plus
+     * the frequency tag — sufficient for the preview header to render
+     * "May 1 – May 31, 2026 (Monthly)" without re-deriving anything.
+     *
+     * `auditLines` is the full ordered list of {@see PayrollLineItem}s, each
+     * already in the canonical display order documented in
+     * {@see PayrollComputationService::compute()}.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'period' => [
+                'frequency' => $this->period->frequency(),
+                'start' => $this->period->start()->toDateString(),
+                'end' => $this->period->end()->toDateString(),
+                'daysInPeriod' => $this->period->daysInPeriod(),
+            ],
+            'basicPay' => $this->serializeMoney($this->basicPay),
+            'grossPay' => $this->serializeMoney($this->grossPay),
+            'sssEmployee' => $this->serializeMoney($this->sssEmployee),
+            'sssEmployer' => $this->serializeMoney($this->sssEmployer),
+            'sssEmployerEc' => $this->serializeMoney($this->sssEmployerEc),
+            'philhealthEmployee' => $this->serializeMoney($this->philhealthEmployee),
+            'philhealthEmployer' => $this->serializeMoney($this->philhealthEmployer),
+            'pagibigEmployee' => $this->serializeMoney($this->pagibigEmployee),
+            'pagibigEmployer' => $this->serializeMoney($this->pagibigEmployer),
+            'birWithholdingTax' => $this->serializeMoney($this->birWithholdingTax),
+            'totalEmployeeDeductions' => $this->serializeMoney($this->totalEmployeeDeductions),
+            'totalEmployerContributions' => $this->serializeMoney($this->totalEmployerContributions),
+            'taxableIncome' => $this->serializeMoney($this->taxableIncome),
+            'netPay' => $this->serializeMoney($this->netPay),
+            'allowancesTaxable' => $this->serializeMoney($this->allowancesTaxable),
+            'allowancesNonTaxable' => $this->serializeMoney($this->allowancesNonTaxable),
+            'customDeductionsEmployee' => $this->serializeMoney($this->customDeductionsEmployee),
+            'customDeductionsEmployer' => $this->serializeMoney($this->customDeductionsEmployer),
+            'loanDeductions' => $this->serializeMoney($this->loanDeductions),
+            'adjustmentTaxableAdditions' => $this->serializeMoney($this->adjustmentTaxableAdditions),
+            'adjustmentNonTaxableAdditions' => $this->serializeMoney($this->adjustmentNonTaxableAdditions),
+            'adjustmentDeductions' => $this->serializeMoney($this->adjustmentDeductions),
+            'unpaidDaysReduction' => $this->serializeMoney($this->unpaidDaysReduction),
+            'unpaidDaysCount' => $this->unpaidDaysCount,
+            'auditLines' => array_map(
+                static fn (PayrollLineItem $line): array => $line->toArray(),
+                $this->auditLines,
+            ),
+        ];
+    }
+
+    /**
+     * @return array{centavos: int, formatted: string}
+     */
+    private function serializeMoney(Money $amount): array
+    {
+        return [
+            'centavos' => $amount->centavos(),
+            'formatted' => $amount->toDecimalString(),
+        ];
+    }
 }

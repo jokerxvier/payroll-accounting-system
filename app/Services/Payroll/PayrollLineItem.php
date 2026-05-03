@@ -95,4 +95,35 @@ final readonly class PayrollLineItem
             );
         }
     }
+
+    /**
+     * Wire-shape serialisation for Inertia / JSON consumers.
+     *
+     * Money is exposed as both `centavos` (the authoritative integer) and
+     * `formatted` (a 2-decimal string the frontend can render verbatim).
+     * The frontend never multiplies or divides amounts; it presents the
+     * formatted string as-is. Banker's-rounded computation has already
+     * happened upstream at the Money layer.
+     *
+     * @return array{
+     *     code: string,
+     *     label: string,
+     *     amount: array{centavos: int, formatted: string},
+     *     bucket: string,
+     *     meta: ?array<string, mixed>,
+     * }
+     */
+    public function toArray(): array
+    {
+        return [
+            'code' => $this->code,
+            'label' => $this->label,
+            'amount' => [
+                'centavos' => $this->amount->centavos(),
+                'formatted' => $this->amount->toDecimalString(),
+            ],
+            'bucket' => $this->bucket,
+            'meta' => $this->meta,
+        ];
+    }
 }
