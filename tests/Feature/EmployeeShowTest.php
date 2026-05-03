@@ -3,7 +3,13 @@
 declare(strict_types=1);
 
 use App\Models\Lms\Staff;
+use App\Models\Pas\Allowance;
+use App\Models\Pas\DeductionType;
+use App\Models\Pas\EmployeeAllowance;
+use App\Models\Pas\EmployeeDeduction;
+use App\Models\Pas\EmployeeLoan;
 use App\Models\Pas\EmployeeProfile;
+use App\Models\Pas\PayrollAdjustment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -161,5 +167,103 @@ it('renders the full profile when one exists', function () {
             ->where('employee.profile.employment_classification', 'regular')
             ->where('employee.profile.pay_frequency', 'monthly')
             ->where('employee.profile.is_active', true)
+        );
+});
+
+it('passes deduction / allowance / loan / adjustment collections via Inertia props', function () {
+    // Verifies the Week 7 Chunk 6 prop additions: when an employee has rows in
+    // each of the four subscription tables, the show response includes them
+    // as collections with the eager-loaded catalog reference. Empty when no
+    // profile exists is covered by the prior "renders LMS identity even when
+    // no payroll profile exists" test (which doesn't assert these props but
+    // also does not error — confirmed via the controller's null-collection
+    // short-circuit).
+    $user = authShowAs('super-admin');
+
+    $staff = Staff::query()->whereIn('role_id', [1, 4, 5])->first();
+    expect($staff)->not->toBeNull();
+
+    $profile = EmployeeProfile::query()->create([
+        'lms_staff_id' => (int) $staff->id,
+        'employment_classification' => 'regular',
+        'pay_frequency' => 'monthly',
+        'basic_salary_centavos' => 5_000_000,
+        'is_active' => true,
+    ]);
+
+    $deductionType = DeductionType::factory()->hmo()->create();
+    EmployeeDeduction::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'deduction_type_id' => $deductionType->id,
+        'amount_centavos' => 200_000,
+    ]);
+
+    $allowance = Allowance::factory()->riceSubsidy()->create();
+    EmployeeAllowance::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'allowance_id' => $allowance->id,
+        'amount_centavos' => 200_000,
+    ]);
+
+    EmployeeLoan::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'code' => 'LN-SHOW-001',
+        'principal_centavos' => 6_000_000,
+        'outstanding_balance_centavos' => 4_500_000,
+        'monthly_amortization_centavos' => 500_000,
+    ]);
+
+    PayrollAdjustment::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'kind' => PayrollAdjustment::KIND_ADDITION,
+        'is_taxable' => true,
+        'amount_centavos' => 1_000_000,
+        'applies_on' => now()->addDays(7)->toDateString(), // future = "pending"
+        'label' => 'Upcoming bonus',
+    ]);
+
+    // A past-dated adjustment must NOT be in pendingAdjustments.
+    PayrollAdjustment::factory()->create([
+        'employee_profile_id' => $profile->id,
+        'kind' => PayrollAdjustment::KIND_ADDITION,
+        'amount_centavos' => 100_000,
+        'applies_on' => now()->subMonths(3)->toDateString(),
+        'label' => 'Past bonus',
+    ]);
+
+    $this->actingAs($user)
+        ->get('/employees/'.(int) $staff->id)
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('employees/show')
+            ->has('deductions', 1)
+            ->where('deductions.0.deduction_type.code', 'hmo')
+            ->has('allowances', 1)
+            ->where('allowances.0.allowance.code', 'rice_subsidy')
+            ->has('loans', 1)
+            ->where('loans.0.code', 'LN-SHOW-001')
+            ->has('pendingAdjustments', 1)
+            ->where('pendingAdjustments.0.label', 'Upcoming bonus')
+            ->has('deductionTypeOptions')
+            ->has('allowanceOptions')
+        );
+});
+
+it('passes empty collections when the staff has no payroll profile', function () {
+    $user = authShowAs('super-admin');
+
+    $staff = Staff::query()->whereIn('role_id', [1, 4, 5])->first();
+    expect($staff)->not->toBeNull();
+    expect(EmployeeProfile::query()->where('lms_staff_id', $staff->id)->exists())->toBeFalse();
+
+    $this->actingAs($user)
+        ->get('/employees/'.(int) $staff->id)
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('employees/show')
+            ->has('deductions', 0)
+            ->has('allowances', 0)
+            ->has('loans', 0)
+            ->has('pendingAdjustments', 0)
         );
 });

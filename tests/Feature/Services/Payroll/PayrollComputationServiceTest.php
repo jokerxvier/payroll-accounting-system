@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Actions\Payroll\ApplyUnpaidDays;
 use App\Models\Pas\Allowance;
 use App\Models\Pas\DeductionType;
 use App\Models\Pas\EmployeeAllowance;
@@ -10,6 +11,7 @@ use App\Models\Pas\EmployeeLoan;
 use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\PayrollAdjustment;
 use App\Models\Pas\StatutoryContribution;
+use App\Services\Payroll\Breakdowns\UnpaidDaysReduction;
 use App\Services\Payroll\PayrollComputationResult;
 use App\Services\Payroll\PayrollComputationService;
 use App\Services\Payroll\PayrollLineItem;
@@ -867,4 +869,115 @@ it('subtracts custom employee taxable deductions from the BIR base', function ()
     expect($result->customDeductionsEmployee->centavos())->toBe(100_000)
         ->and($result->customDeductionsEmployer->centavos())->toBe(0)
         ->and($result->taxableIncome->centavos())->toBe(4_187_500);
+});
+
+it('reduces basic pay by unpaid days reduction', function () {
+    seedStatutoryRowsForMay2026();
+
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'pay_frequency' => 'monthly',
+        'basic_salary_centavos' => 3_000_000, // ₱30,000
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+    ]);
+
+    // 2 unpaid days on a 30-day pro-rata basis: 30_000 × 2 / 30 = ₱2,000.
+    // Mockery cannot mock final classes, but we just dropped `final` from
+    // ApplyUnpaidDays in this commit so the standard Mockery flow works.
+    $this->instance(ApplyUnpaidDays::class, Mockery::mock(ApplyUnpaidDays::class, function ($mock) {
+        $mock->shouldReceive('__invoke')
+            ->once()
+            ->andReturn(new UnpaidDaysReduction(
+                reduction: Money::fromCentavos(200_000), // ₱2,000
+                unpaidDays: 2,
+                line: new PayrollLineItem(
+                    code: PayrollLineItem::CODE_UNPAID_DAYS,
+                    label: 'Unpaid leave (2 day(s))',
+                    amount: Money::fromCentavos(200_000),
+                    bucket: PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION,
+                    meta: ['unpaid_days' => 2],
+                ),
+            ));
+    }));
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    // Basic pay reflects the reduction: 30_000 − 2_000 = 28_000.
+    expect($result->basicPay->centavos())->toBe(2_800_000)
+        ->and($result->unpaidDaysReduction->centavos())->toBe(200_000)
+        ->and($result->unpaidDaysCount)->toBe(2);
+
+    // Audit lines include the unpaid-days line at the very end (per the
+    // canonical engine ordering documented in PayrollComputationService).
+    $codes = array_map(fn (PayrollLineItem $line): string => $line->code, $result->auditLines);
+    expect($codes)->toContain(PayrollLineItem::CODE_UNPAID_DAYS);
+
+    // Confirm it lands last (engine appends after every other line).
+    expect(end($codes))->toBe(PayrollLineItem::CODE_UNPAID_DAYS);
+});
+
+it('short-circuits to zero when unpaid days reduce basic pay to zero', function () {
+    // Intentionally seed NO statutory rows — proves the engine never reaches
+    // the resolver after the unpaid-days short-circuit fires (same shape as
+    // the inactive-employee branch). If the short-circuit regressed,
+    // NoEffectiveContributionException would surface here.
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'pay_frequency' => 'monthly',
+        'basic_salary_centavos' => 3_000_000, // ₱30,000
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+    ]);
+
+    // Reduction equals the full basic pay (full month of unpaid leave).
+    $this->instance(ApplyUnpaidDays::class, Mockery::mock(ApplyUnpaidDays::class, function ($mock) {
+        $mock->shouldReceive('__invoke')
+            ->once()
+            ->andReturn(new UnpaidDaysReduction(
+                reduction: Money::fromCentavos(3_000_000), // ₱30,000 — wipes out basic pay
+                unpaidDays: 30,
+                line: new PayrollLineItem(
+                    code: PayrollLineItem::CODE_UNPAID_DAYS,
+                    label: 'Unpaid leave (30 day(s))',
+                    amount: Money::fromCentavos(3_000_000),
+                    bucket: PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION,
+                    meta: ['unpaid_days' => 30],
+                ),
+            ));
+    }));
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    // PayrollComputationResult::zero() shape: every Money field zero,
+    // unpaidDaysCount zero, auditLines empty (not even the unpaid-days
+    // line — the short-circuit returns the canonical zero result before
+    // line emission).
+    expect($result->basicPay->centavos())->toBe(0)
+        ->and($result->grossPay->centavos())->toBe(0)
+        ->and($result->sssEmployee->centavos())->toBe(0)
+        ->and($result->sssEmployer->centavos())->toBe(0)
+        ->and($result->sssEmployerEc->centavos())->toBe(0)
+        ->and($result->philhealthEmployee->centavos())->toBe(0)
+        ->and($result->philhealthEmployer->centavos())->toBe(0)
+        ->and($result->pagibigEmployee->centavos())->toBe(0)
+        ->and($result->pagibigEmployer->centavos())->toBe(0)
+        ->and($result->birWithholdingTax->centavos())->toBe(0)
+        ->and($result->totalEmployeeDeductions->centavos())->toBe(0)
+        ->and($result->totalEmployerContributions->centavos())->toBe(0)
+        ->and($result->taxableIncome->centavos())->toBe(0)
+        ->and($result->netPay->centavos())->toBe(0)
+        ->and($result->allowancesTaxable->centavos())->toBe(0)
+        ->and($result->allowancesNonTaxable->centavos())->toBe(0)
+        ->and($result->customDeductionsEmployee->centavos())->toBe(0)
+        ->and($result->customDeductionsEmployer->centavos())->toBe(0)
+        ->and($result->loanDeductions->centavos())->toBe(0)
+        ->and($result->adjustmentTaxableAdditions->centavos())->toBe(0)
+        ->and($result->adjustmentNonTaxableAdditions->centavos())->toBe(0)
+        ->and($result->adjustmentDeductions->centavos())->toBe(0)
+        ->and($result->unpaidDaysReduction->centavos())->toBe(0)
+        ->and($result->unpaidDaysCount)->toBe(0)
+        ->and($result->auditLines)->toBe([]);
 });

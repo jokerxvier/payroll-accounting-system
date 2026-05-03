@@ -66,7 +66,7 @@ use App\ValueObjects\PayPeriodInput;
  *      `BUCKET_EMPLOYEE_DEDUCTION`) when reduction > 0; null line for
  *      zero-day cases so payslips for fully-worked periods stay clean.
  */
-final class ApplyUnpaidDays
+class ApplyUnpaidDays
 {
     public function __invoke(
         EmployeeProfile $profile,
