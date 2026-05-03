@@ -1,8 +1,10 @@
 import { format, parseISO } from 'date-fns';
+import { Pencil, Plus } from 'lucide-react';
 import { SCHEDULE_LABEL } from '@/components/employees/schedule-label';
 import { EmptyState } from '@/components/empty-state';
 import { Money } from '@/components/money';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
@@ -16,18 +18,36 @@ import type { EmployeeAllowanceRow } from '@/types';
 interface AllowancesCardProps {
     allowances: EmployeeAllowanceRow[];
     className?: string;
+    onAdd?: () => void;
+    onEdit?: (row: EmployeeAllowanceRow) => void;
 }
 
 /**
- * Pure presentational list of a single employee's active allowance
- * subscriptions. One-off allowances ride on `pas_payroll_adjustments` and
- * surface in the adjustments card instead.
+ * List of a single employee's active allowance subscriptions. One-off
+ * allowances ride on `pas_payroll_adjustments` and surface in the adjustments
+ * card instead. Add / Edit affordances are opt-in via callbacks.
  */
-export function AllowancesCard({ allowances, className }: AllowancesCardProps) {
+export function AllowancesCard({
+    allowances,
+    className,
+    onAdd,
+    onEdit,
+}: AllowancesCardProps) {
     return (
         <Card className={cn('lg:col-span-2', className)}>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between">
                 <CardTitle className="font-serif text-lg">Allowances</CardTitle>
+                {onAdd && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={onAdd}
+                        type="button"
+                    >
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                        Add allowance
+                    </Button>
+                )}
             </CardHeader>
             <CardContent>
                 {allowances.length === 0 ? (
@@ -40,7 +60,10 @@ export function AllowancesCard({ allowances, className }: AllowancesCardProps) {
                         {allowances.map((row, index) => (
                             <li key={row.id}>
                                 {index > 0 && <Separator className="sr-only" />}
-                                <AllowanceListItem row={row} />
+                                <AllowanceListItem
+                                    row={row}
+                                    onEdit={onEdit}
+                                />
                             </li>
                         ))}
                     </ul>
@@ -50,9 +73,14 @@ export function AllowancesCard({ allowances, className }: AllowancesCardProps) {
     );
 }
 
-function AllowanceListItem({ row }: { row: EmployeeAllowanceRow }) {
+interface AllowanceListItemProps {
+    row: EmployeeAllowanceRow;
+    onEdit?: (row: EmployeeAllowanceRow) => void;
+}
+
+function AllowanceListItem({ row, onEdit }: AllowanceListItemProps) {
     return (
-        <div className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[2fr_1fr_1fr_1fr] sm:items-center sm:gap-4">
+        <div className="group grid grid-cols-1 gap-2 py-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] sm:items-center sm:gap-4">
             <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-medium">{row.allowance.name}</p>
@@ -84,6 +112,21 @@ function AllowanceListItem({ row }: { row: EmployeeAllowanceRow }) {
                     </Badge>
                 )}
             </div>
+
+            {onEdit && (
+                <div className="flex justify-end sm:justify-center">
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onEdit(row)}
+                        aria-label={`Edit ${row.allowance.name}`}
+                        className="h-8 w-8 p-0 opacity-60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                    >
+                        <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                </div>
+            )}
         </div>
     );
 }

@@ -1,8 +1,10 @@
 import { format, parseISO } from 'date-fns';
+import { Pencil, Plus } from 'lucide-react';
 import { SCHEDULE_LABEL } from '@/components/employees/schedule-label';
 import { EmptyState } from '@/components/empty-state';
 import { Money } from '@/components/money';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
@@ -16,18 +18,36 @@ import type { EmployeeLoanRow } from '@/types';
 interface LoansCardProps {
     loans: EmployeeLoanRow[];
     className?: string;
+    onAdd?: () => void;
+    onEdit?: (loan: EmployeeLoanRow) => void;
 }
 
 /**
- * Pure presentational list of a single employee's loans (open and closed).
- * Compute path is read-only at the UI level — amortization clamping is
- * handled inside the Phase 2 service composition.
+ * List of a single employee's loans (open and closed). Compute path is
+ * read-only at the UI level — amortization clamping is handled inside the
+ * Phase 2 service composition. Add / Edit affordances are opt-in via callbacks.
  */
-export function LoansCard({ loans, className }: LoansCardProps) {
+export function LoansCard({
+    loans,
+    className,
+    onAdd,
+    onEdit,
+}: LoansCardProps) {
     return (
         <Card className={cn('lg:col-span-2', className)}>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between">
                 <CardTitle className="font-serif text-lg">Loans</CardTitle>
+                {onAdd && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={onAdd}
+                        type="button"
+                    >
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                        Add loan
+                    </Button>
+                )}
             </CardHeader>
             <CardContent>
                 {loans.length === 0 ? (
@@ -40,7 +60,7 @@ export function LoansCard({ loans, className }: LoansCardProps) {
                         {loans.map((loan, index) => (
                             <li key={loan.id}>
                                 {index > 0 && <Separator className="sr-only" />}
-                                <LoanListItem loan={loan} />
+                                <LoanListItem loan={loan} onEdit={onEdit} />
                             </li>
                         ))}
                     </ul>
@@ -50,13 +70,18 @@ export function LoansCard({ loans, className }: LoansCardProps) {
     );
 }
 
-function LoanListItem({ loan }: { loan: EmployeeLoanRow }) {
+interface LoanListItemProps {
+    loan: EmployeeLoanRow;
+    onEdit?: (loan: EmployeeLoanRow) => void;
+}
+
+function LoanListItem({ loan, onEdit }: LoanListItemProps) {
     const isClosed = loan.closed_on !== null;
     const percentPaid = computePercentPaid(loan);
 
     return (
-        <div className="space-y-3 py-3">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr] sm:items-center sm:gap-4">
+        <div className="group space-y-3 py-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] sm:items-center sm:gap-4">
                 <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                         <p className="font-mono text-sm font-medium">
@@ -85,6 +110,21 @@ function LoanListItem({ loan }: { loan: EmployeeLoanRow }) {
                 <div className="text-xs text-muted-foreground sm:text-right">
                     {SCHEDULE_LABEL[loan.schedule]}
                 </div>
+
+                {onEdit && (
+                    <div className="flex justify-end sm:justify-center">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onEdit(loan)}
+                            aria-label={`Edit loan ${loan.code}`}
+                            className="h-8 w-8 p-0 opacity-60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        >
+                            <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                    </div>
+                )}
             </div>
 
             <LoanProgressBar

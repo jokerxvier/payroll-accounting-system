@@ -2,7 +2,15 @@ import { Head, router } from '@inertiajs/react';
 import { UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { AdjustmentEditSheet } from '@/components/employees/adjustment-edit-sheet';
+import { AdjustmentsCard } from '@/components/employees/adjustments-card';
+import { AllowanceEditSheet } from '@/components/employees/allowance-edit-sheet';
+import { AllowancesCard } from '@/components/employees/allowances-card';
+import { DeductionEditSheet } from '@/components/employees/deduction-edit-sheet';
+import { DeductionsCard } from '@/components/employees/deductions-card';
 import { EmployeeEditSheet } from '@/components/employees/edit-sheet';
+import { LoanEditSheet } from '@/components/employees/loan-edit-sheet';
+import { LoansCard } from '@/components/employees/loans-card';
 import { EmptyState } from '@/components/empty-state';
 import { InlineMoneyEdit } from '@/components/inline-money-edit';
 import { PageHeader } from '@/components/page-header';
@@ -22,15 +30,27 @@ import {
     update as profileUpdate,
 } from '@/routes/employees/profile';
 import type {
+    AllowanceRef,
+    DeductionTypeRef,
+    EmployeeAllowanceRow,
+    EmployeeDeductionRow,
     EmployeeDetail,
+    EmployeeLoanRow,
     EmployeeProfile,
     EmploymentTypeOption,
     PayFrequency,
+    PayrollAdjustmentRow,
 } from '@/types';
 
 interface Props {
     employee: EmployeeDetail;
     employmentTypeOptions: EmploymentTypeOption[];
+    deductions: EmployeeDeductionRow[];
+    allowances: EmployeeAllowanceRow[];
+    loans: EmployeeLoanRow[];
+    pendingAdjustments: PayrollAdjustmentRow[];
+    deductionTypeOptions: DeductionTypeRef[];
+    allowanceOptions: AllowanceRef[];
 }
 
 const PAY_FREQUENCY_LABEL: Record<PayFrequency, string> = {
@@ -47,8 +67,38 @@ const DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
 export default function EmployeesShow({
     employee,
     employmentTypeOptions,
+    deductions,
+    allowances,
+    loans,
+    pendingAdjustments,
+    deductionTypeOptions,
+    allowanceOptions,
 }: Props) {
     const [editOpen, setEditOpen] = useState(false);
+
+    // Sheet state for the four Week 7 subscription tables. Each sheet has an
+    // `open` flag plus the row currently being edited (undefined → create
+    // mode). The parent owns this so opening a fresh "Add" never inherits
+    // stale row data from a previous edit pass.
+    const [deductionSheetOpen, setDeductionSheetOpen] = useState(false);
+    const [editingDeduction, setEditingDeduction] = useState<
+        EmployeeDeductionRow | undefined
+    >(undefined);
+
+    const [allowanceSheetOpen, setAllowanceSheetOpen] = useState(false);
+    const [editingAllowance, setEditingAllowance] = useState<
+        EmployeeAllowanceRow | undefined
+    >(undefined);
+
+    const [loanSheetOpen, setLoanSheetOpen] = useState(false);
+    const [editingLoan, setEditingLoan] = useState<EmployeeLoanRow | undefined>(
+        undefined,
+    );
+
+    const [adjustmentSheetOpen, setAdjustmentSheetOpen] = useState(false);
+    const [editingAdjustment, setEditingAdjustment] = useState<
+        PayrollAdjustmentRow | undefined
+    >(undefined);
 
     const description =
         [
@@ -87,6 +137,42 @@ export default function EmployeesShow({
                     <ProfileSection
                         profile={employee.profile}
                         staffId={employee.lms_staff_id}
+                        deductions={deductions}
+                        allowances={allowances}
+                        loans={loans}
+                        adjustments={pendingAdjustments}
+                        onAddDeduction={() => {
+                            setEditingDeduction(undefined);
+                            setDeductionSheetOpen(true);
+                        }}
+                        onEditDeduction={(row) => {
+                            setEditingDeduction(row);
+                            setDeductionSheetOpen(true);
+                        }}
+                        onAddAllowance={() => {
+                            setEditingAllowance(undefined);
+                            setAllowanceSheetOpen(true);
+                        }}
+                        onEditAllowance={(row) => {
+                            setEditingAllowance(row);
+                            setAllowanceSheetOpen(true);
+                        }}
+                        onAddLoan={() => {
+                            setEditingLoan(undefined);
+                            setLoanSheetOpen(true);
+                        }}
+                        onEditLoan={(row) => {
+                            setEditingLoan(row);
+                            setLoanSheetOpen(true);
+                        }}
+                        onAddAdjustment={() => {
+                            setEditingAdjustment(undefined);
+                            setAdjustmentSheetOpen(true);
+                        }}
+                        onEditAdjustment={(row) => {
+                            setEditingAdjustment(row);
+                            setAdjustmentSheetOpen(true);
+                        }}
                     />
                 )}
             </div>
@@ -98,6 +184,37 @@ export default function EmployeesShow({
                     open={editOpen}
                     onOpenChange={setEditOpen}
                 />
+            )}
+
+            {hasProfile && (
+                <>
+                    <DeductionEditSheet
+                        open={deductionSheetOpen}
+                        onOpenChange={setDeductionSheetOpen}
+                        lmsStaffId={employee.lms_staff_id}
+                        deduction={editingDeduction}
+                        deductionTypeOptions={deductionTypeOptions}
+                    />
+                    <AllowanceEditSheet
+                        open={allowanceSheetOpen}
+                        onOpenChange={setAllowanceSheetOpen}
+                        lmsStaffId={employee.lms_staff_id}
+                        allowance={editingAllowance}
+                        allowanceOptions={allowanceOptions}
+                    />
+                    <LoanEditSheet
+                        open={loanSheetOpen}
+                        onOpenChange={setLoanSheetOpen}
+                        lmsStaffId={employee.lms_staff_id}
+                        loan={editingLoan}
+                    />
+                    <AdjustmentEditSheet
+                        open={adjustmentSheetOpen}
+                        onOpenChange={setAdjustmentSheetOpen}
+                        lmsStaffId={employee.lms_staff_id}
+                        adjustment={editingAdjustment}
+                    />
+                </>
             )}
         </>
     );
@@ -171,20 +288,65 @@ function NoProfileState({ staffId }: { staffId: number }) {
     );
 }
 
+interface ProfileSectionProps {
+    profile: EmployeeProfile;
+    staffId: number;
+    deductions: EmployeeDeductionRow[];
+    allowances: EmployeeAllowanceRow[];
+    loans: EmployeeLoanRow[];
+    adjustments: PayrollAdjustmentRow[];
+    onAddDeduction: () => void;
+    onEditDeduction: (row: EmployeeDeductionRow) => void;
+    onAddAllowance: () => void;
+    onEditAllowance: (row: EmployeeAllowanceRow) => void;
+    onAddLoan: () => void;
+    onEditLoan: (loan: EmployeeLoanRow) => void;
+    onAddAdjustment: () => void;
+    onEditAdjustment: (row: PayrollAdjustmentRow) => void;
+}
+
 function ProfileSection({
     profile,
     staffId,
-}: {
-    profile: EmployeeProfile;
-    staffId: number;
-}) {
+    deductions,
+    allowances,
+    loans,
+    adjustments,
+    onAddDeduction,
+    onEditDeduction,
+    onAddAllowance,
+    onEditAllowance,
+    onAddLoan,
+    onEditLoan,
+    onAddAdjustment,
+    onEditAdjustment,
+}: ProfileSectionProps) {
     return (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <SalaryCard profile={profile} staffId={staffId} />
             <StatusCard profile={profile} />
             <GovernmentIdsCard profile={profile} />
             <BankCard profile={profile} />
-            <DeductionsPlaceholderCard />
+            <DeductionsCard
+                deductions={deductions}
+                onAdd={onAddDeduction}
+                onEdit={onEditDeduction}
+            />
+            <AllowancesCard
+                allowances={allowances}
+                onAdd={onAddAllowance}
+                onEdit={onEditAllowance}
+            />
+            <LoansCard
+                loans={loans}
+                onAdd={onAddLoan}
+                onEdit={onEditLoan}
+            />
+            <AdjustmentsCard
+                adjustments={adjustments}
+                onAdd={onAddAdjustment}
+                onEdit={onEditAdjustment}
+            />
         </div>
     );
 }
@@ -345,24 +507,6 @@ function BankCard({ profile }: { profile: EmployeeProfile }) {
                         value={profile.bank_account_name}
                     />
                 </dl>
-            </CardContent>
-        </Card>
-    );
-}
-
-function DeductionsPlaceholderCard() {
-    return (
-        <Card className="lg:col-span-2">
-            <CardHeader>
-                <CardTitle className="font-serif text-lg">
-                    Custom deductions
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <EmptyState
-                    title="No custom deductions yet"
-                    description="Configured in Phase 2 (Week 7) — coming after the payroll computation engine ships."
-                />
             </CardContent>
         </Card>
     );
