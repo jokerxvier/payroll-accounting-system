@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Payroll system built on the Laravel React Starter Kit. Uses Laravel 13 + Inertia.js v3 + React 19 + TypeScript. Authentication is handled by Laravel Fortify (login, registration, 2FA, email verification, password reset). Authorization uses Spatie Permission, with payroll roles assigned on first login by mapping LMS roles via `config/payroll.php`. Served locally by Laravel Herd at `payroll-system.test`.
 
-Current phase: **Phase 2 (Computation Engine), Week 8**. See `rules/PLAN.md` for the 16-week roadmap and `MEMORY.md` for the latest project notes.
+Current phase: **Phase 1 complete; Phase 2 (Computation Engine) in progress.** Week 8 stages A (preview controller/endpoints) and B (preview UI + perf gate) shipped at `f200465` and `77329f4`. See `rules/PLAN.md` for the 16-week roadmap and the next milestone, and `MEMORY.md` for the latest project notes.
 
 ## Common Commands
 
@@ -19,6 +19,7 @@ npm run dev                   # Vite dev server only
 php artisan test --compact                        # Run all tests
 php artisan test --compact --filter=testName       # Run specific test
 php artisan test --compact tests/Feature/Auth/     # Run test directory
+php artisan test --compact tests/Browser/          # Pest 4 browser suite (Dusk-backed)
 
 # Code quality
 vendor/bin/pint --dirty --format agent   # Format modified PHP files (run before finalizing)
