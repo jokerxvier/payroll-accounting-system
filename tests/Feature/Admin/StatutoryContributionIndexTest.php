@@ -85,8 +85,8 @@ it('renders the index for super-admin and groups rows by contribution_code', fun
                 ->component('admin/contribution-tables/index')
                 ->has('grouped.'.StatutoryContribution::CODE_SSS, 2)
                 ->has('grouped.'.StatutoryContribution::CODE_BIR, 1)
-                ->has('codeOptions', 4)
-                ->has('algorithmOptions', 4),
+                ->has('recommendedCodes', 5)
+                ->has('algorithmOptions', 5),
         );
 });
 
@@ -100,7 +100,7 @@ it('renders an empty index when there are no rows', function () {
             fn ($page) => $page
                 ->component('admin/contribution-tables/index')
                 ->where('grouped', [])
-                ->has('codeOptions', 4)
-                ->has('algorithmOptions', 4),
+                ->has('recommendedCodes', 5)
+                ->has('algorithmOptions', 5),
         );
 });

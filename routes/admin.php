@@ -18,6 +18,19 @@ Route::middleware(['auth', 'verified'])
         Route::post('contribution-tables', [StatutoryContributionController::class, 'store'])
             ->name('contribution-tables.store');
 
+        // {contribution} routes are registered AFTER `create` so the static
+        // segment wins the match. Order is load-bearing — moving these above
+        // `create` would silently route GET /contribution-tables/create to
+        // show() with the literal string "create" as the bound model.
+        Route::get('contribution-tables/{contribution}', [StatutoryContributionController::class, 'show'])
+            ->name('contribution-tables.show');
+        Route::get('contribution-tables/{contribution}/edit', [StatutoryContributionController::class, 'edit'])
+            ->name('contribution-tables.edit');
+        Route::patch('contribution-tables/{contribution}', [StatutoryContributionController::class, 'update'])
+            ->name('contribution-tables.update');
+        Route::post('contribution-tables/{contribution}/void', [StatutoryContributionController::class, 'void'])
+            ->name('contribution-tables.void');
+
         // Week 7 catalog admin — DeductionType (resource controller minus show
         // since the index doubles as the catalog overview). The kebab-case URI
         // is mapped back to the camelCase `deductionType` route parameter so

@@ -120,3 +120,20 @@ it('writes one audit log row when a StatutoryContribution is created', function 
     expect($audits)->toHaveCount(1)
         ->and($audits->first()->actor_id)->toBe($user->id);
 });
+
+it('skips voided rows in current() and forDate()', function () {
+    // A row that would otherwise be active (open-ended, well within range)
+    // but stamped as voided. current() and forDate() must both miss it.
+    StatutoryContribution::factory()->sss()->create([
+        'effective_from' => '2024-01-01',
+        'effective_to' => null,
+        'voided_at' => CarbonImmutable::now(),
+    ]);
+
+    expect(StatutoryContribution::current(StatutoryContribution::CODE_SSS, CarbonImmutable::parse('2024-06-15')))
+        ->toBeNull();
+
+    expect(StatutoryContribution::query()
+        ->forDate(CarbonImmutable::parse('2024-06-15'), StatutoryContribution::CODE_SSS)
+        ->count())->toBe(0);
+});

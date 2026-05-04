@@ -22,6 +22,7 @@ use App\Policies\Pas\StatutoryContributionPolicy;
 use App\Policies\PayrollPreviewPolicy;
 use App\Services\Statutory\StatutoryContributionResolver;
 use App\Services\Statutory\Strategies\BracketTableStrategy;
+use App\Services\Statutory\Strategies\FlatPercentageStrategy;
 use App\Services\Statutory\Strategies\PercentageWithCapStrategy;
 use App\Services\Statutory\Strategies\SalaryBandStrategy;
 use App\Services\Statutory\Strategies\TieredPercentageStrategy;
@@ -48,6 +49,7 @@ class AppServiceProvider extends ServiceProvider
                 StatutoryContribution::ALGORITHM_SALARY_BAND => new SalaryBandStrategy,
                 StatutoryContribution::ALGORITHM_PERCENTAGE_WITH_CAP => new PercentageWithCapStrategy,
                 StatutoryContribution::ALGORITHM_TIERED_PERCENTAGE => new TieredPercentageStrategy,
+                StatutoryContribution::ALGORITHM_FLAT_PERCENTAGE => new FlatPercentageStrategy,
             ]),
         );
     }

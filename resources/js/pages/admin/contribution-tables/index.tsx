@@ -13,28 +13,30 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 import {
     create as contributionTablesCreate,
     index as contributionTablesIndex,
+    show as contributionTablesShow,
 } from '@/routes/admin/contribution-tables';
 import type {
     StatutoryContributionAlgorithm,
-    StatutoryContributionCode,
     StatutoryContributionGrouped,
     StatutoryContributionRow,
 } from '@/types';
 
 interface Props {
     grouped: StatutoryContributionGrouped;
-    codeOptions: string[];
+    recommendedCodes: string[];
     algorithmOptions: string[];
 }
 
-const CODE_LABELS: Record<StatutoryContributionCode, string> = {
+const CODE_LABELS: Record<string, string> = {
     BIR_WITHHOLDING: 'BIR withholding tax',
     SSS: 'SSS',
     PHILHEALTH: 'PhilHealth',
     PAGIBIG: 'Pag-IBIG',
+    CITY_TAX: 'City / local tax',
 };
 
 const ALGORITHM_LABELS: Record<StatutoryContributionAlgorithm, string> = {
@@ -42,6 +44,7 @@ const ALGORITHM_LABELS: Record<StatutoryContributionAlgorithm, string> = {
     salary_band: 'Salary band',
     percentage_with_cap: 'Percentage with cap',
     tiered_percentage: 'Tiered percentage',
+    flat_percentage: 'Flat percentage (custom tax)',
 };
 
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-PH', {
@@ -65,11 +68,7 @@ function formatDate(iso: string | null): string {
 }
 
 function codeLabel(code: string, latestRow?: StatutoryContributionRow): string {
-    if (code in CODE_LABELS) {
-        return CODE_LABELS[code as StatutoryContributionCode];
-    }
-
-    return latestRow?.label ?? code;
+    return CODE_LABELS[code] ?? latestRow?.label ?? code;
 }
 
 function algorithmLabel(algorithm: string): string {
@@ -94,10 +93,14 @@ function truncate(text: string | null, max = 80): string {
 
 export default function ContributionTablesIndex({
     grouped,
-    codeOptions,
+    recommendedCodes,
 }: Props) {
-    const codes: string[] =
-        codeOptions.length > 0 ? codeOptions : Object.keys(grouped);
+    // Show recommended codes plus any custom codes that already have rows.
+    // De-dupe while preserving order: recommended first (defines display order),
+    // then custom codes from grouped that aren't already in the list.
+    const codes: string[] = Array.from(
+        new Set([...recommendedCodes, ...Object.keys(grouped)]),
+    );
 
     return (
         <>
@@ -202,39 +205,73 @@ export default function ContributionTablesIndex({
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
-                                                    {rows.map((row) => (
-                                                        <TableRow key={row.id}>
-                                                            <TableCell className="tabular-nums">
-                                                                {formatDate(
-                                                                    row.effective_from,
+                                                    {rows.map((row) => {
+                                                        const isVoided =
+                                                            row.voided_at !==
+                                                            null;
+
+                                                        return (
+                                                            <TableRow
+                                                                key={row.id}
+                                                                className={cn(
+                                                                    isVoided &&
+                                                                        'opacity-60',
                                                                 )}
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                {row.effective_to ===
-                                                                null ? (
-                                                                    <Badge className="bg-success/15 text-success hover:bg-success/15">
-                                                                        Active
-                                                                    </Badge>
-                                                                ) : (
-                                                                    <span className="text-muted-foreground tabular-nums">
+                                                            >
+                                                                <TableCell className="tabular-nums">
+                                                                    <Link
+                                                                        href={
+                                                                            contributionTablesShow(
+                                                                                row.id,
+                                                                            )
+                                                                                .url
+                                                                        }
+                                                                        className="inline-flex items-center gap-2 hover:underline"
+                                                                        aria-label={`Open contribution row ${row.id}`}
+                                                                    >
                                                                         {formatDate(
-                                                                            row.effective_to,
+                                                                            row.effective_from,
                                                                         )}
-                                                                    </span>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="text-muted-foreground">
-                                                                {algorithmLabel(
-                                                                    row.algorithm,
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="text-xs text-muted-foreground">
-                                                                {truncate(
-                                                                    row.notes,
-                                                                )}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
+                                                                        {isVoided && (
+                                                                            <Badge variant="destructive">
+                                                                                Voided
+                                                                            </Badge>
+                                                                        )}
+                                                                    </Link>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    {row.effective_to ===
+                                                                    null ? (
+                                                                        isVoided ? (
+                                                                            <span className="text-muted-foreground">
+                                                                                —
+                                                                            </span>
+                                                                        ) : (
+                                                                            <Badge className="bg-success/15 text-success hover:bg-success/15">
+                                                                                Active
+                                                                            </Badge>
+                                                                        )
+                                                                    ) : (
+                                                                        <span className="text-muted-foreground tabular-nums">
+                                                                            {formatDate(
+                                                                                row.effective_to,
+                                                                            )}
+                                                                        </span>
+                                                                    )}
+                                                                </TableCell>
+                                                                <TableCell className="text-muted-foreground">
+                                                                    {algorithmLabel(
+                                                                        row.algorithm,
+                                                                    )}
+                                                                </TableCell>
+                                                                <TableCell className="text-xs text-muted-foreground">
+                                                                    {truncate(
+                                                                        row.notes,
+                                                                    )}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        );
+                                                    })}
                                                 </TableBody>
                                             </Table>
                                         </div>

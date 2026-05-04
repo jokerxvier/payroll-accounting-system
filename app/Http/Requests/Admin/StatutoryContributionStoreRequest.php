@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Admin\Concerns\NormalisesStatutoryContributionPayload;
 use App\Models\Pas\StatutoryContribution;
-use App\Services\Statutory\StatutoryContributionResolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use InvalidArgumentException;
-use LogicException;
 
 /**
  * Validates a new versioned row for `pas_statutory_contributions`.
@@ -28,12 +26,41 @@ use LogicException;
  *   2. The `rules` JSON shape must satisfy the chosen algorithm's strategy
  *      (delegated to StatutoryContributionStrategy::validateRules so the
  *      shape rules live next to the strategy's compute logic).
+ *
+ * Dual-shape payload for `flat_percentage`:
+ *   The strategy class internally always speaks basis points (rate_bp,
+ *   employee_share_bp, employer_share_bp) and centavos (cap). The HTTP API
+ *   accepts EITHER that integer-bp shape (for backend-internal callers and
+ *   tests) OR a friendlier decimal-percent shape (rate_percent,
+ *   employee_share_percent, employer_share_percent) plus `cap_amount` in
+ *   pesos as a decimal string. prepareForValidation() converts the latter to
+ *   the former before strategy validation runs, so persisted JSON is always
+ *   in the canonical *_bp form. This keeps the storage shape uniform while
+ *   making the surface easy to drive from both a browser form and a
+ *   programmatic test.
+ *
+ * Defaulting + dual-shape normalisation + algorithm-shape validation are
+ * delegated to {@see NormalisesStatutoryContributionPayload}, which is
+ * shared with {@see StatutoryContributionUpdateRequest}.
  */
 final class StatutoryContributionStoreRequest extends FormRequest
 {
+    use NormalisesStatutoryContributionPayload;
+
     public function authorize(): bool
     {
         return true;
+    }
+
+    /**
+     * Default the new application_order / applies_to columns introduced by
+     * the 2026_05_05 migration when the caller omits them, and normalise
+     * the decimal-percent shape of `rules` for `flat_percentage` into the
+     * canonical basis-points shape that the strategy understands.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->applyStatutoryContributionDefaults();
     }
 
     /**
@@ -42,12 +69,26 @@ final class StatutoryContributionStoreRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'contribution_code' => ['required', 'string', Rule::in(StatutoryContribution::CODES)],
+            'contribution_code' => ['required', 'string', 'regex:/^[A-Z][A-Z0-9_]{2,31}$/'],
             'label' => ['required', 'string', 'max:120'],
             'algorithm' => ['required', 'string', Rule::in(StatutoryContribution::ALGORITHMS)],
+            'application_order' => ['required', 'integer', 'min:0'],
+            'applies_to' => ['required', 'string', Rule::in(StatutoryContribution::APPLIES_TO)],
             'effective_from' => ['required', 'date'],
             'rules' => ['required', 'array'],
             'notes' => ['nullable', 'string'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'application_order.integer' => 'application_order must be an integer (use 100 to follow the seeded PH set).',
+            'applies_to.in' => 'applies_to must be one of: gross_pay, taxable_income.',
+            'contribution_code.regex' => 'Code must be uppercase letters, digits, or underscores (3–32 chars, must start with a letter). Example: CITY_TAX or MAKATI_LOCAL_TAX.',
         ];
     }
 
@@ -96,39 +137,6 @@ final class StatutoryContributionStoreRequest extends FormRequest
                 'effective_from',
                 "effective_from must be after {$maxExistingDate->toDateString()} (the latest existing version for {$code}).",
             );
-        }
-    }
-
-    /**
-     * Delegate `rules` shape validation to the strategy registered for the
-     * chosen algorithm. The strategy throws InvalidArgumentException with a
-     * specific message; we surface that as a Laravel validation error on the
-     * `rules` field.
-     */
-    private function validateRulesShapeForAlgorithm(Validator $v): void
-    {
-        $algorithm = (string) $this->input('algorithm');
-
-        /** @var array<string, mixed> $rules */
-        $rules = (array) $this->input('rules', []);
-
-        /** @var StatutoryContributionResolver $resolver */
-        $resolver = app(StatutoryContributionResolver::class);
-
-        try {
-            $strategy = $resolver->getStrategy($algorithm);
-        } catch (LogicException) {
-            // The Rule::in(ALGORITHMS) check should already have rejected this,
-            // but guard the call anyway so a future enum drift doesn't crash.
-            $v->errors()->add('algorithm', "Unknown algorithm '{$algorithm}'.");
-
-            return;
-        }
-
-        try {
-            $strategy->validateRules($rules);
-        } catch (InvalidArgumentException $e) {
-            $v->errors()->add('rules', $e->getMessage());
         }
     }
 }

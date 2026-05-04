@@ -50,6 +50,8 @@ class StatutoryContributionFactory extends Factory
             'contribution_code' => StatutoryContribution::CODE_BIR,
             'label' => 'BIR Withholding Tax',
             'algorithm' => StatutoryContribution::ALGORITHM_BRACKET_TABLE,
+            'application_order' => 90,
+            'applies_to' => StatutoryContribution::APPLIES_TO_TAXABLE_INCOME,
             'rules' => [
                 'period_types' => [
                     'monthly' => [
@@ -76,6 +78,8 @@ class StatutoryContributionFactory extends Factory
             'contribution_code' => StatutoryContribution::CODE_SSS,
             'label' => 'SSS contribution',
             'algorithm' => StatutoryContribution::ALGORITHM_SALARY_BAND,
+            'application_order' => 10,
+            'applies_to' => StatutoryContribution::APPLIES_TO_GROSS_PAY,
             'rules' => [
                 'bands' => [
                     [
@@ -119,6 +123,8 @@ class StatutoryContributionFactory extends Factory
             'contribution_code' => StatutoryContribution::CODE_PHILHEALTH,
             'label' => 'PhilHealth premium',
             'algorithm' => StatutoryContribution::ALGORITHM_PERCENTAGE_WITH_CAP,
+            'application_order' => 20,
+            'applies_to' => StatutoryContribution::APPLIES_TO_GROSS_PAY,
             'rules' => [
                 'rate_bp' => 500,
                 'floor' => 1_000_000,
@@ -140,6 +146,8 @@ class StatutoryContributionFactory extends Factory
             'contribution_code' => StatutoryContribution::CODE_PAGIBIG,
             'label' => 'Pag-IBIG contribution',
             'algorithm' => StatutoryContribution::ALGORITHM_TIERED_PERCENTAGE,
+            'application_order' => 30,
+            'applies_to' => StatutoryContribution::APPLIES_TO_GROSS_PAY,
             'rules' => [
                 'threshold' => 150_000,
                 'lower' => ['ee_bp' => 100, 'er_bp' => 200],

@@ -46,22 +46,15 @@ final readonly class PayrollLineItem
 
     public const CODE_BASIC_PAY = 'BASIC_PAY';
 
-    public const CODE_BIR_WITHHOLDING = 'BIR_WITHHOLDING';
-
-    public const CODE_SSS_EMPLOYEE = 'SSS_EMPLOYEE';
-
-    public const CODE_SSS_EMPLOYER = 'SSS_EMPLOYER';
-
-    public const CODE_SSS_EMPLOYER_EC = 'SSS_EMPLOYER_EC';
-
-    public const CODE_PHILHEALTH_EMPLOYEE = 'PHILHEALTH_EMPLOYEE';
-
-    public const CODE_PHILHEALTH_EMPLOYER = 'PHILHEALTH_EMPLOYER';
-
-    public const CODE_PAGIBIG_EMPLOYEE = 'PAGIBIG_EMPLOYEE';
-
-    public const CODE_PAGIBIG_EMPLOYER = 'PAGIBIG_EMPLOYER';
-
+    /*
+     * Statutory line codes (BIR_WITHHOLDING, SSS_EMPLOYEE, SSS_EMPLOYER,
+     * SSS_EMPLOYER_EC, PHILHEALTH_EMPLOYEE/EMPLOYER, PAGIBIG_EMPLOYEE/EMPLOYER)
+     * are no longer hard-coded constants. The engine composes them at runtime
+     * from `{contribution_code}_EMPLOYEE` / `_EMPLOYER` / `_EMPLOYER_EC`
+     * suffixes off each {@see \App\Models\Pas\StatutoryContribution} row,
+     * so a new contribution (e.g. CITY_TAX) emits CITY_TAX_EMPLOYEE without
+     * a code change. The `bucket` taxonomy below is still authoritative.
+     */
     public const CODE_ALLOWANCE_TAXABLE = 'allowance_taxable';
 
     public const CODE_ALLOWANCE_NON_TAXABLE = 'allowance_non_taxable';

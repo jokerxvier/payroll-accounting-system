@@ -5,6 +5,9 @@ declare(strict_types=1);
 use App\Models\Pas\AuditLog;
 use App\Models\Pas\StatutoryContribution;
 use App\Models\User;
+use App\Services\Statutory\StatutoryContributionResolver;
+use App\ValueObjects\Money;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 
@@ -208,17 +211,63 @@ it('rejects an effective_from earlier than the latest existing version', functio
     expect(StatutoryContribution::query()->where('contribution_code', StatutoryContribution::CODE_SSS)->count())->toBe(1);
 });
 
-it('rejects an unknown contribution_code', function () {
+it('persists a custom contribution code that is not in the recommended list', function () {
     $user = storeAuthAs('super-admin');
 
-    $payload = validBirPayload();
-    $payload['contribution_code'] = 'UNKNOWN_CODE';
+    expect(StatutoryContribution::query()->count())->toBe(0);
 
     $this->actingAs($user)
         ->from('/admin/contribution-tables/create')
-        ->post('/admin/contribution-tables', $payload)
-        ->assertSessionHasErrors('contribution_code');
+        ->post('/admin/contribution-tables', [
+            'contribution_code' => 'MAKATI_TAX',
+            'label' => 'Makati Local Tax',
+            'algorithm' => StatutoryContribution::ALGORITHM_FLAT_PERCENTAGE,
+            'application_order' => 75,
+            'applies_to' => StatutoryContribution::APPLIES_TO_GROSS_PAY,
+            'effective_from' => '2026-01-01',
+            'rules' => [
+                'rate_bp' => 100,
+                'employee_share_bp' => 10_000,
+                'employer_share_bp' => 0,
+                'cap' => null,
+            ],
+            'notes' => null,
+        ])
+        ->assertRedirect('/admin/contribution-tables');
+
+    $row = StatutoryContribution::query()->firstOrFail();
+
+    expect($row->contribution_code)->toBe('MAKATI_TAX')
+        ->and($row->label)->toBe('Makati Local Tax')
+        ->and($row->algorithm)->toBe(StatutoryContribution::ALGORITHM_FLAT_PERCENTAGE)
+        ->and($row->effective_from->toDateString())->toBe('2026-01-01')
+        ->and($row->effective_to)->toBeNull();
 });
+
+it('rejects malformed contribution codes', function (string $badCode): void {
+    $user = storeAuthAs('super-admin');
+
+    $payload = validFlatPercentageBpPayload();
+    $payload['contribution_code'] = $badCode;
+
+    $response = $this->actingAs($user)
+        ->from('/admin/contribution-tables/create')
+        ->post('/admin/contribution-tables', $payload);
+
+    $response->assertStatus(302)
+        ->assertSessionHasErrors('contribution_code');
+
+    $errors = session('errors')->get('contribution_code');
+
+    expect($errors[0])->toContain('Code must be uppercase letters');
+})->with([
+    'lowercase' => ['city_tax'],
+    'leading digit' => ['1TAX'],
+    'too short' => ['AB'],
+    'too long' => [str_repeat('A', 33)],
+    'special chars' => ['MY-TAX'],
+    'spaces' => ['MY TAX'],
+]);
 
 it('rejects an unknown algorithm', function () {
     $user = storeAuthAs('super-admin');
@@ -396,4 +445,176 @@ it('does not mutate any LMS-owned table when storing a new version', function ()
         ->and((int) DB::connection('lms')->table('roles')->count())->toBe($rolesCount)
         ->and((int) DB::connection('lms')->table('sm_human_departments')->count())->toBe($deptCount)
         ->and((int) DB::connection('lms')->table('sm_designations')->count())->toBe($desigCount);
+});
+
+/*
+ * --- flat_percentage algorithm coverage (Task #5) ---------------------------
+ *
+ * The store path now accepts the new `flat_percentage` algorithm wired in
+ * earlier tasks (model constant, strategy, registry binding). Validation is
+ * dual-shape: callers may submit canonical basis points + centavos, OR
+ * decimal-percent + decimal-pesos which prepareForValidation() converts into
+ * basis points before strategy validation runs. Persisted JSON is always in
+ * the canonical *_bp + centavos form so downstream computation stays
+ * float-free.
+ */
+
+function validFlatPercentageBpPayload(string $effectiveFrom = '2026-01-01'): array
+{
+    return [
+        'contribution_code' => StatutoryContribution::CODE_CITY_TAX,
+        'label' => 'Quezon City local tax',
+        'algorithm' => StatutoryContribution::ALGORITHM_FLAT_PERCENTAGE,
+        'application_order' => 50,
+        'applies_to' => StatutoryContribution::APPLIES_TO_GROSS_PAY,
+        'effective_from' => $effectiveFrom,
+        'rules' => [
+            // Canonical bp + centavos shape — the same form the strategy
+            // and the persisted JSON column carry.
+            'rate_bp' => 150,            // 1.5%
+            'employee_share_bp' => 10_000,
+            'employer_share_bp' => 0,
+            'cap' => null,
+        ],
+        'notes' => null,
+    ];
+}
+
+it('persists a flat_percentage row with the canonical bp + centavos rules shape', function () {
+    $user = storeAuthAs('super-admin');
+
+    expect(StatutoryContribution::query()->count())->toBe(0);
+
+    $this->actingAs($user)
+        ->from('/admin/contribution-tables/create')
+        ->post('/admin/contribution-tables', validFlatPercentageBpPayload())
+        ->assertRedirect('/admin/contribution-tables');
+
+    $row = StatutoryContribution::query()->firstOrFail();
+
+    expect($row->contribution_code)->toBe(StatutoryContribution::CODE_CITY_TAX)
+        ->and($row->algorithm)->toBe(StatutoryContribution::ALGORITHM_FLAT_PERCENTAGE)
+        ->and($row->application_order)->toBe(50)
+        ->and($row->applies_to)->toBe(StatutoryContribution::APPLIES_TO_GROSS_PAY)
+        ->and($row->effective_from->toDateString())->toBe('2026-01-01')
+        ->and($row->effective_to)->toBeNull()
+        ->and($row->rules)->toBe([
+            'rate_bp' => 150,
+            'employee_share_bp' => 10_000,
+            'employer_share_bp' => 0,
+            'cap' => null,
+        ]);
+});
+
+it('normalises a decimal-percent flat_percentage payload into the canonical bp shape', function () {
+    $user = storeAuthAs('super-admin');
+
+    $this->actingAs($user)
+        ->from('/admin/contribution-tables/create')
+        ->post('/admin/contribution-tables', [
+            'contribution_code' => StatutoryContribution::CODE_CITY_TAX,
+            'label' => 'Quezon City local tax',
+            'algorithm' => StatutoryContribution::ALGORITHM_FLAT_PERCENTAGE,
+            // application_order + applies_to deliberately omitted to exercise
+            // prepareForValidation()'s defaults (100, gross_pay).
+            'effective_from' => '2026-01-01',
+            'rules' => [
+                'rate_percent' => '1.5',
+                'employee_share_percent' => '50',
+                'employer_share_percent' => '50',
+                'cap_amount' => '50000.00',
+            ],
+            'notes' => null,
+        ])
+        ->assertRedirect('/admin/contribution-tables');
+
+    $row = StatutoryContribution::query()->firstOrFail();
+
+    // Persisted JSON carries integer bp + centavos, regardless of input shape.
+    expect($row->rules)->toBe([
+        'rate_bp' => 150,
+        'employee_share_bp' => 5_000,
+        'employer_share_bp' => 5_000,
+        'cap' => 5_000_000,
+    ])
+        ->and($row->application_order)->toBe(100)
+        ->and($row->applies_to)->toBe(StatutoryContribution::APPLIES_TO_GROSS_PAY);
+});
+
+it('round-trips through the resolver: a stored flat_percentage row computes the configured rate', function () {
+    $user = storeAuthAs('super-admin');
+
+    // Store a 1.5% city tax, 100% employee, no cap.
+    $this->actingAs($user)
+        ->from('/admin/contribution-tables/create')
+        ->post('/admin/contribution-tables', validFlatPercentageBpPayload())
+        ->assertRedirect('/admin/contribution-tables');
+
+    /** @var StatutoryContributionResolver $resolver */
+    $resolver = app(StatutoryContributionResolver::class);
+
+    // Input ₱100,000.00 (100_000_00 centavos).
+    // total = 10_000_000 × 150 / 10_000 = 150_000 centavos (₱1,500.00)
+    // employee = 150_000 × 10_000 / 10_000 = 150_000
+    // employer = 150_000 - 150_000 = 0
+    $result = $resolver->compute(
+        StatutoryContribution::CODE_CITY_TAX,
+        Money::fromCentavos(100_000_00),
+        CarbonImmutable::parse('2026-06-01'),
+    );
+
+    expect($result->employeeShare->centavos())->toBe(150_000)
+        ->and($result->employerShare->centavos())->toBe(0)
+        ->and($result->employerEcShare->centavos())->toBe(0)
+        ->and($result->taxableAmount->centavos())->toBe(100_000_00);
+});
+
+it('rejects a flat_percentage payload whose share split does not sum to 10000 bp', function () {
+    $user = storeAuthAs('super-admin');
+
+    $payload = validFlatPercentageBpPayload();
+    $payload['rules']['employee_share_bp'] = 6_000;
+    $payload['rules']['employer_share_bp'] = 6_000;
+
+    $this->actingAs($user)
+        ->from('/admin/contribution-tables/create')
+        ->post('/admin/contribution-tables', $payload)
+        ->assertSessionHasErrors('rules');
+
+    expect(StatutoryContribution::query()->count())->toBe(0);
+});
+
+it('rejects a flat_percentage payload with rate_bp above 10000', function () {
+    $user = storeAuthAs('super-admin');
+
+    $payload = validFlatPercentageBpPayload();
+    $payload['rules']['rate_bp'] = 20_000;
+
+    $this->actingAs($user)
+        ->from('/admin/contribution-tables/create')
+        ->post('/admin/contribution-tables', $payload)
+        ->assertSessionHasErrors('rules');
+
+    expect(StatutoryContribution::query()->count())->toBe(0);
+});
+
+it('rejects a flat_percentage payload with an unknown applies_to value', function () {
+    $user = storeAuthAs('super-admin');
+
+    $payload = validFlatPercentageBpPayload();
+    $payload['applies_to'] = 'something_else';
+
+    $this->actingAs($user)
+        ->from('/admin/contribution-tables/create')
+        ->post('/admin/contribution-tables', $payload)
+        ->assertSessionHasErrors('applies_to');
+
+    expect(StatutoryContribution::query()->count())->toBe(0);
+});
+
+it('rejects a flat_percentage store from an unauthenticated user', function () {
+    $this->post('/admin/contribution-tables', validFlatPercentageBpPayload())
+        ->assertRedirect('/login');
+
+    expect(StatutoryContribution::query()->count())->toBe(0);
 });

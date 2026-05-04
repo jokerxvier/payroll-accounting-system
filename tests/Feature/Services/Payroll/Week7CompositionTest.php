@@ -348,17 +348,19 @@ it('composes every Week-7 input into a single centavo-exact payslip', function (
         $result->auditLines,
     );
 
-    // Canonical Week-6 prefix (positions 0..8).
+    // Canonical Week-6 prefix (positions 0..8). Statutory line codes are
+    // composed by the engine as `{contribution_code}_EMPLOYEE` /
+    // `_EMPLOYER` / `_EMPLOYER_EC` suffixes off the registry rows.
     expect(array_slice($codes, 0, 9))->toBe([
         PayrollLineItem::CODE_BASIC_PAY,
-        PayrollLineItem::CODE_SSS_EMPLOYEE,
-        PayrollLineItem::CODE_PHILHEALTH_EMPLOYEE,
-        PayrollLineItem::CODE_PAGIBIG_EMPLOYEE,
-        PayrollLineItem::CODE_BIR_WITHHOLDING,
-        PayrollLineItem::CODE_SSS_EMPLOYER,
-        PayrollLineItem::CODE_SSS_EMPLOYER_EC,
-        PayrollLineItem::CODE_PHILHEALTH_EMPLOYER,
-        PayrollLineItem::CODE_PAGIBIG_EMPLOYER,
+        'SSS_EMPLOYEE',
+        'PHILHEALTH_EMPLOYEE',
+        'PAGIBIG_EMPLOYEE',
+        'BIR_WITHHOLDING_EMPLOYEE',
+        'SSS_EMPLOYER',
+        'SSS_EMPLOYER_EC',
+        'PHILHEALTH_EMPLOYER',
+        'PAGIBIG_EMPLOYER',
     ]);
 
     // Week-7 suffix: allowances (taxable then non-taxable), then adjustment

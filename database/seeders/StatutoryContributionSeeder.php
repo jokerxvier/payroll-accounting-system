@@ -85,6 +85,8 @@ final class StatutoryContributionSeeder extends Seeder
             [
                 'label' => 'BIR Withholding Tax (TRAIN-law, 2023+)',
                 'algorithm' => StatutoryContribution::ALGORITHM_BRACKET_TABLE,
+                'application_order' => 90,
+                'applies_to' => StatutoryContribution::APPLIES_TO_TAXABLE_INCOME,
                 'effective_to' => null,
                 'rules' => [
                     'period_types' => [
@@ -216,6 +218,8 @@ final class StatutoryContributionSeeder extends Seeder
             [
                 'label' => 'SSS Contribution (2025)',
                 'algorithm' => StatutoryContribution::ALGORITHM_SALARY_BAND,
+                'application_order' => 10,
+                'applies_to' => StatutoryContribution::APPLIES_TO_GROSS_PAY,
                 'effective_to' => null,
                 'rules' => [
                     'bands' => $this->buildSssBands(),
@@ -290,6 +294,8 @@ final class StatutoryContributionSeeder extends Seeder
             [
                 'label' => 'PhilHealth Premium (5%, 2024+)',
                 'algorithm' => StatutoryContribution::ALGORITHM_PERCENTAGE_WITH_CAP,
+                'application_order' => 20,
+                'applies_to' => StatutoryContribution::APPLIES_TO_GROSS_PAY,
                 'effective_to' => null,
                 'rules' => [
                     'rate_bp' => 500,            // 5.00%
@@ -322,6 +328,8 @@ final class StatutoryContributionSeeder extends Seeder
             [
                 'label' => 'Pag-IBIG Contribution (HDMF Circular 460, 2024+)',
                 'algorithm' => StatutoryContribution::ALGORITHM_TIERED_PERCENTAGE,
+                'application_order' => 30,
+                'applies_to' => StatutoryContribution::APPLIES_TO_GROSS_PAY,
                 'effective_to' => null,
                 'rules' => [
                     'threshold' => 150_000,                            // PHP 1,500

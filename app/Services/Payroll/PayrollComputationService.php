@@ -10,22 +10,30 @@ use App\Actions\Payroll\ApplyEmployeeLoans;
 use App\Actions\Payroll\ApplyPayrollAdjustments;
 use App\Actions\Payroll\ApplyUnpaidDays;
 use App\Actions\Payroll\ComputeBasicPay;
-use App\Actions\Payroll\ComputeBirWithholdingTax;
-use App\Actions\Payroll\ComputePagibigContribution;
-use App\Actions\Payroll\ComputePhilhealthContribution;
-use App\Actions\Payroll\ComputeSssContribution;
 use App\Models\Pas\EmployeeProfile;
+use App\Models\Pas\StatutoryContribution;
+use App\Services\Statutory\StatutoryContributionRegistry;
+use App\Services\Statutory\StatutoryContributionResolver;
+use App\Services\Statutory\StatutoryContributionResult;
 use App\ValueObjects\Money;
 use App\ValueObjects\PayPeriodInput;
 
 /**
- * Composes the ten payroll computation actions into a single
- * {@see PayrollComputationResult} for one employee against one pay period.
+ * Composes the payroll computation actions and the statutory contribution
+ * registry into a single {@see PayrollComputationResult} for one employee
+ * against one pay period.
  *
  * This is the public entry point for the engine: callers (the batch persister
  * in §6F, the payslip preview controller, etc.) interact only with this
  * service. The underlying actions remain individually unit-testable but
  * are never invoked directly by feature code.
+ *
+ * Statutory contributions (SSS / PhilHealth / Pag-IBIG / BIR plus any future
+ * municipal or scheme rows) are resolved from {@see StatutoryContributionRegistry}
+ * — the engine no longer hard-codes the four PH codes. Each row carries its
+ * own `application_order` (sequencing), `applies_to` (basis: gross pay vs
+ * taxable income), and `algorithm` (strategy key). Adding a new contribution
+ * is a row insert, not a code change.
  *
  * Algorithm:
  *
@@ -45,11 +53,11 @@ use App\ValueObjects\PayPeriodInput;
  *   3. **Statutory contribution basis** — every contribution is computed
  *      against the FULL monthly salary, not against `basicPay`. Regulators
  *      (SSS, PhilHealth, Pag-IBIG) define their tables monthly; for a
- *      semi-monthly run the four contribution actions internally halve the
- *      result. The basis for a partial month (newly hired employee, etc.) is
- *      still the full monthly salary — the regulators do not pro-rate
- *      contribution bases by tenure. Adding allowances or adjustments DOES
- *      NOT widen the statutory base either (decision 2 in the Week 7 plan).
+ *      semi-monthly run the loop halves non-bracket-table results because
+ *      `bracket_table` rows already carry per-period bracket arrays
+ *      (BIR has explicit `monthly` and `semi_monthly` tables). Adding
+ *      allowances or adjustments DOES NOT widen the statutory base either
+ *      (decision 2 in the Week 7 plan).
  *
  *   4. **Allowances + adjustments** — {@see ApplyAllowances} and
  *      {@see ApplyPayrollAdjustments} resolve recurring + one-off earnings
@@ -69,41 +77,42 @@ use App\ValueObjects\PayPeriodInput;
  *      compute time; the Week-9 batch path mutates balances inside a
  *      transaction.
  *
- *   8. **Taxable income** — `basicPay + taxableAllowances +
- *      taxableAdjustmentAdditions − statutoryEmployeeShares −
- *      customTaxableEmployeeDeductions`. Non-taxable items never enter the
- *      BIR base; loan amortizations and adjustment deductions never reduce
- *      it either (the latter two are post-tax payslip lines).
+ *   8. **Statutory loop** — registry rows are processed in
+ *      `application_order` ASC. Each row's basis is selected by its
+ *      `applies_to` column: `gross_pay` rows read from gross; `taxable_income`
+ *      rows read from a running tally `(basicPay + taxableAllowances +
+ *      taxableAdjustmentAdditions − accumulatedEmployeeStatutoryDeductions −
+ *      customTaxableEmployeeDeductions)`. The PH set seeds with order
+ *      10 (SSS) / 20 (PhilHealth) / 30 (Pag-IBIG) / 90 (BIR), so all three
+ *      gross-based contributions land in the running tally before BIR
+ *      reads its taxable-income basis.
  *
- *   9. **BIR withholding** — applied against taxable income from step 8.
- *
- *  10. **Net pay** — `gross − totalEmployeeDeductions`. Because gross now
+ *   9. **Net pay** — `gross − totalEmployeeDeductions`. Because gross now
  *      includes non-taxable earnings, the engine no longer adds them
  *      separately to net.
  *
- *  11. **Audit lines** — the engine emits one {@see PayrollLineItem} per
- *      discrete contribution, in a canonical display order: the nine Week-6
- *      lines (basic, employee statutory + BIR, employer statutory) followed
- *      by Week-7 additions in this order: allowances (taxable then
- *      non-taxable), adjustments (additions then deductions), custom
- *      deductions, loans, and finally the unpaid-days line if any.
+ *  10. **Audit lines** — the engine emits one {@see PayrollLineItem} per
+ *      discrete contribution line, in a canonical display order: basic pay
+ *      first, then per registry row in order (employee share, then any
+ *      employer + employer-EC shares the strategy returned), then Week-7
+ *      additions in this order: allowances (taxable then non-taxable),
+ *      adjustments (additions then deductions), custom deductions, loans,
+ *      and finally the unpaid-days line if any.
  *
- * The service is stateless. The actions are constructor-injected via
- * Laravel's auto-wiring — no service-provider binding required.
+ * The service is stateless. The actions and resolver are constructor-injected
+ * via Laravel's auto-wiring — no service-provider binding required.
  */
 final class PayrollComputationService
 {
     public function __construct(
         private ComputeBasicPay $computeBasicPay,
-        private ComputeSssContribution $computeSss,
-        private ComputePhilhealthContribution $computePhilhealth,
-        private ComputePagibigContribution $computePagibig,
-        private ComputeBirWithholdingTax $computeBir,
         private ApplyAllowances $applyAllowances,
         private ApplyEmployeeDeductions $applyEmployeeDeductions,
         private ApplyEmployeeLoans $applyEmployeeLoans,
         private ApplyPayrollAdjustments $applyPayrollAdjustments,
         private ApplyUnpaidDays $applyUnpaidDays,
+        private StatutoryContributionRegistry $registry,
+        private StatutoryContributionResolver $resolver,
     ) {}
 
     public function compute(EmployeeProfile $profile, PayPeriodInput $period): PayrollComputationResult
@@ -112,7 +121,7 @@ final class PayrollComputationService
         $basicPay = ($this->computeBasicPay)($profile, $period);
 
         // 2. Short-circuit when there's nothing to compute. Skipping the
-        //    statutory resolver here is what lets a fresh DB (no contribution
+        //    statutory registry here is what lets a fresh DB (no contribution
         //    rows seeded) still produce a deterministic zero result for an
         //    inactive employee — useful for the batch flow where every active
         //    employee always yields a result and no-pay employees produce a
@@ -125,7 +134,7 @@ final class PayrollComputationService
         //    The action is currently a documented stub returning zero, but the
         //    engine is plumbed for the eventual real implementation. If the
         //    reduction wipes out basic pay entirely, short-circuit to zero —
-        //    statutory / BIR / etc. lookups are skipped just like the
+        //    statutory / etc. lookups are skipped just like the
         //    inactive-employee branch.
         $reduction = ($this->applyUnpaidDays)($profile, $period, $basicPay);
         $basicPay = $basicPay->minus($reduction->reduction);
@@ -137,10 +146,6 @@ final class PayrollComputationService
         //    regardless of pay frequency, partial-tenure pro-ration, or
         //    allowances/adjustments riding on this period.
         $monthlyBasis = Money::fromCentavos($profile->basic_salary_centavos);
-
-        $sss = ($this->computeSss)($monthlyBasis, $period);
-        $philhealth = ($this->computePhilhealth)($monthlyBasis, $period);
-        $pagibig = ($this->computePagibig)($monthlyBasis, $period);
 
         // 5. Recurring + one-off earnings.
         $allowances = ($this->applyAllowances)($profile, $period);
@@ -160,41 +165,106 @@ final class PayrollComputationService
         // 8. Loans (read-only preview at compute time).
         $loans = ($this->applyEmployeeLoans)($profile, $period);
 
-        // 9. Taxable income = taxable earnings − statutory employee shares
-        //    − custom taxable employee deductions. Non-taxable allowances,
-        //    non-taxable adjustment additions, loan amortizations, and
-        //    adjustment deductions never enter the BIR base.
-        $taxableIncome = $basicPay
-            ->plus($allowances->taxable)
-            ->plus($adjustments->taxableAdditions)
-            ->minus($sss->employeeShare)
-            ->minus($philhealth->employeeShare)
-            ->minus($pagibig->employeeShare)
-            ->minus($deductions->taxableImpact);
+        // 9. Statutory loop. The registry returns rows in `application_order`
+        //    ASC; we process them in that order so any `taxable_income` rows
+        //    (e.g. BIR at order 90) read a running tally that already
+        //    subtracted the earlier `gross_pay` rows' employee shares.
+        $contributions = $this->registry->active($period->end());
 
-        $birTax = ($this->computeBir)($taxableIncome, $period);
+        /** @var array<string, StatutoryContributionResult> $contributionResults */
+        $contributionResults = [];
+        $accumulatedEmployeeStatutoryShares = Money::zero();
 
-        // 10. Aggregates derive from the per-strategy + per-action shares.
-        $totalEmployeeDeductions = $sss->employeeShare
-            ->plus($philhealth->employeeShare)
-            ->plus($pagibig->employeeShare)
-            ->plus($birTax)
+        foreach ($contributions as $contribution) {
+            $basis = match ($contribution->applies_to) {
+                StatutoryContribution::APPLIES_TO_GROSS_PAY => $monthlyBasis,
+                StatutoryContribution::APPLIES_TO_TAXABLE_INCOME => $basicPay
+                    ->plus($allowances->taxable)
+                    ->plus($adjustments->taxableAdditions)
+                    ->minus($accumulatedEmployeeStatutoryShares)
+                    ->minus($deductions->taxableImpact),
+                default => $monthlyBasis,
+            };
+
+            $context = $contribution->algorithm === StatutoryContribution::ALGORITHM_BRACKET_TABLE
+                ? ['period_type' => $period->frequency()]
+                : [];
+
+            $result = $this->resolver->compute(
+                $contribution->contribution_code,
+                $basis,
+                $period->end(),
+                $context,
+            );
+
+            // Halve only when the strategy isn't already period-aware.
+            // `bracket_table` rows ship with explicit per-period bracket
+            // arrays so the strategy returns the per-period figure already;
+            // every other algorithm computes against the full monthly basis
+            // and needs to be halved for semi-monthly runs.
+            if ($period->isSemiMonthly() && $contribution->algorithm !== StatutoryContribution::ALGORITHM_BRACKET_TABLE) {
+                $result = new StatutoryContributionResult(
+                    employeeShare: $result->employeeShare->dividedBy(2),
+                    employerShare: $result->employerShare->dividedBy(2),
+                    employerEcShare: $result->employerEcShare->dividedBy(2),
+                    taxableAmount: $result->taxableAmount->dividedBy(2),
+                );
+            }
+
+            $contributionResults[$contribution->contribution_code] = $result;
+            $accumulatedEmployeeStatutoryShares = $accumulatedEmployeeStatutoryShares
+                ->plus($result->employeeShare);
+        }
+
+        // 10. Map known PH codes onto the legacy DTO fields so existing
+        //     consumers (frontend types, batch persister, payslips) keep
+        //     reading the same shape. Unknown codes still flow through
+        //     `totalEmployeeDeductions` / `totalEmployerContributions` and
+        //     show up as audit lines.
+        $sssResult = $contributionResults[StatutoryContribution::CODE_SSS] ?? StatutoryContributionResult::zero();
+        $philhealthResult = $contributionResults[StatutoryContribution::CODE_PHILHEALTH] ?? StatutoryContributionResult::zero();
+        $pagibigResult = $contributionResults[StatutoryContribution::CODE_PAGIBIG] ?? StatutoryContributionResult::zero();
+        $birResult = $contributionResults[StatutoryContribution::CODE_BIR] ?? StatutoryContributionResult::zero();
+
+        // The taxable income surfaced on the DTO is the BIR-flavour basis: the
+        // post-statutory taxable income BIR was computed against. When BIR is
+        // not seeded we fall back to the same formula so the field stays
+        // meaningful for callers (payslip preview, etc.).
+        $taxableIncome = $contributions->firstWhere('contribution_code', StatutoryContribution::CODE_BIR) !== null
+            ? $birResult->taxableAmount
+            : $basicPay
+                ->plus($allowances->taxable)
+                ->plus($adjustments->taxableAdditions)
+                ->minus($accumulatedEmployeeStatutoryShares)
+                ->minus($deductions->taxableImpact);
+
+        // 11. Aggregate employee deductions: every contribution's employee
+        //     share + custom deductions + loans + adjustment deductions.
+        //     `$accumulatedEmployeeStatutoryShares` was already accumulated
+        //     by the statutory loop above; re-use it instead of summing
+        //     again.
+        $totalEmployerContributionShares = Money::zero();
+        foreach ($contributionResults as $result) {
+            $totalEmployerContributionShares = $totalEmployerContributionShares
+                ->plus($result->employerShare)
+                ->plus($result->employerEcShare);
+        }
+
+        $totalEmployeeDeductions = $accumulatedEmployeeStatutoryShares
             ->plus($deductions->employee)
             ->plus($loans->total)
             ->plus($adjustments->deductions);
 
-        $totalEmployerContributions = $sss->employerShare
-            ->plus($sss->employerEcShare)
-            ->plus($philhealth->employerShare)
-            ->plus($pagibig->employerShare)
+        $totalEmployerContributions = $totalEmployerContributionShares
             ->plus($deductions->employer);
 
-        // 11. Net pay = gross − total employee deductions. Non-taxable items
+        // 12. Net pay = gross − total employee deductions. Non-taxable items
         //     are already in gross, so no separate "add to net" step.
         $netPay = $grossPay->minus($totalEmployeeDeductions);
 
-        // 12. Canonical audit-line order: the Week-6 nine first, then the
-        //     Week-7 additions in deterministic order.
+        // 13. Canonical audit-line order: basic, then employee statutory
+        //     shares (registry order), then employer + EC shares (registry
+        //     order), then Week-7 additions in deterministic order.
         $auditLines = [
             new PayrollLineItem(
                 code: PayrollLineItem::CODE_BASIC_PAY,
@@ -203,59 +273,50 @@ final class PayrollComputationService
                 bucket: PayrollLineItem::BUCKET_EARNING,
                 meta: null,
             ),
-            new PayrollLineItem(
-                code: PayrollLineItem::CODE_SSS_EMPLOYEE,
-                label: 'SSS contribution (employee)',
-                amount: $sss->employeeShare,
-                bucket: PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION,
-                meta: ['contribution_base_centavos' => $sss->taxableAmount->centavos()],
-            ),
-            new PayrollLineItem(
-                code: PayrollLineItem::CODE_PHILHEALTH_EMPLOYEE,
-                label: 'PhilHealth premium (employee)',
-                amount: $philhealth->employeeShare,
-                bucket: PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION,
-                meta: ['contribution_base_centavos' => $philhealth->taxableAmount->centavos()],
-            ),
-            new PayrollLineItem(
-                code: PayrollLineItem::CODE_PAGIBIG_EMPLOYEE,
-                label: 'Pag-IBIG contribution (employee)',
-                amount: $pagibig->employeeShare,
-                bucket: PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION,
-                meta: ['contribution_base_centavos' => $pagibig->taxableAmount->centavos()],
-            ),
-            new PayrollLineItem(
-                code: PayrollLineItem::CODE_BIR_WITHHOLDING,
-                label: 'BIR withholding tax',
-                amount: $birTax,
-                bucket: PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION,
-                meta: ['taxable_income_centavos' => $taxableIncome->centavos()],
-            ),
-            new PayrollLineItem(
-                code: PayrollLineItem::CODE_SSS_EMPLOYER,
-                label: 'SSS contribution (employer)',
-                amount: $sss->employerShare,
-                bucket: PayrollLineItem::BUCKET_EMPLOYER_CONTRIBUTION,
-            ),
-            new PayrollLineItem(
-                code: PayrollLineItem::CODE_SSS_EMPLOYER_EC,
-                label: "SSS Employees' Compensation (employer)",
-                amount: $sss->employerEcShare,
-                bucket: PayrollLineItem::BUCKET_EMPLOYER_CONTRIBUTION,
-            ),
-            new PayrollLineItem(
-                code: PayrollLineItem::CODE_PHILHEALTH_EMPLOYER,
-                label: 'PhilHealth premium (employer)',
-                amount: $philhealth->employerShare,
-                bucket: PayrollLineItem::BUCKET_EMPLOYER_CONTRIBUTION,
-            ),
-            new PayrollLineItem(
-                code: PayrollLineItem::CODE_PAGIBIG_EMPLOYER,
-                label: 'Pag-IBIG contribution (employer)',
-                amount: $pagibig->employerShare,
-                bucket: PayrollLineItem::BUCKET_EMPLOYER_CONTRIBUTION,
-            ),
         ];
+
+        // Employee shares first, in registry order.
+        foreach ($contributions as $contribution) {
+            $result = $contributionResults[$contribution->contribution_code];
+            $meta = $contribution->applies_to === StatutoryContribution::APPLIES_TO_TAXABLE_INCOME
+                ? ['taxable_income_centavos' => $result->taxableAmount->centavos()]
+                : ['contribution_base_centavos' => $result->taxableAmount->centavos()];
+
+            $auditLines[] = new PayrollLineItem(
+                code: $contribution->contribution_code.'_EMPLOYEE',
+                label: $contribution->label.' (employee)',
+                amount: $result->employeeShare,
+                bucket: PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION,
+                meta: $meta,
+            );
+        }
+
+        // Then employer shares (and any EC) in registry order.
+        foreach ($contributions as $contribution) {
+            $result = $contributionResults[$contribution->contribution_code];
+
+            // Skip emitting an employer line when both employer shares are
+            // zero — strategies like BracketTableStrategy carry no employer
+            // share at all (BIR), so suppressing zero rows keeps payslips
+            // free of noise lines.
+            if (! $result->employerShare->isZero()) {
+                $auditLines[] = new PayrollLineItem(
+                    code: $contribution->contribution_code.'_EMPLOYER',
+                    label: $contribution->label.' (employer)',
+                    amount: $result->employerShare,
+                    bucket: PayrollLineItem::BUCKET_EMPLOYER_CONTRIBUTION,
+                );
+            }
+
+            if (! $result->employerEcShare->isZero()) {
+                $auditLines[] = new PayrollLineItem(
+                    code: $contribution->contribution_code.'_EMPLOYER_EC',
+                    label: $contribution->label." Employees' Compensation (employer)",
+                    amount: $result->employerEcShare,
+                    bucket: PayrollLineItem::BUCKET_EMPLOYER_CONTRIBUTION,
+                );
+            }
+        }
 
         // Allowances: taxable lines first, then non-taxable. Within a bucket
         // the action's emit order is preserved (insertion order from the
@@ -302,14 +363,14 @@ final class PayrollComputationService
             period: $period,
             basicPay: $basicPay,
             grossPay: $grossPay,
-            sssEmployee: $sss->employeeShare,
-            sssEmployer: $sss->employerShare,
-            sssEmployerEc: $sss->employerEcShare,
-            philhealthEmployee: $philhealth->employeeShare,
-            philhealthEmployer: $philhealth->employerShare,
-            pagibigEmployee: $pagibig->employeeShare,
-            pagibigEmployer: $pagibig->employerShare,
-            birWithholdingTax: $birTax,
+            sssEmployee: $sssResult->employeeShare,
+            sssEmployer: $sssResult->employerShare,
+            sssEmployerEc: $sssResult->employerEcShare,
+            philhealthEmployee: $philhealthResult->employeeShare,
+            philhealthEmployer: $philhealthResult->employerShare,
+            pagibigEmployee: $pagibigResult->employeeShare,
+            pagibigEmployer: $pagibigResult->employerShare,
+            birWithholdingTax: $birResult->employeeShare,
             totalEmployeeDeductions: $totalEmployeeDeductions,
             totalEmployerContributions: $totalEmployerContributions,
             taxableIncome: $taxableIncome,

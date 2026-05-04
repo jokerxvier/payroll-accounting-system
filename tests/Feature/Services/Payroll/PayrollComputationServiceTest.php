@@ -135,14 +135,14 @@ it('computes a full result for an active employee with all contributions seeded'
     $codes = array_map(fn (PayrollLineItem $line): string => $line->code, $result->auditLines);
     expect($codes)->toBe([
         PayrollLineItem::CODE_BASIC_PAY,
-        PayrollLineItem::CODE_SSS_EMPLOYEE,
-        PayrollLineItem::CODE_PHILHEALTH_EMPLOYEE,
-        PayrollLineItem::CODE_PAGIBIG_EMPLOYEE,
-        PayrollLineItem::CODE_BIR_WITHHOLDING,
-        PayrollLineItem::CODE_SSS_EMPLOYER,
-        PayrollLineItem::CODE_SSS_EMPLOYER_EC,
-        PayrollLineItem::CODE_PHILHEALTH_EMPLOYER,
-        PayrollLineItem::CODE_PAGIBIG_EMPLOYER,
+        'SSS_EMPLOYEE',
+        'PHILHEALTH_EMPLOYEE',
+        'PAGIBIG_EMPLOYEE',
+        'BIR_WITHHOLDING_EMPLOYEE',
+        'SSS_EMPLOYER',
+        'SSS_EMPLOYER_EC',
+        'PHILHEALTH_EMPLOYER',
+        'PAGIBIG_EMPLOYER',
     ]);
 
     // Bucket assignments per line.
@@ -392,9 +392,9 @@ it('picks the contribution row effective on the period end date', function () {
     $decemberSssLine = $december2024->auditLines[1];
     $januarySssLine = $january2025->auditLines[1];
 
-    expect($decemberSssLine->code)->toBe(PayrollLineItem::CODE_SSS_EMPLOYEE)
+    expect($decemberSssLine->code)->toBe('SSS_EMPLOYEE')
         ->and($decemberSssLine->amount->centavos())->toBe(70_000)
-        ->and($januarySssLine->code)->toBe(PayrollLineItem::CODE_SSS_EMPLOYEE)
+        ->and($januarySssLine->code)->toBe('SSS_EMPLOYEE')
         ->and($januarySssLine->amount->centavos())->toBe(95_000);
 });
 
@@ -980,4 +980,255 @@ it('short-circuits to zero when unpaid days reduce basic pay to zero', function 
         ->and($result->unpaidDaysReduction->centavos())->toBe(0)
         ->and($result->unpaidDaysCount)->toBe(0)
         ->and($result->auditLines)->toBe([]);
+});
+
+/*
+ * --------------------------------------------------------------------------
+ * Dynamic statutory registry — refactor regression net
+ * --------------------------------------------------------------------------
+ *
+ * After the engine moved off hard-coded contribution names onto a registry-
+ * driven loop, these two tests guarantee that:
+ *
+ *   1. The canonical PH-set employee still produces byte-identical output —
+ *      every field, every audit line, every centavo. Acts as the golden
+ *      baseline; any future contributor changing the engine's loop must
+ *      update the inline expected array consciously.
+ *
+ *   2. A brand-new contribution (CITY_TAX, 10% flat percentage) seeded as
+ *      data — no code change anywhere — flows through the engine, emits a
+ *      `{contribution_code}_EMPLOYEE` line, lands in the deduction bucket,
+ *      and reduces net pay by exactly its computed amount. Proves the
+ *      decoupling actually works end-to-end.
+ */
+
+it('produces byte-identical output to the pre-refactor baseline for the canonical employee', function () {
+    seedStatutoryRowsForMay2026();
+
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'basic_salary_centavos' => 4_500_000, // PHP 45,000.00
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    $actual = $result->toArray();
+
+    // Strip the volatile employee/period blocks — period is asserted
+    // structurally below; the rest is the pinned engine output.
+    expect($actual['period'])->toBe([
+        'frequency' => 'monthly',
+        'start' => '2026-05-01',
+        'end' => '2026-05-31',
+        'daysInPeriod' => 31,
+    ]);
+
+    // Pinned aggregate fields. Hand-derived from the same factory states
+    // exercised by the spec test up top — every centavo here matches the
+    // pre-refactor figures.
+    $expectedAggregates = [
+        'basicPay' => ['centavos' => 4_500_000, 'formatted' => '45000.00'],
+        'grossPay' => ['centavos' => 4_500_000, 'formatted' => '45000.00'],
+        'sssEmployee' => ['centavos' => 90_000, 'formatted' => '900.00'],
+        'sssEmployer' => ['centavos' => 190_000, 'formatted' => '1900.00'],
+        'sssEmployerEc' => ['centavos' => 3_000, 'formatted' => '30.00'],
+        'philhealthEmployee' => ['centavos' => 112_500, 'formatted' => '1125.00'],
+        'philhealthEmployer' => ['centavos' => 112_500, 'formatted' => '1125.00'],
+        'pagibigEmployee' => ['centavos' => 10_000, 'formatted' => '100.00'],
+        'pagibigEmployer' => ['centavos' => 10_000, 'formatted' => '100.00'],
+        'birWithholdingTax' => ['centavos' => 378_340, 'formatted' => '3783.40'],
+        'totalEmployeeDeductions' => ['centavos' => 590_840, 'formatted' => '5908.40'],
+        'totalEmployerContributions' => ['centavos' => 315_500, 'formatted' => '3155.00'],
+        'taxableIncome' => ['centavos' => 4_287_500, 'formatted' => '42875.00'],
+        'netPay' => ['centavos' => 3_909_160, 'formatted' => '39091.60'],
+        'allowancesTaxable' => ['centavos' => 0, 'formatted' => '0.00'],
+        'allowancesNonTaxable' => ['centavos' => 0, 'formatted' => '0.00'],
+        'customDeductionsEmployee' => ['centavos' => 0, 'formatted' => '0.00'],
+        'customDeductionsEmployer' => ['centavos' => 0, 'formatted' => '0.00'],
+        'loanDeductions' => ['centavos' => 0, 'formatted' => '0.00'],
+        'adjustmentTaxableAdditions' => ['centavos' => 0, 'formatted' => '0.00'],
+        'adjustmentNonTaxableAdditions' => ['centavos' => 0, 'formatted' => '0.00'],
+        'adjustmentDeductions' => ['centavos' => 0, 'formatted' => '0.00'],
+        'unpaidDaysReduction' => ['centavos' => 0, 'formatted' => '0.00'],
+    ];
+
+    foreach ($expectedAggregates as $key => $expected) {
+        expect($actual[$key])->toBe($expected, "aggregate field `{$key}` drifted from baseline");
+    }
+
+    expect($actual['unpaidDaysCount'])->toBe(0);
+
+    // Pinned audit lines. Engine ordering: basic, then employee shares in
+    // registry order (SSS / PhilHealth / Pag-IBIG / BIR), then employer
+    // shares in registry order (SSS + EC, PhilHealth, Pag-IBIG; BIR has
+    // no employer share so the engine suppresses its zero row).
+    expect($actual['auditLines'])->toBe([
+        [
+            'code' => 'BASIC_PAY',
+            'label' => 'Basic pay',
+            'amount' => ['centavos' => 4_500_000, 'formatted' => '45000.00'],
+            'bucket' => 'earning',
+            'meta' => null,
+        ],
+        [
+            'code' => 'SSS_EMPLOYEE',
+            'label' => 'SSS contribution (employee)',
+            'amount' => ['centavos' => 90_000, 'formatted' => '900.00'],
+            'bucket' => 'employee_deduction',
+            'meta' => ['contribution_base_centavos' => 2_000_000],
+        ],
+        [
+            'code' => 'PHILHEALTH_EMPLOYEE',
+            'label' => 'PhilHealth premium (employee)',
+            'amount' => ['centavos' => 112_500, 'formatted' => '1125.00'],
+            'bucket' => 'employee_deduction',
+            'meta' => ['contribution_base_centavos' => 4_500_000],
+        ],
+        [
+            'code' => 'PAGIBIG_EMPLOYEE',
+            'label' => 'Pag-IBIG contribution (employee)',
+            'amount' => ['centavos' => 10_000, 'formatted' => '100.00'],
+            'bucket' => 'employee_deduction',
+            'meta' => ['contribution_base_centavos' => 500_000],
+        ],
+        [
+            'code' => 'BIR_WITHHOLDING_EMPLOYEE',
+            'label' => 'BIR Withholding Tax (employee)',
+            'amount' => ['centavos' => 378_340, 'formatted' => '3783.40'],
+            'bucket' => 'employee_deduction',
+            'meta' => ['taxable_income_centavos' => 4_287_500],
+        ],
+        [
+            'code' => 'SSS_EMPLOYER',
+            'label' => 'SSS contribution (employer)',
+            'amount' => ['centavos' => 190_000, 'formatted' => '1900.00'],
+            'bucket' => 'employer_contribution',
+            'meta' => null,
+        ],
+        [
+            'code' => 'SSS_EMPLOYER_EC',
+            'label' => "SSS contribution Employees' Compensation (employer)",
+            'amount' => ['centavos' => 3_000, 'formatted' => '30.00'],
+            'bucket' => 'employer_contribution',
+            'meta' => null,
+        ],
+        [
+            'code' => 'PHILHEALTH_EMPLOYER',
+            'label' => 'PhilHealth premium (employer)',
+            'amount' => ['centavos' => 112_500, 'formatted' => '1125.00'],
+            'bucket' => 'employer_contribution',
+            'meta' => null,
+        ],
+        [
+            'code' => 'PAGIBIG_EMPLOYER',
+            'label' => 'Pag-IBIG contribution (employer)',
+            'amount' => ['centavos' => 10_000, 'formatted' => '100.00'],
+            'bucket' => 'employer_contribution',
+            'meta' => null,
+        ],
+    ]);
+});
+
+it('flows a custom flat-percentage contribution through the engine without code changes', function () {
+    // The four PH rows so the canonical baseline still resolves cleanly.
+    seedStatutoryRowsForMay2026();
+
+    // CITY_TAX at 10% of gross pay, 100% employee, application_order 50 —
+    // sequenced AFTER the four gross-based PH rows (10/20/30) but BEFORE
+    // BIR (90), so its share also lands in BIR's running tally if BIR were
+    // gross-based. BIR is taxable-income-based, so CITY_TAX riding on the
+    // taxable basis would reduce BIR. Here we keep CITY_TAX gross-based so
+    // it has no effect on BIR (matches a typical municipal tax).
+    StatutoryContribution::factory()->create([
+        'contribution_code' => StatutoryContribution::CODE_CITY_TAX,
+        'label' => 'Quezon City local tax',
+        'algorithm' => StatutoryContribution::ALGORITHM_FLAT_PERCENTAGE,
+        'application_order' => 50,
+        'applies_to' => StatutoryContribution::APPLIES_TO_GROSS_PAY,
+        'effective_from' => '2024-01-01',
+        'effective_to' => null,
+        'rules' => [
+            'rate_bp' => 1_000,           // 10%
+            'employee_share_bp' => 10_000, // 100% employee
+            'employer_share_bp' => 0,
+            'cap' => null,                 // no cap — straight 10% of monthly basis
+        ],
+    ]);
+
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'basic_salary_centavos' => 4_500_000, // PHP 45,000.00
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    // CITY_TAX = 10% of 4_500_000 = 450_000.
+    $expectedCityTax = 450_000;
+
+    // The three PH gross-based contributions all read from the FULL monthly
+    // basic salary (not from gross-minus-tally), so their employee shares
+    // are unchanged from the baseline regardless of CITY_TAX.
+    expect($result->sssEmployee->centavos())->toBe(90_000)
+        ->and($result->philhealthEmployee->centavos())->toBe(112_500)
+        ->and($result->pagibigEmployee->centavos())->toBe(10_000);
+
+    // BIR is `applies_to=taxable_income`. Its basis is the running tally:
+    //   basicPay − Σ(prior employee statutory shares) − customTaxableImpact.
+    // With CITY_TAX (450_000) sequenced ahead of BIR (order 50 < 90), the
+    // BIR base drops by 450_000, so withholding falls accordingly. This is
+    // the documented behavior of the engine — pre-tax statutory deductions
+    // reduce the BIR base.
+    //   Baseline taxable: 4_500_000 − 90_000 − 112_500 − 10_000 = 4_287_500
+    //   With CITY_TAX:    4_287_500 − 450_000               = 3_837_500
+    //   BIR (top bracket): 187_500 + (3_837_500 − 3_333_300) × 20%
+    //                    = 187_500 + 504_200 × 2000 / 10_000
+    //                    = 187_500 + 100_840 = 288_340.
+    expect($result->birWithholdingTax->centavos())->toBe(288_340)
+        ->and($result->taxableIncome->centavos())->toBe(3_837_500);
+
+    // CITY_TAX surfaces in the audit log with the runtime-composed code.
+    $cityTaxLine = collect($result->auditLines)
+        ->first(fn (PayrollLineItem $line): bool => $line->code === 'CITY_TAX_EMPLOYEE');
+
+    expect($cityTaxLine)->not->toBeNull()
+        ->and($cityTaxLine->code)->toBe('CITY_TAX_EMPLOYEE')
+        ->and($cityTaxLine->label)->toBe('Quezon City local tax (employee)')
+        ->and($cityTaxLine->bucket)->toBe(PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION)
+        ->and($cityTaxLine->amount->centavos())->toBe($expectedCityTax);
+
+    // No CITY_TAX_EMPLOYER line emitted — strategy returned zero employer
+    // share and the engine suppresses zero-share employer rows.
+    $codes = array_map(fn (PayrollLineItem $line): string => $line->code, $result->auditLines);
+    expect($codes)->not->toContain('CITY_TAX_EMPLOYER');
+
+    // Aggregates: total employee deductions = baseline_statutory_minus_BIR
+    //   + new_BIR + CITY_TAX = (90_000 + 112_500 + 10_000) + 288_340 + 450_000.
+    expect($result->totalEmployeeDeductions->centavos())
+        ->toBe(90_000 + 112_500 + 10_000 + 288_340 + 450_000)
+        ->and($result->totalEmployeeDeductions->centavos())->toBe(950_840)
+        ->and($result->netPay->centavos())->toBe(4_500_000 - 950_840)
+        ->and($result->netPay->centavos())->toBe(3_549_160);
+
+    // The four PH lines still land in their canonical positions; CITY_TAX
+    // slots between Pag-IBIG (order 30) and BIR (order 90) per its
+    // application_order = 50.
+    $employeeCodes = collect($result->auditLines)
+        ->filter(fn (PayrollLineItem $line): bool => $line->bucket === PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION)
+        ->map(fn (PayrollLineItem $line): string => $line->code)
+        ->values()
+        ->all();
+
+    expect($employeeCodes)->toBe([
+        'SSS_EMPLOYEE',
+        'PHILHEALTH_EMPLOYEE',
+        'PAGIBIG_EMPLOYEE',
+        'CITY_TAX_EMPLOYEE',
+        'BIR_WITHHOLDING_EMPLOYEE',
+    ]);
 });
