@@ -37,3 +37,6 @@ yarn-error.log
 *.gif
 *.webp
 /pnpm-lock.yaml
+
+# Pest browser test artifacts (never commit)
+/tests/Browser/Screenshots

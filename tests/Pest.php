@@ -24,7 +24,7 @@ pest()->extend(TestCase::class)
         // having to seed manually.
         $this->seed(RoleSeeder::class);
     })
-    ->in('Feature');
+    ->in('Feature', 'Browser');
 
 /*
 |--------------------------------------------------------------------------
