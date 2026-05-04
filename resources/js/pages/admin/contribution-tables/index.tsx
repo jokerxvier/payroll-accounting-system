@@ -1,7 +1,25 @@
-import { Head, Link } from '@inertiajs/react';
-import { FileText, Plus, ShieldCheck } from 'lucide-react';
+import { Head, Link, router } from '@inertiajs/react';
+import {
+    ChevronRight,
+    FileText,
+    Pencil,
+    Plus,
+    ShieldCheck,
+    Trash2,
+} from 'lucide-react';
+import { useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,8 +34,10 @@ import {
 import { cn } from '@/lib/utils';
 import {
     create as contributionTablesCreate,
+    edit as contributionTablesEdit,
     index as contributionTablesIndex,
     show as contributionTablesShow,
+    voidMethod as contributionTablesVoid,
 } from '@/routes/admin/contribution-tables';
 import type {
     StatutoryContributionAlgorithm,
@@ -29,6 +49,7 @@ interface Props {
     grouped: StatutoryContributionGrouped;
     recommendedCodes: string[];
     algorithmOptions: string[];
+    can: { modify: boolean };
 }
 
 const CODE_LABELS: Record<string, string> = {
@@ -94,6 +115,7 @@ function truncate(text: string | null, max = 80): string {
 export default function ContributionTablesIndex({
     grouped,
     recommendedCodes,
+    can,
 }: Props) {
     // Show recommended codes plus any custom codes that already have rows.
     // De-dupe while preserving order: recommended first (defines display order),
@@ -101,6 +123,49 @@ export default function ContributionTablesIndex({
     const codes: string[] = Array.from(
         new Set([...recommendedCodes, ...Object.keys(grouped)]),
     );
+
+    // Track which row's void confirmation is open. Only one dialog is mounted
+    // at a time even though multiple editable rows can render their own Void
+    // trigger — keying by row id keeps the AlertDialog state model trivial.
+    const [voidTargetId, setVoidTargetId] = useState<number | null>(null);
+    const [voiding, setVoiding] = useState(false);
+
+    const voidTarget: StatutoryContributionRow | null = (() => {
+        if (voidTargetId === null) {
+            return null;
+        }
+
+        for (const code of codes) {
+            const found = (grouped[code] ?? []).find(
+                (r) => r.id === voidTargetId,
+            );
+
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
+    })();
+
+    const handleVoidConfirm = (): void => {
+        if (voidTargetId === null) {
+            return;
+        }
+
+        setVoiding(true);
+        router.post(
+            contributionTablesVoid(voidTargetId).url,
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setVoiding(false);
+                    setVoidTargetId(null);
+                },
+            },
+        );
+    };
 
     return (
         <>
@@ -202,6 +267,11 @@ export default function ContributionTablesIndex({
                                                         <TableHead className="text-xs tracking-wide text-muted-foreground uppercase">
                                                             Notes
                                                         </TableHead>
+                                                        <TableHead className="w-[140px] text-right text-xs tracking-wide text-muted-foreground uppercase">
+                                                            <span className="sr-only">
+                                                                Actions
+                                                            </span>
+                                                        </TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
@@ -209,11 +279,15 @@ export default function ContributionTablesIndex({
                                                         const isVoided =
                                                             row.voided_at !==
                                                             null;
+                                                        const showInlineActions =
+                                                            row.is_editable &&
+                                                            can.modify;
 
                                                         return (
                                                             <TableRow
                                                                 key={row.id}
                                                                 className={cn(
+                                                                    'transition-colors hover:bg-muted/30',
                                                                     isVoided &&
                                                                         'opacity-60',
                                                                 )}
@@ -269,6 +343,58 @@ export default function ContributionTablesIndex({
                                                                         row.notes,
                                                                     )}
                                                                 </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        {showInlineActions && (
+                                                                            <>
+                                                                                <Button
+                                                                                    asChild
+                                                                                    size="icon"
+                                                                                    variant="ghost"
+                                                                                    className="h-7 w-7"
+                                                                                >
+                                                                                    <Link
+                                                                                        href={
+                                                                                            contributionTablesEdit(
+                                                                                                row.id,
+                                                                                            )
+                                                                                                .url
+                                                                                        }
+                                                                                        aria-label={`Edit row ${row.id}`}
+                                                                                    >
+                                                                                        <Pencil className="h-3.5 w-3.5" />
+                                                                                    </Link>
+                                                                                </Button>
+                                                                                <Button
+                                                                                    type="button"
+                                                                                    size="icon"
+                                                                                    variant="ghost"
+                                                                                    className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                                                    aria-label={`Void row ${row.id}`}
+                                                                                    onClick={() =>
+                                                                                        setVoidTargetId(
+                                                                                            row.id,
+                                                                                        )
+                                                                                    }
+                                                                                >
+                                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                                </Button>
+                                                                            </>
+                                                                        )}
+                                                                        <Link
+                                                                            href={
+                                                                                contributionTablesShow(
+                                                                                    row.id,
+                                                                                )
+                                                                                    .url
+                                                                            }
+                                                                            aria-label={`View row ${row.id}`}
+                                                                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                                        >
+                                                                            <ChevronRight className="h-4 w-4" />
+                                                                        </Link>
+                                                                    </div>
+                                                                </TableCell>
                                                             </TableRow>
                                                         );
                                                     })}
@@ -290,6 +416,46 @@ export default function ContributionTablesIndex({
                     />
                 )}
             </div>
+
+            <AlertDialog
+                open={voidTargetId !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setVoidTargetId(null);
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            Void{' '}
+                            {voidTarget
+                                ? voidTarget.contribution_code
+                                : 'contribution'}
+                            ?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Voiding removes this contribution from all future
+                            payroll computation. This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={voiding}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            disabled={voiding}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                handleVoidConfirm();
+                            }}
+                        >
+                            {voiding ? 'Voiding…' : 'Void contribution'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }

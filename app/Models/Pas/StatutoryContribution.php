@@ -103,6 +103,16 @@ final class StatutoryContribution extends Model
     protected $table = 'pas_statutory_contributions';
 
     /**
+     * Surface `is_editable` on every JSON / array serialisation so the
+     * Inertia index, show, and edit payloads carry the per-row gate without
+     * each controller having to assemble it manually. Mirrors the
+     * StatutoryContributionPolicy's per-row gate.
+     *
+     * @var list<string>
+     */
+    protected $appends = ['is_editable'];
+
+    /**
      * Factory lives at Database\Factories\StatutoryContributionFactory, which
      * doesn't match Laravel's default resolver path for a model under the
      * App\Models\Pas namespace. Same pattern as EmployeeProfile.
@@ -261,5 +271,15 @@ final class StatutoryContribution extends Model
         return $this->effective_from->greaterThan($today)
             && $this->effective_to === null
             && $this->voided_at === null;
+    }
+
+    /**
+     * Accessor backing the appended `is_editable` attribute. Delegates to
+     * {@see isEditable()} so the JSON/array projection and the policy gate
+     * both observe the exact same rule.
+     */
+    public function getIsEditableAttribute(): bool
+    {
+        return $this->isEditable();
     }
 }

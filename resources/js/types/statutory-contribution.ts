@@ -75,9 +75,9 @@ export interface StatutoryContributionRow {
      * the row is strictly future-dated, open-ended, and not voided. The
      * `update` and `void` policy gates already enforce this server-side — the
      * field exists so the client UI can mirror the same gate without
-     * re-deriving it.
+     * re-deriving it. Index, show, and edit payloads all populate it.
      */
-    is_editable?: boolean;
+    is_editable: boolean;
     /**
      * Application order — present on the model but not always exposed in
      * controller payloads. Optional here so existing callers don't need to

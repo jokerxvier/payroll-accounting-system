@@ -42,12 +42,22 @@ final class StatutoryContributionController extends Controller
 
         // Group in PHP — the table holds at most a few dozen rows, so a
         // collection groupBy is cheaper and clearer than a SQL window query.
+        // The model appends `is_editable` to its array projection (see
+        // StatutoryContribution::$appends), so the per-row gate lands on the
+        // client automatically without each controller assembling it.
         $grouped = $rows->groupBy('contribution_code')->toArray();
 
         return Inertia::render('admin/contribution-tables/index', [
             'grouped' => $grouped,
             'recommendedCodes' => StatutoryContribution::CODES,
             'algorithmOptions' => StatutoryContribution::ALGORITHMS,
+            // The `update` and `void` policy gates additionally require
+            // `isEditable()` per row, but the role check is global — derive
+            // it once here so the client can short-circuit rendering icon
+            // buttons on rows that would otherwise pass the per-row check.
+            'can' => [
+                'modify' => Gate::allows('create', StatutoryContribution::class),
+            ],
         ]);
     }
 

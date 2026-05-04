@@ -86,7 +86,8 @@ it('renders the index for super-admin and groups rows by contribution_code', fun
                 ->has('grouped.'.StatutoryContribution::CODE_SSS, 2)
                 ->has('grouped.'.StatutoryContribution::CODE_BIR, 1)
                 ->has('recommendedCodes', 5)
-                ->has('algorithmOptions', 5),
+                ->has('algorithmOptions', 5)
+                ->where('can.modify', true),
         );
 });
 
@@ -101,6 +102,58 @@ it('renders an empty index when there are no rows', function () {
                 ->component('admin/contribution-tables/index')
                 ->where('grouped', [])
                 ->has('recommendedCodes', 5)
-                ->has('algorithmOptions', 5),
+                ->has('algorithmOptions', 5)
+                ->where('can.modify', true),
         );
+});
+
+it('decorates each grouped row with an is_editable boolean', function () {
+    $user = indexAuthAs('super-admin');
+
+    // Future-dated open-ended row → editable.
+    $future = StatutoryContribution::factory()->sss()->create([
+        'effective_from' => now()->addYear()->toDateString(),
+        'effective_to' => null,
+    ]);
+
+    // Past-dated, currently-active row (open-ended) → not editable.
+    $past = StatutoryContribution::factory()->bir()->create([
+        'effective_from' => '2024-01-01',
+        'effective_to' => null,
+    ]);
+
+    // Voided future-dated row → not editable.
+    $voided = StatutoryContribution::factory()->bir()->create([
+        'contribution_code' => StatutoryContribution::CODE_PAGIBIG,
+        'effective_from' => now()->addYear()->toDateString(),
+        'effective_to' => null,
+    ]);
+    $voided->void($user->id);
+
+    $this->actingAs($user)
+        ->get('/admin/contribution-tables')
+        ->assertOk()
+        ->assertInertia(function ($page) use ($future, $past, $voided) {
+            $page->component('admin/contribution-tables/index');
+
+            $sssRows = collect($page->toArray()['props']['grouped'][StatutoryContribution::CODE_SSS]);
+            $birRows = collect($page->toArray()['props']['grouped'][StatutoryContribution::CODE_BIR]);
+            $pagRows = collect($page->toArray()['props']['grouped'][StatutoryContribution::CODE_PAGIBIG]);
+
+            expect($sssRows->firstWhere('id', $future->id)['is_editable'])->toBeTrue();
+            expect($birRows->firstWhere('id', $past->id)['is_editable'])->toBeFalse();
+            expect($pagRows->firstWhere('id', $voided->id)['is_editable'])->toBeFalse();
+        });
+});
+
+it('exposes can.modify=false for forbidden roles', function () {
+    // The forbidden roles already 403 on the index, so they never see `can`.
+    // Sanity-check that the prop resolves to false for any user that lacks
+    // the super-admin role by hitting the controller's allow check directly
+    // through Gate. Since the request itself is forbidden upstream, the
+    // assertion below is on the gate not the response.
+    foreach (['payroll-officer', 'hr', 'auditor', 'employee'] as $roleName) {
+        $user = indexAuthAs($roleName);
+        expect($user->can('create', StatutoryContribution::class))->toBeFalse();
+    }
 });
