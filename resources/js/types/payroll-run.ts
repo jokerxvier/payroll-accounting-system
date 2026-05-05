@@ -49,6 +49,14 @@ export interface PayrollRunCanFlags {
     void: boolean;
 }
 
+export interface PayslipAuditLine {
+    code: string;
+    label: string;
+    amount: number; // centavos
+    bucket: 'earning' | 'employee_deduction' | 'employer_contribution';
+    meta: Record<string, unknown> | null;
+}
+
 export interface PayslipSummary {
     id: number;
     lms_staff_id: number;
@@ -59,6 +67,7 @@ export interface PayslipSummary {
     net_pay_centavos: number;
     taxable_income_centavos: number;
     applied_exemptions: string[];
+    audit_lines: PayslipAuditLine[];
 }
 
 export interface PayrollRunProgress {

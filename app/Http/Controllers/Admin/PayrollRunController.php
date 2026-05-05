@@ -123,22 +123,26 @@ final class PayrollRunController extends Controller
             ->get();
 
         // One LMS query for the whole batch — no N+1. Read-only LMS connection
-        // is enforced by the ReadOnlyModel base class.
+        // is enforced by the ReadOnlyModel base class. `full_name` is a real
+        // column on sm_staffs (verified via Schema::getColumnListing), so we
+        // select it directly rather than rely on an accessor — there's no
+        // getFullNameAttribute that derives from first+last.
         $staffNames = Staff::query()
             ->whereIn('id', $rawPayslips->pluck('lms_staff_id')->unique())
-            ->get(['id', 'first_name', 'last_name'])
+            ->get(['id', 'full_name'])
             ->keyBy('id');
 
         $payslips = $rawPayslips->map(fn ($p): array => [
             'id' => $p->id,
             'lms_staff_id' => $p->lms_staff_id,
-            'staff_name' => $staffNames->get($p->lms_staff_id)?->full_name,
+            'staff_name' => $staffNames->get((int) $p->lms_staff_id)?->full_name,
             'gross_pay_centavos' => $p->gross_pay_centavos,
             'total_employee_deductions_centavos' => $p->total_employee_deductions_centavos,
             'total_employer_contributions_centavos' => $p->total_employer_contributions_centavos,
             'net_pay_centavos' => $p->net_pay_centavos,
             'taxable_income_centavos' => $p->taxable_income_centavos,
             'applied_exemptions' => $p->applied_exemptions ?? [],
+            'audit_lines' => $p->audit_lines ?? [],
         ]);
 
         return Inertia::render('admin/payroll-runs/show', [

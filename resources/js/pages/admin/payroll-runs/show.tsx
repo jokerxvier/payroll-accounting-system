@@ -2,13 +2,15 @@ import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowLeft,
     CheckCircle2,
+    ChevronDown,
+    ChevronRight,
     FileText,
     Loader2,
     Lock,
     Send,
     Trash2,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import {
@@ -39,6 +41,7 @@ import type {
     PayrollRunProgress,
     PayrollRunStatus,
     PayrollRunSummary,
+    PayslipAuditLine,
     PayslipSummary,
 } from '@/types/payroll-run';
 
@@ -136,6 +139,7 @@ export default function PayrollRunShow({
 }: Props) {
     const [dialog, setDialog] = useState<DialogKind>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [expandedId, setExpandedId] = useState<number | null>(null);
 
     // Poll the run state while computing — the per-employee batch jobs
     // persist payslips one at a time. Reload only `run`, `payslips`, and
@@ -366,6 +370,7 @@ export default function PayrollRunShow({
                                 <Table className="text-sm">
                                     <TableHeader>
                                         <TableRow className="bg-muted/40 hover:bg-muted/40">
+                                            <TableHead className="w-[30px]" />
                                             <TableHead className="text-xs tracking-wide text-muted-foreground uppercase">
                                                 Staff
                                             </TableHead>
@@ -387,55 +392,97 @@ export default function PayrollRunShow({
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {payslips.map((p) => (
-                                            <TableRow key={p.id}>
-                                                <TableCell className="font-mono text-xs">
-                                                    {p.lms_staff_id}
-                                                </TableCell>
-                                                <TableCell className="text-sm">
-                                                    {p.staff_name ?? (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            Unknown staff
-                                                        </span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="tabular-nums">
-                                                    {formatCurrency(
-                                                        p.gross_pay_centavos,
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="tabular-nums">
-                                                    {formatCurrency(
-                                                        p.total_employee_deductions_centavos,
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="tabular-nums">
-                                                    {formatCurrency(
-                                                        p.net_pay_centavos,
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="space-x-1">
-                                                    {p.applied_exemptions
-                                                        .length === 0 ? (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            —
-                                                        </span>
-                                                    ) : (
-                                                        p.applied_exemptions.map(
-                                                            (code) => (
-                                                                <Badge
-                                                                    key={code}
-                                                                    variant="outline"
-                                                                    className="font-mono text-xs"
-                                                                >
-                                                                    {code}
-                                                                </Badge>
-                                                            ),
-                                                        )
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
+                                        {payslips.map((p) => {
+                                            const isExpanded =
+                                                expandedId === p.id;
+
+                                            return (
+                                                <Fragment key={p.id}>
+                                                    <TableRow
+                                                        className="cursor-pointer transition-colors hover:bg-muted/30"
+                                                        onClick={() =>
+                                                            setExpandedId(
+                                                                isExpanded
+                                                                    ? null
+                                                                    : p.id,
+                                                            )
+                                                        }
+                                                    >
+                                                        <TableCell className="text-muted-foreground">
+                                                            {isExpanded ? (
+                                                                <ChevronDown className="h-4 w-4" />
+                                                            ) : (
+                                                                <ChevronRight className="h-4 w-4" />
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="font-mono text-xs">
+                                                            {p.lms_staff_id}
+                                                        </TableCell>
+                                                        <TableCell className="text-sm">
+                                                            {p.staff_name ?? (
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    Unknown
+                                                                    staff
+                                                                </span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="tabular-nums">
+                                                            {formatCurrency(
+                                                                p.gross_pay_centavos,
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="tabular-nums">
+                                                            {formatCurrency(
+                                                                p.total_employee_deductions_centavos,
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="tabular-nums">
+                                                            {formatCurrency(
+                                                                p.net_pay_centavos,
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="space-x-1">
+                                                            {p
+                                                                .applied_exemptions
+                                                                .length ===
+                                                            0 ? (
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    —
+                                                                </span>
+                                                            ) : (
+                                                                p.applied_exemptions.map(
+                                                                    (code) => (
+                                                                        <Badge
+                                                                            key={
+                                                                                code
+                                                                            }
+                                                                            variant="outline"
+                                                                            className="font-mono text-xs"
+                                                                        >
+                                                                            {
+                                                                                code
+                                                                            }
+                                                                        </Badge>
+                                                                    ),
+                                                                )
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                    {isExpanded ? (
+                                                        <TableRow className="bg-muted/20 hover:bg-muted/20">
+                                                            <TableCell
+                                                                colSpan={7}
+                                                                className="p-0"
+                                                            >
+                                                                <PayslipBreakdown
+                                                                    payslip={p}
+                                                                />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ) : null}
+                                                </Fragment>
+                                            );
+                                        })}
                                     </TableBody>
                                 </Table>
                             </div>
@@ -509,6 +556,140 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
                 </p>
             </CardContent>
         </Card>
+    );
+}
+
+const BUCKET_LABELS: Record<PayslipAuditLine['bucket'], string> = {
+    earning: 'Earnings',
+    employee_deduction: 'Employee deductions',
+    employer_contribution: 'Employer contributions',
+};
+
+const BUCKET_ORDER: Array<PayslipAuditLine['bucket']> = [
+    'earning',
+    'employee_deduction',
+    'employer_contribution',
+];
+
+function PayslipBreakdown({ payslip }: { payslip: PayslipSummary }) {
+    const grouped: Record<PayslipAuditLine['bucket'], PayslipAuditLine[]> = {
+        earning: [],
+        employee_deduction: [],
+        employer_contribution: [],
+    };
+
+    for (const line of payslip.audit_lines) {
+        grouped[line.bucket].push(line);
+    }
+
+    return (
+        <div className="space-y-4 p-4">
+            <div className="grid gap-4 lg:grid-cols-3">
+                {BUCKET_ORDER.map((bucket) => (
+                    <BucketCard
+                        key={bucket}
+                        title={BUCKET_LABELS[bucket]}
+                        lines={grouped[bucket]}
+                    />
+                ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 rounded-md border bg-card p-3 sm:grid-cols-4">
+                <TotalsCell
+                    label="Gross pay"
+                    value={formatCurrency(payslip.gross_pay_centavos)}
+                />
+                <TotalsCell
+                    label="Taxable income"
+                    value={formatCurrency(payslip.taxable_income_centavos)}
+                />
+                <TotalsCell
+                    label="Total deductions"
+                    value={formatCurrency(
+                        payslip.total_employee_deductions_centavos,
+                    )}
+                />
+                <TotalsCell
+                    label="Net pay"
+                    value={formatCurrency(payslip.net_pay_centavos)}
+                    emphasis
+                />
+            </div>
+        </div>
+    );
+}
+
+function BucketCard({
+    title,
+    lines,
+}: {
+    title: string;
+    lines: PayslipAuditLine[];
+}) {
+    const total = lines.reduce((sum, l) => sum + l.amount, 0);
+
+    return (
+        <div className="rounded-md border bg-card">
+            <div className="flex items-baseline justify-between border-b px-3 py-2">
+                <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    {title}
+                </h4>
+                <span className="text-sm font-semibold tabular-nums">
+                    {formatCurrency(total)}
+                </span>
+            </div>
+            {lines.length === 0 ? (
+                <p className="px-3 py-3 text-xs text-muted-foreground">
+                    No lines.
+                </p>
+            ) : (
+                <ul className="divide-y">
+                    {lines.map((line) => (
+                        <li
+                            key={`${line.code}-${line.label}`}
+                            className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                        >
+                            <div className="min-w-0 flex-1">
+                                <p className="truncate">{line.label}</p>
+                                <p className="font-mono text-[10px] text-muted-foreground">
+                                    {line.code}
+                                </p>
+                            </div>
+                            <span className="shrink-0 tabular-nums">
+                                {formatCurrency(line.amount)}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+function TotalsCell({
+    label,
+    value,
+    emphasis,
+}: {
+    label: string;
+    value: string;
+    emphasis?: boolean;
+}) {
+    return (
+        <div>
+            <p className="text-xs tracking-wide text-muted-foreground uppercase">
+                {label}
+            </p>
+            <p
+                className={
+                    emphasis
+                        ? 'mt-1 text-base font-semibold tabular-nums'
+                        : 'mt-1 text-sm tabular-nums'
+                }
+            >
+                {value}
+            </p>
+        </div>
     );
 }
 
