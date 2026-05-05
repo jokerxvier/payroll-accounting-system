@@ -224,6 +224,16 @@
         display: none !important;
     }
 
+    /* Hide the application shell when printing payslips/reports — the
+       sidebar nav and topbar header are not part of the printed
+       artefact. Pages tagged this way (e.g. payslip detail) print only
+       the content card. */
+    [data-sidebar],
+    aside[role='complementary'],
+    [data-slot='sidebar'] {
+        display: none !important;
+    }
+
     body {
         font-size: 11pt;
     }

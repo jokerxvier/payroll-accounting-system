@@ -35,6 +35,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { index as payrollRunsIndex } from '@/routes/admin/payroll-runs';
+import { show as payslipShow } from '@/routes/admin/payroll-runs/payslips';
 import { PAYROLL_RUN_STATUS_LABELS } from '@/types/payroll-run';
 import type {
     PayrollRunCanFlags,
@@ -475,6 +476,9 @@ export default function PayrollRunShow({
                                                                 className="p-0"
                                                             >
                                                                 <PayslipBreakdown
+                                                                    runId={
+                                                                        run.id
+                                                                    }
                                                                     payslip={p}
                                                                 />
                                                             </TableCell>
@@ -571,7 +575,13 @@ const BUCKET_ORDER: Array<PayslipAuditLine['bucket']> = [
     'employer_contribution',
 ];
 
-function PayslipBreakdown({ payslip }: { payslip: PayslipSummary }) {
+function PayslipBreakdown({
+    runId,
+    payslip,
+}: {
+    runId: number;
+    payslip: PayslipSummary;
+}) {
     const grouped: Record<PayslipAuditLine['bucket'], PayslipAuditLine[]> = {
         earning: [],
         employee_deduction: [],
@@ -584,6 +594,20 @@ function PayslipBreakdown({ payslip }: { payslip: PayslipSummary }) {
 
     return (
         <div className="space-y-4 p-4">
+            <div className="flex justify-end">
+                <Button asChild size="sm" variant="outline">
+                    <Link
+                        href={
+                            payslipShow({
+                                payrollRun: runId,
+                                payslip: payslip.id,
+                            }).url
+                        }
+                    >
+                        Open full payslip
+                    </Link>
+                </Button>
+            </div>
             <div className="grid gap-4 lg:grid-cols-3">
                 {BUCKET_ORDER.map((bucket) => (
                     <BucketCard

@@ -11,8 +11,10 @@ use App\Actions\Payroll\SubmitPayrollRunForApprovalAction;
 use App\Actions\Payroll\VoidPayrollRunAction;
 use App\Http\Controllers\Controller;
 use App\Models\Lms\Staff;
+use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollRun;
+use App\Models\Pas\Payslip;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -199,6 +201,61 @@ final class PayrollRunController extends Controller
         return redirect()
             ->route('admin.payroll-runs.show', $payrollRun->id)
             ->with('success', 'Payroll run voided. Payslips remain visible for audit.');
+    }
+
+    /**
+     * Standalone payslip view (Phase 3 W11 Stage A). HTML for screen +
+     * print. PDF download lands in Stage B as a sibling route.
+     */
+    public function showPayslip(PayrollRun $payrollRun, Payslip $payslip): Response
+    {
+        Gate::authorize('view', $payrollRun);
+
+        // Defensive: the URL pattern lets {payslip} be any id; ensure it
+        // belongs to the {run} the user is viewing. Prevents leaking one
+        // run's payslips through another run's URL.
+        if ($payslip->payroll_run_id !== $payrollRun->id) {
+            abort(404);
+        }
+
+        $payrollRun->load(['payPeriod']);
+
+        $staff = Staff::query()
+            ->where('id', $payslip->lms_staff_id)
+            ->first(['id', 'full_name', 'staff_no', 'email', 'designation_id', 'department_id']);
+
+        $profile = EmployeeProfile::query()
+            ->where('lms_staff_id', $payslip->lms_staff_id)
+            ->first();
+
+        return Inertia::render('admin/payroll-runs/payslips/show', [
+            'run' => self::serialiseRun($payrollRun),
+            'payslip' => [
+                'id' => $payslip->id,
+                'lms_staff_id' => $payslip->lms_staff_id,
+                'gross_pay_centavos' => $payslip->gross_pay_centavos,
+                'total_employee_deductions_centavos' => $payslip->total_employee_deductions_centavos,
+                'total_employer_contributions_centavos' => $payslip->total_employer_contributions_centavos,
+                'net_pay_centavos' => $payslip->net_pay_centavos,
+                'taxable_income_centavos' => $payslip->taxable_income_centavos,
+                'audit_lines' => $payslip->audit_lines ?? [],
+                'applied_exemptions' => $payslip->applied_exemptions ?? [],
+                'computed_at' => $payslip->computed_at?->toIso8601String(),
+            ],
+            'employee' => [
+                'lms_staff_id' => $payslip->lms_staff_id,
+                'staff_no' => $staff?->staff_no,
+                'full_name' => $staff?->full_name,
+                'email' => $staff?->email,
+                // Government IDs are encrypted at rest; the model's
+                // encrypted cast decrypts them on read for the auth'd
+                // super-admin. Falsy fallback when unset.
+                'tin' => $profile?->tin,
+                'sss_number' => $profile?->sss_number,
+                'philhealth_number' => $profile?->philhealth_number,
+                'pagibig_number' => $profile?->pagibig_number,
+            ],
+        ]);
     }
 
     /**

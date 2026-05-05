@@ -81,6 +81,11 @@ Route::middleware(['auth', 'verified'])
         Route::post('payroll-runs/{payrollRun}/void', [PayrollRunController::class, 'void'])
             ->name('payroll-runs.void');
 
+        // Phase 3 W11 — single-payslip standalone view (HTML in Stage A;
+        // Stage B will add a sibling .pdf route that streams a rendered PDF).
+        Route::get('payroll-runs/{payrollRun}/payslips/{payslip}', [PayrollRunController::class, 'showPayslip'])
+            ->name('payroll-runs.payslips.show');
+
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-
         // in-depth abort for the production case.
