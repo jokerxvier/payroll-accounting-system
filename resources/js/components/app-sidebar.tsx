@@ -5,6 +5,7 @@ import {
     FolderGit2,
     LayoutGrid,
     MinusCircle,
+    PlayCircle,
     PlusCircle,
     ShieldCheck,
     Users,
@@ -29,6 +30,7 @@ import { dashboard } from '@/routes';
 import { index as adminAllowancesIndex } from '@/routes/admin/allowances';
 import { index as adminContributionTablesIndex } from '@/routes/admin/contribution-tables';
 import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
+import { index as adminPayrollRunsIndex } from '@/routes/admin/payroll-runs';
 import { index as employeesIndex } from '@/routes/employees';
 import { show as payrollPreviewShow } from '@/routes/payroll/preview';
 import type { NavItem } from '@/types';
@@ -75,6 +77,11 @@ const adminNavItems: NavItem[] = [
         title: 'Allowances',
         href: adminAllowancesIndex(),
         icon: PlusCircle,
+    },
+    {
+        title: 'Payroll runs',
+        href: adminPayrollRunsIndex(),
+        icon: PlayCircle,
     },
 ];
 

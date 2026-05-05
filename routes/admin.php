@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Admin\AllowanceController;
 use App\Http\Controllers\Admin\DeductionTypeController;
+use App\Http\Controllers\Admin\PayrollRunController;
 use App\Http\Controllers\Admin\StatutoryContributionController;
 use Illuminate\Support\Facades\Route;
 
@@ -44,4 +45,15 @@ Route::middleware(['auth', 'verified'])
         // parameter is fine; no parameters() override needed.
         Route::resource('allowances', AllowanceController::class)
             ->except(['show']);
+
+        // Phase 3 Week 9 — Payroll runs (batch generate / show / list).
+        // Approval + voiding land in Week 10; not exposed yet.
+        Route::get('payroll-runs', [PayrollRunController::class, 'index'])
+            ->name('payroll-runs.index');
+        Route::get('payroll-runs/create', [PayrollRunController::class, 'create'])
+            ->name('payroll-runs.create');
+        Route::post('payroll-runs', [PayrollRunController::class, 'store'])
+            ->name('payroll-runs.store');
+        Route::get('payroll-runs/{payrollRun}', [PayrollRunController::class, 'show'])
+            ->name('payroll-runs.show');
     });
