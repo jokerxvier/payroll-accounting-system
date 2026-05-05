@@ -2,6 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import {
     BookOpen,
     Calculator,
+    CalendarDays,
     FolderGit2,
     LayoutGrid,
     MinusCircle,
@@ -30,6 +31,7 @@ import { dashboard } from '@/routes';
 import { index as adminAllowancesIndex } from '@/routes/admin/allowances';
 import { index as adminContributionTablesIndex } from '@/routes/admin/contribution-tables';
 import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
+import { index as adminPayPeriodsIndex } from '@/routes/admin/pay-periods';
 import { index as adminPayrollRunsIndex } from '@/routes/admin/payroll-runs';
 import { index as employeesIndex } from '@/routes/employees';
 import { show as payrollPreviewShow } from '@/routes/payroll/preview';
@@ -77,6 +79,11 @@ const adminNavItems: NavItem[] = [
         title: 'Allowances',
         href: adminAllowancesIndex(),
         icon: PlusCircle,
+    },
+    {
+        title: 'Pay periods',
+        href: adminPayPeriodsIndex(),
+        icon: CalendarDays,
     },
     {
         title: 'Payroll runs',

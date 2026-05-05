@@ -9,6 +9,7 @@ use App\Models\Pas\EmployeeAllowance;
 use App\Models\Pas\EmployeeDeduction;
 use App\Models\Pas\EmployeeLoan;
 use App\Models\Pas\EmployeeProfile;
+use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollAdjustment;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\StatutoryContribution;
@@ -18,6 +19,7 @@ use App\Policies\Pas\EmployeeAllowancePolicy;
 use App\Policies\Pas\EmployeeDeductionPolicy;
 use App\Policies\Pas\EmployeeLoanPolicy;
 use App\Policies\Pas\EmployeeProfilePolicy;
+use App\Policies\Pas\PayPeriodPolicy;
 use App\Policies\Pas\PayrollAdjustmentPolicy;
 use App\Policies\Pas\PayrollRunPolicy;
 use App\Policies\Pas\StatutoryContributionPolicy;
@@ -85,7 +87,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(EmployeeLoan::class, EmployeeLoanPolicy::class);
         Gate::policy(PayrollAdjustment::class, PayrollAdjustmentPolicy::class);
 
-        // Phase 3 Week 9 — payroll runs (admin batch generation).
+        // Phase 3 Week 9 — pay periods + payroll runs (admin batch generation).
+        Gate::policy(PayPeriod::class, PayPeriodPolicy::class);
         Gate::policy(PayrollRun::class, PayrollRunPolicy::class);
 
         // Week 8 — real-time gross-to-net preview. Class-level Gate (no

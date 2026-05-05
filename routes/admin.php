@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Admin\AllowanceController;
 use App\Http\Controllers\Admin\DeductionTypeController;
+use App\Http\Controllers\Admin\PayPeriodController;
 use App\Http\Controllers\Admin\PayrollRunController;
 use App\Http\Controllers\Admin\StatutoryContributionController;
 use Illuminate\Support\Facades\Route;
@@ -45,6 +46,16 @@ Route::middleware(['auth', 'verified'])
         // parameter is fine; no parameters() override needed.
         Route::resource('allowances', AllowanceController::class)
             ->except(['show']);
+
+        // Phase 3 Week 9 — Pay periods (lightweight CRUD: list + create).
+        // Edit/show land later; for now an admin creates a period in `open`
+        // status and immediately uses it to generate a payroll run.
+        Route::get('pay-periods', [PayPeriodController::class, 'index'])
+            ->name('pay-periods.index');
+        Route::get('pay-periods/create', [PayPeriodController::class, 'create'])
+            ->name('pay-periods.create');
+        Route::post('pay-periods', [PayPeriodController::class, 'store'])
+            ->name('pay-periods.store');
 
         // Phase 3 Week 9 — Payroll runs (batch generate / show / list).
         // Approval + voiding land in Week 10; not exposed yet.
