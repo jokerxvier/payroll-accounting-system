@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Requests;
 
 use App\Models\Pas\EmployeeProfile;
+use App\Services\Statutory\StatutoryContributionRegistry;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 /**
@@ -46,6 +48,37 @@ class EmployeeProfileUpdateRequest extends FormRequest
             'date_hired' => ['sometimes', 'nullable', 'date'],
             'date_terminated' => ['sometimes', 'nullable', 'date'],
             'is_active' => ['sometimes', 'boolean'],
+            'exempted_contribution_codes' => ['sometimes', 'array'],
+            'exempted_contribution_codes.*' => ['string', Rule::in($this->activeContributionCodes())],
         ];
+    }
+
+    /**
+     * Coerce explicit `null` to `[]` so a partial update that clears the field
+     * persists as an empty exemption list rather than nulling the column.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('exempted_contribution_codes') && $this->input('exempted_contribution_codes') === null) {
+            $this->merge(['exempted_contribution_codes' => []]);
+        }
+    }
+
+    /**
+     * Codes currently active in the statutory-contribution registry. Used as
+     * the allowlist for per-employee exemptions so admins can't select a
+     * contribution that doesn't apply to anyone today.
+     *
+     * @return list<string>
+     */
+    private function activeContributionCodes(): array
+    {
+        /** @var list<string> $codes */
+        $codes = app(StatutoryContributionRegistry::class)
+            ->active(Carbon::now())
+            ->pluck('contribution_code')
+            ->all();
+
+        return $codes;
     }
 }

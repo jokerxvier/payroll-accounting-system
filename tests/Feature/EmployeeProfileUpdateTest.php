@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\Lms\Staff;
 use App\Models\Pas\AuditLog;
 use App\Models\Pas\EmployeeProfile;
+use App\Models\Pas\StatutoryContribution;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -256,4 +257,81 @@ it('returns 404 when the profile does not exist', function () {
             'basic_salary_centavos' => 1_000_000,
         ])
         ->assertNotFound();
+});
+
+/*
+ * Per-employee statutory exemptions. The frontend ships an array; the
+ * FormRequest validates each code against the active statutory registry,
+ * coerces explicit null to [] (so a partial PATCH that clears the field
+ * persists empty rather than nulling), and the model casts to array.
+ */
+
+it('rejects an exemption code that is not in the active statutory registry', function () {
+    $user = authUpdateAs('super-admin');
+    $profile = profileForFirstAllowlistedStaff();
+
+    StatutoryContribution::factory()->sss()->create([
+        'effective_from' => '2024-01-01',
+        'effective_to' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->from('/employees/'.$profile->lms_staff_id)
+        ->patch('/employees/'.$profile->lms_staff_id.'/profile', [
+            'exempted_contribution_codes' => ['FAKE_TAX'],
+        ])
+        ->assertSessionHasErrors('exempted_contribution_codes.0');
+
+    // Validation failed → column unchanged. A freshly-created profile that
+    // never set the field reads back as null (cast to array yields null when
+    // the column is null); we just assert the bad code didn't land.
+    $profile->refresh();
+    expect($profile->exempted_contribution_codes ?? [])->not->toContain('FAKE_TAX');
+});
+
+it('persists a valid exemption list', function () {
+    $user = authUpdateAs('super-admin');
+    $profile = profileForFirstAllowlistedStaff();
+
+    StatutoryContribution::factory()->sss()->create([
+        'effective_from' => '2024-01-01',
+        'effective_to' => null,
+    ]);
+    StatutoryContribution::factory()->philhealth()->create([
+        'effective_from' => '2024-01-01',
+        'effective_to' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->from('/employees/'.$profile->lms_staff_id)
+        ->patch('/employees/'.$profile->lms_staff_id.'/profile', [
+            'exempted_contribution_codes' => ['SSS', 'PHILHEALTH'],
+        ])
+        ->assertSessionDoesntHaveErrors()
+        ->assertRedirect('/employees/'.$profile->lms_staff_id);
+
+    $profile->refresh();
+    expect($profile->exempted_contribution_codes)->toBe(['SSS', 'PHILHEALTH']);
+});
+
+it('clears the exemption list when an empty array is submitted', function () {
+    $user = authUpdateAs('super-admin');
+    $profile = profileForFirstAllowlistedStaff();
+    $profile->update(['exempted_contribution_codes' => ['SSS']]);
+
+    StatutoryContribution::factory()->sss()->create([
+        'effective_from' => '2024-01-01',
+        'effective_to' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->from('/employees/'.$profile->lms_staff_id)
+        ->patch('/employees/'.$profile->lms_staff_id.'/profile', [
+            'exempted_contribution_codes' => [],
+        ])
+        ->assertSessionDoesntHaveErrors()
+        ->assertRedirect('/employees/'.$profile->lms_staff_id);
+
+    $profile->refresh();
+    expect($profile->exempted_contribution_codes)->toBe([]);
 });

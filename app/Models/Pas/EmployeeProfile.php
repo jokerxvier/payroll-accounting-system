@@ -79,6 +79,7 @@ final class EmployeeProfile extends Model
         'date_hired',
         'date_terminated',
         'is_active',
+        'exempted_contribution_codes',
     ];
 
     protected function casts(): array
@@ -89,6 +90,7 @@ final class EmployeeProfile extends Model
             'is_active' => 'boolean',
             'date_hired' => 'date',
             'date_terminated' => 'date',
+            'exempted_contribution_codes' => 'array',
             // Sensitive fields — encrypted at rest.
             'tin' => 'encrypted',
             'sss_number' => 'encrypted',
@@ -96,6 +98,15 @@ final class EmployeeProfile extends Model
             'pagibig_number' => 'encrypted',
             'bank_account_number' => 'encrypted',
         ];
+    }
+
+    /**
+     * Whether the employee is opted out of the given statutory contribution
+     * (by code, e.g. "SSS"). Used by the engine to skip the row entirely.
+     */
+    public function isExemptFrom(string $contributionCode): bool
+    {
+        return in_array($contributionCode, $this->exempted_contribution_codes ?? [], true);
     }
 
     /**

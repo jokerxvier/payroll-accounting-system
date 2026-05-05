@@ -38,8 +38,25 @@ export type EmployeeProfile = {
     date_hired: string | null;
     date_terminated: string | null;
     is_active: boolean;
+    /**
+     * Statutory contribution codes the employee is opted out of (e.g. `["SSS"]`).
+     * The DB column is nullable, but the controller normalises to an array
+     * before serialising — frontend always reads a (possibly empty) string list.
+     */
+    exempted_contribution_codes: string[];
     created_at: string | null;
     updated_at: string | null;
+};
+
+/**
+ * Statutory contribution surfaced to the employee edit sheet so payroll admins
+ * can flag per-employee exemptions. Sourced from
+ * {@see App\Services\Statutory\StatutoryContributionRegistry::active()} on the
+ * server, narrowed to just the fields the UI needs to render a checkbox row.
+ */
+export type AvailableContribution = {
+    code: string;
+    label: string;
 };
 
 export type EmployeeDetail = {

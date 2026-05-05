@@ -47,6 +47,7 @@ import {
 } from '@/routes/employees/profile';
 import type {
     AllowanceRef,
+    AvailableContribution,
     DeductionTypeRef,
     EmployeeAllowanceRow,
     EmployeeDeductionRow,
@@ -67,6 +68,7 @@ interface Props {
     pendingAdjustments: PayrollAdjustmentRow[];
     deductionTypeOptions: DeductionTypeRef[];
     allowanceOptions: AllowanceRef[];
+    availableContributions: AvailableContribution[];
 }
 
 const PAY_FREQUENCY_LABEL: Record<PayFrequency, string> = {
@@ -95,6 +97,7 @@ export default function EmployeesShow({
     pendingAdjustments,
     deductionTypeOptions,
     allowanceOptions,
+    availableContributions,
 }: Props) {
     const [editOpen, setEditOpen] = useState(false);
 
@@ -250,6 +253,7 @@ export default function EmployeesShow({
                 <EmployeeEditSheet
                     employee={employee}
                     employmentTypeOptions={employmentTypeOptions}
+                    availableContributions={availableContributions}
                     open={editOpen}
                     onOpenChange={setEditOpen}
                 />

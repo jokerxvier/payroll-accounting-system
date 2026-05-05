@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,6 +28,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { update as profileUpdate } from '@/routes/employees/profile';
 import type {
+    AvailableContribution,
     EmployeeDetail,
     EmploymentClassification,
     EmploymentTypeOption,
@@ -36,6 +38,12 @@ import type {
 interface EmployeeEditSheetProps {
     employee: EmployeeDetail;
     employmentTypeOptions: EmploymentTypeOption[];
+    /**
+     * Statutory contributions HR can flag the employee exempt from. Sourced
+     * from the controller's `availableContributions` prop. When the list is
+     * empty the exemptions section is hidden defensively.
+     */
+    availableContributions: AvailableContribution[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }
@@ -55,6 +63,7 @@ type FormShape = {
     date_hired: string;
     date_terminated: string;
     is_active: boolean;
+    exempted_contribution_codes: string[];
 };
 
 const PAY_FREQUENCY_OPTIONS: { value: PayFrequency; label: string }[] = [
@@ -83,6 +92,7 @@ function buildDefaults(employee: EmployeeDetail): FormShape {
             date_hired: '',
             date_terminated: '',
             is_active: true,
+            exempted_contribution_codes: [],
         };
     }
 
@@ -101,6 +111,9 @@ function buildDefaults(employee: EmployeeDetail): FormShape {
         date_hired: profile.date_hired ?? '',
         date_terminated: profile.date_terminated ?? '',
         is_active: profile.is_active,
+        // Defensive `?? []` — older payloads predating the column may still
+        // arrive with the field undefined (e.g. cached Inertia visits).
+        exempted_contribution_codes: profile.exempted_contribution_codes ?? [],
     };
 }
 
@@ -127,6 +140,7 @@ function pesosToCentavos(input: string): number {
 export function EmployeeEditSheet({
     employee,
     employmentTypeOptions,
+    availableContributions,
     open,
     onOpenChange,
 }: EmployeeEditSheetProps) {
@@ -155,6 +169,22 @@ export function EmployeeEditSheet({
         setSalaryStr(centavosToPesos(next.basic_salary_centavos));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [profileKey]);
+
+    /**
+     * Add or remove a statutory contribution code from the exemption list.
+     * Pure list-mutation routed through `setData` so Inertia's form picks up
+     * the change (and its dirty / errors machinery still works as expected).
+     */
+    const toggleExemption = (code: string, checked: boolean): void => {
+        const current = form.data.exempted_contribution_codes;
+        const next = checked
+            ? current.includes(code)
+                ? current
+                : [...current, code]
+            : current.filter((existing) => existing !== code);
+
+        form.setData('exempted_contribution_codes', next);
+    };
 
     const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -420,6 +450,95 @@ export function EmployeeEditSheet({
                                 />
                             </div>
                         </section>
+
+                        {availableContributions.length > 0 && (
+                            <>
+                                <Separator />
+
+                                <section
+                                    className="space-y-4"
+                                    aria-labelledby="exemptions-heading"
+                                >
+                                    <div className="space-y-1">
+                                        <h3
+                                            id="exemptions-heading"
+                                            className="text-sm font-medium"
+                                        >
+                                            Statutory exemptions
+                                        </h3>
+                                        <p
+                                            id="exemptions-description"
+                                            className="text-xs text-muted-foreground"
+                                        >
+                                            Selected contributions will not be
+                                            deducted from this employee's
+                                            payroll. Use sparingly — most
+                                            employees should be subscribed to
+                                            all active statutory contributions.
+                                        </p>
+                                    </div>
+
+                                    <ul
+                                        className="space-y-2"
+                                        aria-describedby="exemptions-description"
+                                    >
+                                        {availableContributions.map(
+                                            (contribution) => {
+                                                const checkboxId = `exemption-${contribution.code}`;
+                                                const isChecked =
+                                                    form.data.exempted_contribution_codes.includes(
+                                                        contribution.code,
+                                                    );
+
+                                                return (
+                                                    <li key={contribution.code}>
+                                                        <Label
+                                                            htmlFor={checkboxId}
+                                                            className="flex items-start gap-3 rounded-md border p-3 hover:bg-muted/30"
+                                                        >
+                                                            <Checkbox
+                                                                id={checkboxId}
+                                                                checked={
+                                                                    isChecked
+                                                                }
+                                                                onCheckedChange={(
+                                                                    checked,
+                                                                ) =>
+                                                                    toggleExemption(
+                                                                        contribution.code,
+                                                                        checked ===
+                                                                            true,
+                                                                    )
+                                                                }
+                                                                className="mt-0.5"
+                                                            />
+                                                            <div className="flex-1 space-y-0.5">
+                                                                <span className="font-mono text-sm">
+                                                                    {
+                                                                        contribution.code
+                                                                    }
+                                                                </span>
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    {
+                                                                        contribution.label
+                                                                    }
+                                                                </p>
+                                                            </div>
+                                                        </Label>
+                                                    </li>
+                                                );
+                                            },
+                                        )}
+                                    </ul>
+                                    <InputError
+                                        message={
+                                            form.errors
+                                                .exempted_contribution_codes
+                                        }
+                                    />
+                                </section>
+                            </>
+                        )}
 
                         <Separator />
 

@@ -38,6 +38,7 @@ class EmployeeProfileFactory extends Factory
             'date_hired' => fake()->dateTimeBetween('-5 years', '-1 month')->format('Y-m-d'),
             'date_terminated' => null,
             'is_active' => true,
+            'exempted_contribution_codes' => [],
         ];
     }
 }

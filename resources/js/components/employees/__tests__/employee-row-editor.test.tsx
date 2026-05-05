@@ -110,6 +110,7 @@ const SAMPLE_PROFILE: EmployeeProfile = {
     date_hired: '2026-01-01',
     date_terminated: null,
     is_active: true,
+    exempted_contribution_codes: [],
     created_at: null,
     updated_at: null,
 };

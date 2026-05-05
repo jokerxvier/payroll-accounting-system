@@ -176,6 +176,16 @@ final class PayrollComputationService
         $accumulatedEmployeeStatutoryShares = Money::zero();
 
         foreach ($contributions as $contribution) {
+            // Per-employee opt-out: zero the result so legacy DTO mapping
+            // still works, and don't grow the statutory-deduction running
+            // tally — exempt employees correctly see a higher BIR taxable
+            // basis because no SSS/PhilHealth/etc. share reduces it.
+            if ($profile->isExemptFrom($contribution->contribution_code)) {
+                $contributionResults[$contribution->contribution_code] = StatutoryContributionResult::zero();
+
+                continue;
+            }
+
             $basis = match ($contribution->applies_to) {
                 StatutoryContribution::APPLIES_TO_GROSS_PAY => $monthlyBasis,
                 StatutoryContribution::APPLIES_TO_TAXABLE_INCOME => $basicPay
@@ -277,6 +287,10 @@ final class PayrollComputationService
 
         // Employee shares first, in registry order.
         foreach ($contributions as $contribution) {
+            if ($profile->isExemptFrom($contribution->contribution_code)) {
+                continue;
+            }
+
             $result = $contributionResults[$contribution->contribution_code];
             $meta = $contribution->applies_to === StatutoryContribution::APPLIES_TO_TAXABLE_INCOME
                 ? ['taxable_income_centavos' => $result->taxableAmount->centavos()]
@@ -293,6 +307,10 @@ final class PayrollComputationService
 
         // Then employer shares (and any EC) in registry order.
         foreach ($contributions as $contribution) {
+            if ($profile->isExemptFrom($contribution->contribution_code)) {
+                continue;
+            }
+
             $result = $contributionResults[$contribution->contribution_code];
 
             // Skip emitting an employer line when both employer shares are

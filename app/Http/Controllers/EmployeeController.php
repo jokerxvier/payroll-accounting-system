@@ -14,7 +14,9 @@ use App\Models\Pas\EmployeeDeduction;
 use App\Models\Pas\EmployeeLoan;
 use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\PayrollAdjustment;
+use App\Models\Pas\StatutoryContribution;
 use App\Repositories\Contracts\EmployeeRepositoryInterface;
+use App\Services\Statutory\StatutoryContributionRegistry;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -27,7 +29,28 @@ class EmployeeController extends Controller
 {
     public function __construct(
         private readonly EmployeeRepositoryInterface $repo,
+        private readonly StatutoryContributionRegistry $statutoryRegistry,
     ) {}
+
+    /**
+     * Statutory contributions currently active in the registry, narrowed to
+     * the `{code, label}` shape the employee edit sheet needs to render
+     * exemption checkboxes. Centralised so `show()` and `profileJson()` emit
+     * the same wire shape.
+     *
+     * @return list<array{code: string, label: string}>
+     */
+    private function availableContributions(): array
+    {
+        return $this->statutoryRegistry
+            ->active(CarbonImmutable::now())
+            ->map(fn (StatutoryContribution $c): array => [
+                'code' => $c->contribution_code,
+                'label' => $c->label,
+            ])
+            ->values()
+            ->all();
+    }
 
     public function index(EmployeeIndexRequest $request): Response
     {
@@ -85,6 +108,9 @@ class EmployeeController extends Controller
                 ->active()
                 ->orderBy('name')
                 ->get(['id', 'code', 'name', 'is_taxable', 'is_de_minimis', 'de_minimis_cap_centavos', 'default_amount_centavos']),
+            // Statutory contributions HR can mark this employee exempt from
+            // (read-only allowlist used by the edit sheet's checkbox list).
+            'availableContributions' => $this->availableContributions(),
         ]);
     }
 
@@ -241,6 +267,9 @@ class EmployeeController extends Controller
                 ->active()
                 ->orderBy('name')
                 ->get(['id', 'code', 'name', 'is_taxable', 'is_de_minimis', 'de_minimis_cap_centavos', 'default_amount_centavos']),
+            // Mirrors `show()` so the directory's quick-edit can surface the
+            // same exemption allowlist without a second round-trip.
+            'availableContributions' => $this->availableContributions(),
         ]);
     }
 }

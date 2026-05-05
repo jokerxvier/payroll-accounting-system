@@ -1232,3 +1232,140 @@ it('flows a custom flat-percentage contribution through the engine without code 
         'BIR_WITHHOLDING_EMPLOYEE',
     ]);
 });
+
+/*
+ * Per-employee exemption suite. Lets an employee opt out of one or more
+ * statutory contributions; the engine skips the row entirely (no line item,
+ * no employer share, no contribution to BIR's running tally — so BIR rises
+ * by exactly the marginal-rate impact of the missing employee deduction).
+ */
+
+it('skips an SSS-exempted employee and lifts BIR by the marginal-rate impact', function () {
+    seedStatutoryRowsForMay2026();
+
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'basic_salary_centavos' => 4_500_000,
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+        'exempted_contribution_codes' => ['SSS'],
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    // SSS is fully skipped: zero on the DTO mapping AND no audit line.
+    expect($result->sssEmployee->centavos())->toBe(0)
+        ->and($result->sssEmployer->centavos())->toBe(0)
+        ->and($result->sssEmployerEc->centavos())->toBe(0);
+
+    $codes = array_map(fn (PayrollLineItem $line): string => $line->code, $result->auditLines);
+    expect($codes)->not->toContain('SSS_EMPLOYEE')
+        ->and($codes)->not->toContain('SSS_EMPLOYER')
+        ->and($codes)->not->toContain('SSS_EMPLOYER_EC');
+
+    // PhilHealth and Pag-IBIG still apply at their full rates.
+    expect($result->philhealthEmployee->centavos())->toBe(112_500)
+        ->and($result->pagibigEmployee->centavos())->toBe(10_000);
+
+    // BIR taxable basis loses the SSS reduction (90_000), so it rises by
+    // 90_000. Marginal rate at this income is 20%, so BIR withholding rises
+    // by 90_000 × 0.20 = 18_000.
+    //   Baseline taxable: 4_500_000 − 90_000 − 112_500 − 10_000 = 4_287_500
+    //   SSS-exempt:        4_500_000          − 112_500 − 10_000 = 4_377_500
+    //   BIR (top bracket): 187_500 + (4_377_500 − 3_333_300) × 20%
+    //                    = 187_500 + 1_044_200 × 20% = 187_500 + 208_840 = 396_340.
+    expect($result->birWithholdingTax->centavos())->toBe(396_340)
+        ->and($result->taxableIncome->centavos())->toBe(4_377_500);
+});
+
+it('skips multiple exemptions cumulatively', function () {
+    seedStatutoryRowsForMay2026();
+
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'basic_salary_centavos' => 4_500_000,
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+        'exempted_contribution_codes' => ['SSS', 'PHILHEALTH'],
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    expect($result->sssEmployee->centavos())->toBe(0)
+        ->and($result->philhealthEmployee->centavos())->toBe(0)
+        ->and($result->pagibigEmployee->centavos())->toBe(10_000);
+
+    $codes = array_map(fn (PayrollLineItem $line): string => $line->code, $result->auditLines);
+    expect($codes)->not->toContain('SSS_EMPLOYEE')
+        ->and($codes)->not->toContain('PHILHEALTH_EMPLOYEE')
+        ->and($codes)->toContain('PAGIBIG_EMPLOYEE')
+        ->and($codes)->toContain('BIR_WITHHOLDING_EMPLOYEE');
+
+    // Taxable basis loses both SSS (90_000) and PhilHealth (112_500) reductions.
+    //   4_500_000 − 10_000 = 4_490_000.
+    //   BIR: 187_500 + (4_490_000 − 3_333_300) × 20%
+    //      = 187_500 + 1_156_700 × 20%
+    //      = 187_500 + 231_340 = 418_840.
+    expect($result->birWithholdingTax->centavos())->toBe(418_840)
+        ->and($result->taxableIncome->centavos())->toBe(4_490_000);
+});
+
+it('produces byte-identical output to the baseline when exempted_contribution_codes is empty', function () {
+    seedStatutoryRowsForMay2026();
+
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'basic_salary_centavos' => 4_500_000,
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+        'exempted_contribution_codes' => [],
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    // Same numbers as the canonical baseline test at the top of this suite.
+    expect($result->sssEmployee->centavos())->toBe(90_000)
+        ->and($result->philhealthEmployee->centavos())->toBe(112_500)
+        ->and($result->pagibigEmployee->centavos())->toBe(10_000)
+        ->and($result->birWithholdingTax->centavos())->toBe(378_340)
+        ->and($result->taxableIncome->centavos())->toBe(4_287_500);
+
+    $employeeCodes = collect($result->auditLines)
+        ->filter(fn (PayrollLineItem $line): bool => $line->bucket === PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION)
+        ->map(fn (PayrollLineItem $line): string => $line->code)
+        ->values()
+        ->all();
+
+    expect($employeeCodes)->toBe([
+        'SSS_EMPLOYEE',
+        'PHILHEALTH_EMPLOYEE',
+        'PAGIBIG_EMPLOYEE',
+        'BIR_WITHHOLDING_EMPLOYEE',
+    ]);
+});
+
+it('treats an exemption code that is not in the active registry as a no-op', function () {
+    seedStatutoryRowsForMay2026();
+
+    $profile = EmployeeProfile::factory()->create([
+        'is_active' => true,
+        'basic_salary_centavos' => 4_500_000,
+        'date_hired' => '2024-01-01',
+        'date_terminated' => null,
+        'exempted_contribution_codes' => ['DOES_NOT_EXIST'],
+    ]);
+
+    $result = app(PayrollComputationService::class)
+        ->compute($profile, PayPeriodInput::monthly(2026, 5));
+
+    // Output identical to the baseline. The engine never sees DOES_NOT_EXIST
+    // because the registry doesn't return it; the exemption is effectively
+    // dead config that costs nothing.
+    expect($result->sssEmployee->centavos())->toBe(90_000)
+        ->and($result->philhealthEmployee->centavos())->toBe(112_500)
+        ->and($result->pagibigEmployee->centavos())->toBe(10_000)
+        ->and($result->birWithholdingTax->centavos())->toBe(378_340);
+});
