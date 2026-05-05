@@ -40,10 +40,10 @@ final class PayrollRunController extends Controller
         $runs = PayrollRun::query()
             ->with([
                 'payPeriod',
-                'submittedBy:id,name',
-                'approvedBy:id,name',
-                'postedBy:id,name',
-                'voidedBy:id,name',
+                'submittedBy:id,full_name',
+                'approvedBy:id,full_name',
+                'postedBy:id,full_name',
+                'voidedBy:id,full_name',
             ])
             ->orderByDesc('created_at')
             ->limit(50)
@@ -111,10 +111,10 @@ final class PayrollRunController extends Controller
 
         $payrollRun->load([
             'payPeriod',
-            'submittedBy:id,name',
-            'approvedBy:id,name',
-            'postedBy:id,name',
-            'voidedBy:id,name',
+            'submittedBy:id,full_name',
+            'approvedBy:id,full_name',
+            'postedBy:id,full_name',
+            'voidedBy:id,full_name',
         ]);
         $rawPayslips = $payrollRun
             ->payslips()
@@ -226,19 +226,19 @@ final class PayrollRunController extends Controller
             ] : null,
             'submitted_by' => $run->submittedBy ? [
                 'id' => $run->submittedBy->id,
-                'name' => $run->submittedBy->name,
+                'name' => $run->submittedBy->full_name,
             ] : null,
             'approved_by' => $run->approvedBy ? [
                 'id' => $run->approvedBy->id,
-                'name' => $run->approvedBy->name,
+                'name' => $run->approvedBy->full_name,
             ] : null,
             'posted_by' => $run->postedBy ? [
                 'id' => $run->postedBy->id,
-                'name' => $run->postedBy->name,
+                'name' => $run->postedBy->full_name,
             ] : null,
             'voided_by' => $run->voidedBy ? [
                 'id' => $run->voidedBy->id,
-                'name' => $run->voidedBy->name,
+                'name' => $run->voidedBy->full_name,
             ] : null,
         ];
     }
