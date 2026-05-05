@@ -23,18 +23,30 @@ export interface PayrollRunActor {
 export interface PayrollRunSummary {
     id: number;
     status: PayrollRunStatus;
+    is_locked: boolean;
     total_employees: number;
     total_employee_deductions_centavos: number;
     total_employer_contributions_centavos: number;
     total_net_pay_centavos: number;
     started_at: string | null;
     computed_at: string | null;
+    submitted_at: string | null;
     approved_at: string | null;
+    posted_at: string | null;
     voided_at: string | null;
     created_at: string | null;
     pay_period: PayPeriodSummary | null;
+    submitted_by: PayrollRunActor | null;
     approved_by: PayrollRunActor | null;
+    posted_by: PayrollRunActor | null;
     voided_by: PayrollRunActor | null;
+}
+
+export interface PayrollRunCanFlags {
+    submit: boolean;
+    approve: boolean;
+    post: boolean;
+    void: boolean;
 }
 
 export interface PayslipSummary {

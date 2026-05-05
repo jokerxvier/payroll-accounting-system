@@ -36,6 +36,21 @@ final class GeneratePayrollRunAction
      */
     public function execute(PayPeriod $period): PayrollRun
     {
+        // Period locking: refuse to start a new run when the latest run on
+        // this period is approved or posted. A voided run doesn't lock —
+        // admins can re-run after voiding.
+        $latest = PayrollRun::query()
+            ->where('pay_period_id', $period->id)
+            ->whereIn('status', [PayrollRun::STATUS_APPROVED, PayrollRun::STATUS_POSTED])
+            ->exists();
+
+        if ($latest) {
+            throw new \DomainException(sprintf(
+                'Pay period [%s] is locked by an approved or posted payroll run. Void the existing run before re-generating.',
+                $period->code,
+            ));
+        }
+
         $employeeIds = EmployeeProfile::query()
             ->where('is_active', true)
             ->pluck('id')

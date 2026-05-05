@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\Payroll\ApprovePayrollRunAction;
 use App\Actions\Payroll\GeneratePayrollRunAction;
+use App\Actions\Payroll\PostPayrollRunAction;
+use App\Actions\Payroll\SubmitPayrollRunForApprovalAction;
+use App\Actions\Payroll\VoidPayrollRunAction;
 use App\Http\Controllers\Controller;
 use App\Models\Lms\Staff;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollRun;
+use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -33,7 +38,13 @@ final class PayrollRunController extends Controller
         Gate::authorize('viewAny', PayrollRun::class);
 
         $runs = PayrollRun::query()
-            ->with(['payPeriod', 'approvedBy:id,name', 'voidedBy:id,name'])
+            ->with([
+                'payPeriod',
+                'submittedBy:id,name',
+                'approvedBy:id,name',
+                'postedBy:id,name',
+                'voidedBy:id,name',
+            ])
             ->orderByDesc('created_at')
             ->limit(50)
             ->get()
@@ -82,7 +93,12 @@ final class PayrollRunController extends Controller
         ]);
 
         $period = PayPeriod::query()->findOrFail($data['pay_period_id']);
-        $run = $action->execute($period);
+
+        try {
+            $run = $action->execute($period);
+        } catch (DomainException $e) {
+            return back()->withErrors(['pay_period_id' => $e->getMessage()]);
+        }
 
         return redirect()
             ->route('admin.payroll-runs.show', $run->id)
@@ -93,7 +109,13 @@ final class PayrollRunController extends Controller
     {
         Gate::authorize('view', $payrollRun);
 
-        $payrollRun->load(['payPeriod', 'approvedBy:id,name', 'voidedBy:id,name']);
+        $payrollRun->load([
+            'payPeriod',
+            'submittedBy:id,name',
+            'approvedBy:id,name',
+            'postedBy:id,name',
+            'voidedBy:id,name',
+        ]);
         $rawPayslips = $payrollRun
             ->payslips()
             ->orderBy('lms_staff_id')
@@ -126,7 +148,53 @@ final class PayrollRunController extends Controller
                 'persisted_payslips' => $payslips->count(),
                 'total_employees' => $payrollRun->total_employees,
             ],
+            'can' => [
+                'submit' => Gate::allows('submit', $payrollRun),
+                'approve' => Gate::allows('approve', $payrollRun),
+                'post' => Gate::allows('post', $payrollRun),
+                'void' => Gate::allows('void', $payrollRun),
+            ],
         ]);
+    }
+
+    public function submit(PayrollRun $payrollRun, SubmitPayrollRunForApprovalAction $action): RedirectResponse
+    {
+        Gate::authorize('submit', $payrollRun);
+        $action->execute($payrollRun, (int) auth()->id());
+
+        return redirect()
+            ->route('admin.payroll-runs.show', $payrollRun->id)
+            ->with('success', 'Payroll run submitted for approval.');
+    }
+
+    public function approve(PayrollRun $payrollRun, ApprovePayrollRunAction $action): RedirectResponse
+    {
+        Gate::authorize('approve', $payrollRun);
+        $action->execute($payrollRun, (int) auth()->id());
+
+        return redirect()
+            ->route('admin.payroll-runs.show', $payrollRun->id)
+            ->with('success', 'Payroll run approved.');
+    }
+
+    public function post(PayrollRun $payrollRun, PostPayrollRunAction $action): RedirectResponse
+    {
+        Gate::authorize('post', $payrollRun);
+        $action->execute($payrollRun, (int) auth()->id());
+
+        return redirect()
+            ->route('admin.payroll-runs.show', $payrollRun->id)
+            ->with('success', 'Payroll run posted. Final state.');
+    }
+
+    public function void(PayrollRun $payrollRun, VoidPayrollRunAction $action): RedirectResponse
+    {
+        Gate::authorize('void', $payrollRun);
+        $action->execute($payrollRun, (int) auth()->id());
+
+        return redirect()
+            ->route('admin.payroll-runs.show', $payrollRun->id)
+            ->with('success', 'Payroll run voided. Payslips remain visible for audit.');
     }
 
     /**
@@ -137,13 +205,16 @@ final class PayrollRunController extends Controller
         return [
             'id' => $run->id,
             'status' => $run->status,
+            'is_locked' => $run->isLocked(),
             'total_employees' => $run->total_employees,
             'total_employee_deductions_centavos' => $run->total_employee_deductions_centavos,
             'total_employer_contributions_centavos' => $run->total_employer_contributions_centavos,
             'total_net_pay_centavos' => $run->total_net_pay_centavos,
             'started_at' => $run->started_at?->toIso8601String(),
             'computed_at' => $run->computed_at?->toIso8601String(),
+            'submitted_at' => $run->submitted_at?->toIso8601String(),
             'approved_at' => $run->approved_at?->toIso8601String(),
+            'posted_at' => $run->posted_at?->toIso8601String(),
             'voided_at' => $run->voided_at?->toIso8601String(),
             'created_at' => $run->created_at?->toIso8601String(),
             'pay_period' => $run->payPeriod ? [
@@ -153,9 +224,17 @@ final class PayrollRunController extends Controller
                 'start_date' => $run->payPeriod->start_date->toDateString(),
                 'end_date' => $run->payPeriod->end_date->toDateString(),
             ] : null,
+            'submitted_by' => $run->submittedBy ? [
+                'id' => $run->submittedBy->id,
+                'name' => $run->submittedBy->name,
+            ] : null,
             'approved_by' => $run->approvedBy ? [
                 'id' => $run->approvedBy->id,
                 'name' => $run->approvedBy->name,
+            ] : null,
+            'posted_by' => $run->postedBy ? [
+                'id' => $run->postedBy->id,
+                'name' => $run->postedBy->name,
             ] : null,
             'voided_by' => $run->voidedBy ? [
                 'id' => $run->voidedBy->id,

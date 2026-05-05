@@ -38,8 +38,44 @@ final class PayrollRunPolicy
         return $user->hasAnyRole(self::SUPER_ADMIN_ROLES);
     }
 
+    /**
+     * Submit a `computed` run for approval. Only super-admin in v1.
+     */
+    public function submit(User $user, PayrollRun $run): bool
+    {
+        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES)
+            && $run->status === PayrollRun::STATUS_COMPUTED;
+    }
+
+    /**
+     * Approve a `pending_approval` run. Only super-admin in v1; widening
+     * to a payroll-officer "approver" role lands later.
+     */
+    public function approve(User $user, PayrollRun $run): bool
+    {
+        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES)
+            && $run->status === PayrollRun::STATUS_PENDING_APPROVAL;
+    }
+
+    /**
+     * Post an `approved` run. Final transition; only super-admin.
+     */
+    public function post(User $user, PayrollRun $run): bool
+    {
+        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES)
+            && $run->status === PayrollRun::STATUS_APPROVED;
+    }
+
+    /**
+     * Void any non-posted, non-voided run.
+     */
     public function void(User $user, PayrollRun $run): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES) && $run->isMutable();
+        if (! $user->hasAnyRole(self::SUPER_ADMIN_ROLES)) {
+            return false;
+        }
+
+        return $run->status !== PayrollRun::STATUS_POSTED
+            && $run->status !== PayrollRun::STATUS_VOIDED;
     }
 }

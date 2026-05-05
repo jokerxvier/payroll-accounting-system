@@ -1,8 +1,26 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, FileText, Loader2 } from 'lucide-react';
-import { useEffect } from 'react';
+import {
+    ArrowLeft,
+    CheckCircle2,
+    FileText,
+    Loader2,
+    Lock,
+    Send,
+    Trash2,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +35,7 @@ import {
 import { index as payrollRunsIndex } from '@/routes/admin/payroll-runs';
 import { PAYROLL_RUN_STATUS_LABELS } from '@/types/payroll-run';
 import type {
+    PayrollRunCanFlags,
     PayrollRunProgress,
     PayrollRunStatus,
     PayrollRunSummary,
@@ -27,7 +46,53 @@ interface Props {
     run: PayrollRunSummary;
     payslips: PayslipSummary[];
     progress: PayrollRunProgress;
+    can: PayrollRunCanFlags;
 }
+
+type DialogKind = 'submit' | 'approve' | 'post' | 'void' | null;
+
+interface DialogConfig {
+    title: string;
+    description: string;
+    confirmLabel: string;
+    confirmVariant: 'default' | 'destructive';
+    path: (id: number) => string;
+}
+
+const DIALOGS: Record<Exclude<DialogKind, null>, DialogConfig> = {
+    submit: {
+        title: 'Submit run for approval?',
+        description:
+            'The run will move to Pending approval. An approver can then sign off or void it.',
+        confirmLabel: 'Submit for approval',
+        confirmVariant: 'default',
+        path: (id) => `/admin/payroll-runs/${id}/submit`,
+    },
+    approve: {
+        title: 'Approve this payroll run?',
+        description:
+            'Approving locks the run. You can still void it, but you will need to re-run on a new period if you need to recompute.',
+        confirmLabel: 'Approve',
+        confirmVariant: 'default',
+        path: (id) => `/admin/payroll-runs/${id}/approve`,
+    },
+    post: {
+        title: 'Post this payroll run?',
+        description:
+            'Posting is the final state. After posting, this run cannot be edited or voided. Continue?',
+        confirmLabel: 'Post run',
+        confirmVariant: 'default',
+        path: (id) => `/admin/payroll-runs/${id}/post`,
+    },
+    void: {
+        title: 'Void this payroll run?',
+        description:
+            'Voiding marks the run as inactive. Payslip rows stay visible for audit. The pay period will be available for a new run after voiding.',
+        confirmLabel: 'Void run',
+        confirmVariant: 'destructive',
+        path: (id) => `/admin/payroll-runs/${id}/void`,
+    },
+};
 
 const STATUS_VARIANT: Record<
     PayrollRunStatus,
@@ -63,7 +128,15 @@ function formatDateTime(iso: string | null): string {
     });
 }
 
-export default function PayrollRunShow({ run, payslips, progress }: Props) {
+export default function PayrollRunShow({
+    run,
+    payslips,
+    progress,
+    can,
+}: Props) {
+    const [dialog, setDialog] = useState<DialogKind>(null);
+    const [submitting, setSubmitting] = useState(false);
+
     // Poll the run state while computing — the per-employee batch jobs
     // persist payslips one at a time. Reload only `run`, `payslips`, and
     // `progress` so other shared props (auth, flash, etc.) don't churn.
@@ -78,6 +151,25 @@ export default function PayrollRunShow({ run, payslips, progress }: Props) {
 
         return () => window.clearInterval(handle);
     }, [run.status]);
+
+    const confirmDialog = () => {
+        if (dialog === null) {
+            return;
+        }
+
+        setSubmitting(true);
+        router.post(
+            DIALOGS[dialog].path(run.id),
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setSubmitting(false);
+                    setDialog(null);
+                },
+            },
+        );
+    };
 
     const completionPct =
         progress.total_employees === 0
@@ -104,8 +196,42 @@ export default function PayrollRunShow({ run, payslips, progress }: Props) {
                     actions={
                         <div className="flex items-center gap-2">
                             <Badge variant={STATUS_VARIANT[run.status]}>
+                                {run.is_locked ? (
+                                    <Lock className="mr-1 h-3 w-3" />
+                                ) : null}
                                 {PAYROLL_RUN_STATUS_LABELS[run.status]}
                             </Badge>
+                            {can.submit ? (
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setDialog('submit')}
+                                >
+                                    <Send className="mr-1 h-4 w-4" />
+                                    Submit for approval
+                                </Button>
+                            ) : null}
+                            {can.approve ? (
+                                <Button onClick={() => setDialog('approve')}>
+                                    <CheckCircle2 className="mr-1 h-4 w-4" />
+                                    Approve
+                                </Button>
+                            ) : null}
+                            {can.post ? (
+                                <Button onClick={() => setDialog('post')}>
+                                    <Lock className="mr-1 h-4 w-4" />
+                                    Post
+                                </Button>
+                            ) : null}
+                            {can.void ? (
+                                <Button
+                                    variant="outline"
+                                    className="text-destructive"
+                                    onClick={() => setDialog('void')}
+                                >
+                                    <Trash2 className="mr-1 h-4 w-4" />
+                                    Void
+                                </Button>
+                            ) : null}
                             <Button asChild variant="outline">
                                 <Link href={payrollRunsIndex().url}>
                                     <ArrowLeft className="mr-1 h-4 w-4" />
@@ -115,6 +241,49 @@ export default function PayrollRunShow({ run, payslips, progress }: Props) {
                         </div>
                     }
                 />
+
+                <AlertDialog
+                    open={dialog !== null}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setDialog(null);
+                        }
+                    }}
+                >
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>
+                                {dialog ? DIALOGS[dialog].title : ''}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                                {dialog ? DIALOGS[dialog].description : ''}
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                disabled={submitting}
+                                className={
+                                    dialog &&
+                                    DIALOGS[dialog].confirmVariant ===
+                                        'destructive'
+                                        ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                                        : undefined
+                                }
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    confirmDialog();
+                                }}
+                            >
+                                {submitting
+                                    ? 'Working…'
+                                    : dialog
+                                      ? DIALOGS[dialog].confirmLabel
+                                      : ''}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
 
                 {run.status === 'computing' ? (
                     <Card>
@@ -294,11 +463,23 @@ export default function PayrollRunShow({ run, payslips, progress }: Props) {
                             {formatDateTime(run.computed_at)}
                         </div>
                         <div>
+                            <span className="font-medium">Submitted:</span>{' '}
+                            {formatDateTime(run.submitted_at)}
+                            {run.submitted_by
+                                ? ` by ${run.submitted_by.name}`
+                                : ''}
+                        </div>
+                        <div>
                             <span className="font-medium">Approved:</span>{' '}
                             {formatDateTime(run.approved_at)}
                             {run.approved_by
                                 ? ` by ${run.approved_by.name}`
                                 : ''}
+                        </div>
+                        <div>
+                            <span className="font-medium">Posted:</span>{' '}
+                            {formatDateTime(run.posted_at)}
+                            {run.posted_by ? ` by ${run.posted_by.name}` : ''}
                         </div>
                         {run.voided_at ? (
                             <div className="sm:col-span-2">

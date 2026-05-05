@@ -69,6 +69,18 @@ Route::middleware(['auth', 'verified'])
         Route::get('payroll-runs/{payrollRun}', [PayrollRunController::class, 'show'])
             ->name('payroll-runs.show');
 
+        // Phase 3 Week 10 — approval lifecycle transitions. Each one is a
+        // POST that hits a Gate-checked controller action and an Action
+        // class with a defensive status-invariant guard.
+        Route::post('payroll-runs/{payrollRun}/submit', [PayrollRunController::class, 'submit'])
+            ->name('payroll-runs.submit');
+        Route::post('payroll-runs/{payrollRun}/approve', [PayrollRunController::class, 'approve'])
+            ->name('payroll-runs.approve');
+        Route::post('payroll-runs/{payrollRun}/post', [PayrollRunController::class, 'post'])
+            ->name('payroll-runs.post');
+        Route::post('payroll-runs/{payrollRun}/void', [PayrollRunController::class, 'void'])
+            ->name('payroll-runs.void');
+
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-
         // in-depth abort for the production case.

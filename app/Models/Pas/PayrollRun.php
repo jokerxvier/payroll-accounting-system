@@ -82,8 +82,12 @@ final class PayrollRun extends Model
         'total_net_pay_centavos',
         'started_at',
         'computed_at',
+        'submitted_at',
+        'submitted_by_user_id',
         'approved_at',
         'approved_by_user_id',
+        'posted_at',
+        'posted_by_user_id',
         'voided_at',
         'voided_by_user_id',
     ];
@@ -103,9 +107,13 @@ final class PayrollRun extends Model
             'total_net_pay_centavos' => 'integer',
             'started_at' => 'immutable_datetime',
             'computed_at' => 'immutable_datetime',
+            'submitted_at' => 'immutable_datetime',
             'approved_at' => 'immutable_datetime',
+            'posted_at' => 'immutable_datetime',
             'voided_at' => 'immutable_datetime',
+            'submitted_by_user_id' => 'integer',
             'approved_by_user_id' => 'integer',
+            'posted_by_user_id' => 'integer',
             'voided_by_user_id' => 'integer',
         ];
     }
@@ -123,9 +131,21 @@ final class PayrollRun extends Model
     }
 
     /** @return BelongsTo<User, PayrollRun> */
+    public function submittedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by_user_id');
+    }
+
+    /** @return BelongsTo<User, PayrollRun> */
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by_user_id');
+    }
+
+    /** @return BelongsTo<User, PayrollRun> */
+    public function postedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'posted_by_user_id');
     }
 
     /** @return BelongsTo<User, PayrollRun> */
@@ -148,5 +168,20 @@ final class PayrollRun extends Model
     {
         return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_COMPUTED], true)
             && ! $this->isVoided();
+    }
+
+    /**
+     * Whether the run is in a terminal/locked state — approved, posted, or
+     * voided. Locked runs cannot be edited, re-run, or transitioned further
+     * (except `posted` is the absolute final state; `approved` can still
+     * progress to `posted` or backwards to `voided`).
+     */
+    public function isLocked(): bool
+    {
+        return in_array(
+            $this->status,
+            [self::STATUS_APPROVED, self::STATUS_POSTED, self::STATUS_VOIDED],
+            true,
+        );
     }
 }
