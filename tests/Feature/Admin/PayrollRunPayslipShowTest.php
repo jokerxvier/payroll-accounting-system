@@ -61,3 +61,43 @@ it('forbids the payslip page for non-super-admin roles', function (string $role)
         ->get('/admin/payroll-runs/'.$run->id.'/payslips/'.$payslip->id)
         ->assertForbidden();
 })->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+
+it('streams a PDF for super-admin', function () {
+    $user = authPayslipShowAs('super-admin');
+    $run = PayrollRun::factory()->computed()->create();
+    $payslip = Payslip::factory()->for($run, 'payrollRun')->create();
+
+    $response = $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id.'/payslips/'.$payslip->id.'/pdf');
+
+    $response->assertOk();
+    expect($response->headers->get('Content-Type'))
+        ->toContain('application/pdf');
+    expect($response->headers->get('Content-Disposition'))
+        ->toContain('attachment')
+        ->toContain('.pdf');
+
+    // Magic-byte check: dompdf output begins with %PDF-.
+    expect(substr($response->getContent() ?: '', 0, 5))->toBe('%PDF-');
+});
+
+it('returns 404 on the PDF route when the payslip belongs to a different run', function () {
+    $user = authPayslipShowAs('super-admin');
+    $runA = PayrollRun::factory()->computed()->create();
+    $runB = PayrollRun::factory()->computed()->create();
+    $payslip = Payslip::factory()->for($runA, 'payrollRun')->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$runB->id.'/payslips/'.$payslip->id.'/pdf')
+        ->assertNotFound();
+});
+
+it('forbids the PDF route for non-super-admin roles', function (string $role) {
+    $user = authPayslipShowAs($role);
+    $run = PayrollRun::factory()->computed()->create();
+    $payslip = Payslip::factory()->for($run, 'payrollRun')->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id.'/payslips/'.$payslip->id.'/pdf')
+        ->assertForbidden();
+})->with(['payroll-officer', 'hr', 'auditor', 'employee']);

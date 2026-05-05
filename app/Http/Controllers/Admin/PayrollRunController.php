@@ -15,6 +15,7 @@ use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\Payslip;
+use Barryvdh\DomPDF\Facade\Pdf;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,6 +23,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 /**
  * Admin surface for payroll runs (Phase 3 Week 9).
@@ -204,6 +206,70 @@ final class PayrollRunController extends Controller
     }
 
     /**
+     * Build the canonical payslip view-model used by both the Inertia
+     * HTML page and the dompdf-rendered PDF. Single source of truth so
+     * the two surfaces never drift.
+     *
+     * @return array{run: array<string,mixed>, payslip: array<string,mixed>, employee: array<string,mixed>, earnings: list<array<string,mixed>>, deductions: list<array<string,mixed>>, employer_lines: list<array<string,mixed>>}
+     */
+    private function payslipViewModel(PayrollRun $run, Payslip $payslip): array
+    {
+        $run->load(['payPeriod']);
+
+        $staff = Staff::query()
+            ->where('id', $payslip->lms_staff_id)
+            ->first(['id', 'full_name', 'staff_no', 'email', 'designation_id', 'department_id']);
+
+        $profile = EmployeeProfile::query()
+            ->where('lms_staff_id', $payslip->lms_staff_id)
+            ->first();
+
+        $auditLines = $payslip->audit_lines ?? [];
+        $earnings = array_values(array_filter(
+            $auditLines,
+            fn (array $l): bool => ($l['bucket'] ?? null) === 'earning',
+        ));
+        $deductions = array_values(array_filter(
+            $auditLines,
+            fn (array $l): bool => ($l['bucket'] ?? null) === 'employee_deduction',
+        ));
+        $employerLines = array_values(array_filter(
+            $auditLines,
+            fn (array $l): bool => ($l['bucket'] ?? null) === 'employer_contribution',
+        ));
+
+        return [
+            'run' => self::serialiseRun($run),
+            'payslip' => [
+                'id' => $payslip->id,
+                'lms_staff_id' => $payslip->lms_staff_id,
+                'gross_pay_centavos' => $payslip->gross_pay_centavos,
+                'total_employee_deductions_centavos' => $payslip->total_employee_deductions_centavos,
+                'total_employer_contributions_centavos' => $payslip->total_employer_contributions_centavos,
+                'net_pay_centavos' => $payslip->net_pay_centavos,
+                'taxable_income_centavos' => $payslip->taxable_income_centavos,
+                'audit_lines' => $auditLines,
+                'applied_exemptions' => $payslip->applied_exemptions ?? [],
+                'computed_at' => $payslip->computed_at?->toIso8601String(),
+                'computed_at_formatted' => $payslip->computed_at?->format('F j, Y'),
+            ],
+            'employee' => [
+                'lms_staff_id' => $payslip->lms_staff_id,
+                'staff_no' => $staff?->staff_no,
+                'full_name' => $staff?->full_name,
+                'email' => $staff?->email,
+                'tin' => $profile?->tin,
+                'sss_number' => $profile?->sss_number,
+                'philhealth_number' => $profile?->philhealth_number,
+                'pagibig_number' => $profile?->pagibig_number,
+            ],
+            'earnings' => $earnings,
+            'deductions' => $deductions,
+            'employer_lines' => $employerLines,
+        ];
+    }
+
+    /**
      * Standalone payslip view (Phase 3 W11 Stage A). HTML for screen +
      * print. PDF download lands in Stage B as a sibling route.
      */
@@ -218,44 +284,41 @@ final class PayrollRunController extends Controller
             abort(404);
         }
 
-        $payrollRun->load(['payPeriod']);
+        $vm = $this->payslipViewModel($payrollRun, $payslip);
 
-        $staff = Staff::query()
-            ->where('id', $payslip->lms_staff_id)
-            ->first(['id', 'full_name', 'staff_no', 'email', 'designation_id', 'department_id']);
-
-        $profile = EmployeeProfile::query()
-            ->where('lms_staff_id', $payslip->lms_staff_id)
-            ->first();
-
+        // Inertia page only consumes a subset; pass the full VM so the
+        // page can render however it likes.
         return Inertia::render('admin/payroll-runs/payslips/show', [
-            'run' => self::serialiseRun($payrollRun),
-            'payslip' => [
-                'id' => $payslip->id,
-                'lms_staff_id' => $payslip->lms_staff_id,
-                'gross_pay_centavos' => $payslip->gross_pay_centavos,
-                'total_employee_deductions_centavos' => $payslip->total_employee_deductions_centavos,
-                'total_employer_contributions_centavos' => $payslip->total_employer_contributions_centavos,
-                'net_pay_centavos' => $payslip->net_pay_centavos,
-                'taxable_income_centavos' => $payslip->taxable_income_centavos,
-                'audit_lines' => $payslip->audit_lines ?? [],
-                'applied_exemptions' => $payslip->applied_exemptions ?? [],
-                'computed_at' => $payslip->computed_at?->toIso8601String(),
-            ],
-            'employee' => [
-                'lms_staff_id' => $payslip->lms_staff_id,
-                'staff_no' => $staff?->staff_no,
-                'full_name' => $staff?->full_name,
-                'email' => $staff?->email,
-                // Government IDs are encrypted at rest; the model's
-                // encrypted cast decrypts them on read for the auth'd
-                // super-admin. Falsy fallback when unset.
-                'tin' => $profile?->tin,
-                'sss_number' => $profile?->sss_number,
-                'philhealth_number' => $profile?->philhealth_number,
-                'pagibig_number' => $profile?->pagibig_number,
-            ],
+            'run' => $vm['run'],
+            'payslip' => $vm['payslip'],
+            'employee' => $vm['employee'],
         ]);
+    }
+
+    /**
+     * Stream the payslip as a downloadable PDF (Phase 3 W11 Stage B).
+     * Renders the same view-model the Inertia page uses, through a
+     * dedicated dompdf-friendly Blade template.
+     */
+    public function downloadPayslipPdf(PayrollRun $payrollRun, Payslip $payslip): HttpResponse
+    {
+        Gate::authorize('view', $payrollRun);
+
+        if ($payslip->payroll_run_id !== $payrollRun->id) {
+            abort(404);
+        }
+
+        $vm = $this->payslipViewModel($payrollRun, $payslip);
+
+        $filename = sprintf(
+            'payslip-%s-staff%d.pdf',
+            $vm['run']['pay_period']['code'] ?? ('run'.$vm['run']['id']),
+            $vm['payslip']['lms_staff_id'],
+        );
+
+        return Pdf::loadView('payslips.pdf', $vm)
+            ->setPaper('a4')
+            ->download($filename);
     }
 
     /**

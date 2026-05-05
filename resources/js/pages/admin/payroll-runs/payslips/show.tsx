@@ -1,7 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Download, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { show as payrollRunsShow } from '@/routes/admin/payroll-runs';
+import { pdf as payslipPdf } from '@/routes/admin/payroll-runs/payslips';
 import type { PayrollRunSummary, PayslipAuditLine } from '@/types/payroll-run';
 
 interface PayslipDetail {
@@ -82,14 +83,29 @@ export default function PayslipShow({ run, payslip, employee }: Props) {
                             Back to run
                         </Link>
                     </Button>
-                    <Button
-                        size="sm"
-                        onClick={() => window.print()}
-                        aria-label="Print payslip"
-                    >
-                        <Printer className="mr-1 h-4 w-4" />
-                        Print
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <Button asChild variant="outline" size="sm">
+                            <a
+                                href={
+                                    payslipPdf({
+                                        payrollRun: run.id,
+                                        payslip: payslip.id,
+                                    }).url
+                                }
+                            >
+                                <Download className="mr-1 h-4 w-4" />
+                                Download PDF
+                            </a>
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={() => window.print()}
+                            aria-label="Print payslip"
+                        >
+                            <Printer className="mr-1 h-4 w-4" />
+                            Print
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Payslip document */}
