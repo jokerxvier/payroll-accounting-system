@@ -201,6 +201,9 @@ export default function PayrollRunShow({ run, payslips, progress }: Props) {
                                                 Staff
                                             </TableHead>
                                             <TableHead className="text-xs tracking-wide text-muted-foreground uppercase">
+                                                Name
+                                            </TableHead>
+                                            <TableHead className="text-xs tracking-wide text-muted-foreground uppercase">
                                                 Gross
                                             </TableHead>
                                             <TableHead className="text-xs tracking-wide text-muted-foreground uppercase">
@@ -219,6 +222,13 @@ export default function PayrollRunShow({ run, payslips, progress }: Props) {
                                             <TableRow key={p.id}>
                                                 <TableCell className="font-mono text-xs">
                                                     {p.lms_staff_id}
+                                                </TableCell>
+                                                <TableCell className="text-sm">
+                                                    {p.staff_name ?? (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            Unknown staff
+                                                        </span>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell className="tabular-nums">
                                                     {formatCurrency(

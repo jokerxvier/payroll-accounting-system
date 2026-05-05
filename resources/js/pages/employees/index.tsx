@@ -5,6 +5,7 @@ import {
     ChevronDown,
     ChevronRight,
     Search,
+    Sparkles,
     Users,
     X,
 } from 'lucide-react';
@@ -14,6 +15,17 @@ import { EmployeeRowEditor } from '@/components/employees/employee-row-editor';
 import { InlineMoneyEdit } from '@/components/inline-money-edit';
 import { PageHeader } from '@/components/page-header';
 import { StatCard } from '@/components/stat-card';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -48,6 +60,7 @@ interface Props {
     filters: EmployeeListFilters;
     departmentOptions: DepartmentOption[];
     employmentTypeOptions: EmploymentTypeOption[];
+    can?: { seedDemoSalaries?: boolean };
 }
 
 const PATH = '/employees';
@@ -203,10 +216,13 @@ export default function EmployeesIndex({
     filters: initialFilters,
     departmentOptions,
     employmentTypeOptions,
+    can,
 }: Props) {
     const { filters, apply, applyDebounced, reset } =
         useTableFilters<EmployeeListFilters>(initialFilters, PATH);
     const [searchValue, setSearchValue] = useState(initialFilters.search ?? '');
+    const [seedDialogOpen, setSeedDialogOpen] = useState(false);
+    const [seeding, setSeeding] = useState(false);
 
     const columns = useMemo(() => buildColumns(), []);
 
@@ -345,6 +361,65 @@ export default function EmployeesIndex({
                     eyebrow="DIRECTORY"
                     title="Employees"
                     description={`${totalLabel} drawn from the LMS staff roster`}
+                    actions={
+                        can?.seedDemoSalaries ? (
+                            <AlertDialog
+                                open={seedDialogOpen}
+                                onOpenChange={setSeedDialogOpen}
+                            >
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                        <Sparkles className="mr-1 h-3.5 w-3.5" />
+                                        Seed demo salaries
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>
+                                            Seed demo salaries
+                                        </AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Assigns a random round-thousand
+                                            basic salary (₱25,000 – ₱75,000) to
+                                            every active employee currently at
+                                            zero. Idempotent — non-zero rows are
+                                            never touched. Dev/demo only;
+                                            disabled in production.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>
+                                            Cancel
+                                        </AlertDialogCancel>
+                                        <AlertDialogAction
+                                            disabled={seeding}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                setSeeding(true);
+                                                router.post(
+                                                    '/admin/dev/seed-demo-salaries',
+                                                    {},
+                                                    {
+                                                        preserveScroll: true,
+                                                        onFinish: () => {
+                                                            setSeeding(false);
+                                                            setSeedDialogOpen(
+                                                                false,
+                                                            );
+                                                        },
+                                                    },
+                                                );
+                                            }}
+                                        >
+                                            {seeding
+                                                ? 'Seeding…'
+                                                : 'Seed salaries'}
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        ) : undefined
+                    }
                 />
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

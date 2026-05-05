@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Admin\AllowanceController;
 use App\Http\Controllers\Admin\DeductionTypeController;
+use App\Http\Controllers\Admin\DevSeedController;
 use App\Http\Controllers\Admin\PayPeriodController;
 use App\Http\Controllers\Admin\PayrollRunController;
 use App\Http\Controllers\Admin\StatutoryContributionController;
@@ -67,4 +68,10 @@ Route::middleware(['auth', 'verified'])
             ->name('payroll-runs.store');
         Route::get('payroll-runs/{payrollRun}', [PayrollRunController::class, 'show'])
             ->name('payroll-runs.show');
+
+        // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
+        // super-admin + non-production; the controller carries a defense-
+        // in-depth abort for the production case.
+        Route::post('dev/seed-demo-salaries', [DevSeedController::class, 'seedDemoSalaries'])
+            ->name('dev.seed-demo-salaries');
     });

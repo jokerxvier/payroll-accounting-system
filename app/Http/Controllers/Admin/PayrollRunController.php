@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Payroll\GeneratePayrollRunAction;
 use App\Http\Controllers\Controller;
+use App\Models\Lms\Staff;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollRun;
 use Illuminate\Http\RedirectResponse;
@@ -93,21 +94,30 @@ final class PayrollRunController extends Controller
         Gate::authorize('view', $payrollRun);
 
         $payrollRun->load(['payPeriod', 'approvedBy:id,name', 'voidedBy:id,name']);
-        $payslips = $payrollRun
+        $rawPayslips = $payrollRun
             ->payslips()
             ->orderBy('lms_staff_id')
             ->limit(500)
-            ->get()
-            ->map(fn ($p): array => [
-                'id' => $p->id,
-                'lms_staff_id' => $p->lms_staff_id,
-                'gross_pay_centavos' => $p->gross_pay_centavos,
-                'total_employee_deductions_centavos' => $p->total_employee_deductions_centavos,
-                'total_employer_contributions_centavos' => $p->total_employer_contributions_centavos,
-                'net_pay_centavos' => $p->net_pay_centavos,
-                'taxable_income_centavos' => $p->taxable_income_centavos,
-                'applied_exemptions' => $p->applied_exemptions ?? [],
-            ]);
+            ->get();
+
+        // One LMS query for the whole batch — no N+1. Read-only LMS connection
+        // is enforced by the ReadOnlyModel base class.
+        $staffNames = Staff::query()
+            ->whereIn('id', $rawPayslips->pluck('lms_staff_id')->unique())
+            ->get(['id', 'first_name', 'last_name'])
+            ->keyBy('id');
+
+        $payslips = $rawPayslips->map(fn ($p): array => [
+            'id' => $p->id,
+            'lms_staff_id' => $p->lms_staff_id,
+            'staff_name' => $staffNames->get($p->lms_staff_id)?->full_name,
+            'gross_pay_centavos' => $p->gross_pay_centavos,
+            'total_employee_deductions_centavos' => $p->total_employee_deductions_centavos,
+            'total_employer_contributions_centavos' => $p->total_employer_contributions_centavos,
+            'net_pay_centavos' => $p->net_pay_centavos,
+            'taxable_income_centavos' => $p->taxable_income_centavos,
+            'applied_exemptions' => $p->applied_exemptions ?? [],
+        ]);
 
         return Inertia::render('admin/payroll-runs/show', [
             'run' => self::serialiseRun($payrollRun),

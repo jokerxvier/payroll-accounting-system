@@ -40,6 +40,7 @@ export interface PayrollRunSummary {
 export interface PayslipSummary {
     id: number;
     lms_staff_id: number;
+    staff_name: string | null;
     gross_pay_centavos: number;
     total_employee_deductions_centavos: number;
     total_employer_contributions_centavos: number;

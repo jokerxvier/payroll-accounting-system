@@ -94,6 +94,15 @@ class AppServiceProvider extends ServiceProvider
         // Week 8 — real-time gross-to-net preview. Class-level Gate (no
         // underlying model), so it lives outside Gate::policy() registrations.
         Gate::define('payroll.preview', [PayrollPreviewPolicy::class, 'preview']);
+
+        // Phase 3 W9 — dev/demo affordance. Super-admin only AND only when
+        // not running in production. The controller adds its own
+        // `app()->environment('production')` guard for defence in depth,
+        // but gating here keeps the button hidden in the admin UI.
+        Gate::define(
+            'dev.seed-demo-salaries',
+            fn ($user): bool => $user->hasRole('super-admin') && ! app()->environment('production'),
+        );
     }
 
     /**

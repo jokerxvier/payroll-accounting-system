@@ -64,6 +64,12 @@ class EmployeeController extends Controller
             'filters' => $request->only(['search', 'status', 'department_id', 'employment_classification', 'sort_by', 'sort_dir', 'per_page']),
             'departmentOptions' => Department::query()->orderBy('name')->get(['id', 'name']),
             'employmentTypeOptions' => EmployeeProfile::employmentTypeOptions(),
+            'can' => [
+                // Dev/demo affordance — gated to super-admin AND non-production
+                // by the `dev.seed-demo-salaries` Gate. The button on the
+                // index hides itself when this is false.
+                'seedDemoSalaries' => Gate::allows('dev.seed-demo-salaries'),
+            ],
         ]);
     }
 
