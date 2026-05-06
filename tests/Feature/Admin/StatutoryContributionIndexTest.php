@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Exports\StatutoryContributionExport;
 use App\Models\Pas\StatutoryContribution;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Maatwebsite\Excel\Facades\Excel;
 
 uses(RefreshDatabase::class);
 
@@ -157,3 +159,33 @@ it('exposes can.modify=false for forbidden roles', function () {
         expect($user->can('create', StatutoryContribution::class))->toBeFalse();
     }
 });
+
+/*
+ * Phase 3 W12 Stage B — GET /admin/contribution-tables/template
+ *
+ * Excel snapshot of every row. Audit / archival surface; not a round-trip
+ * import template. Same auth matrix as the index.
+ */
+
+it('super-admin downloads the contribution-tables Excel snapshot', function () {
+    Excel::fake();
+    $user = indexAuthAs('super-admin');
+    StatutoryContribution::factory()->sss()->create();
+
+    $this->actingAs($user)
+        ->get('/admin/contribution-tables/template')
+        ->assertOk();
+
+    Excel::assertDownloaded(
+        'contribution-tables.xlsx',
+        fn ($export): bool => $export instanceof StatutoryContributionExport,
+    );
+});
+
+it('forbids the contribution-tables Excel snapshot for non-super-admin roles', function (string $role) {
+    $user = indexAuthAs($role);
+
+    $this->actingAs($user)
+        ->get('/admin/contribution-tables/template')
+        ->assertForbidden();
+})->with(['payroll-officer', 'hr', 'auditor', 'employee']);

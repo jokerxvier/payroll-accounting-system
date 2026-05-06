@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exports\StatutoryContributionExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StatutoryContributionStoreRequest;
 use App\Http\Requests\Admin\StatutoryContributionUpdateRequest;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Admin surface for the unified pas_statutory_contributions table.
@@ -31,6 +34,22 @@ use Inertia\Response;
  */
 final class StatutoryContributionController extends Controller
 {
+    /**
+     * Phase 3 W12 Stage B — download every contribution row as Excel.
+     * Snapshot for audit / archival / external tooling. Writing back via
+     * Excel is intentionally NOT supported in v1; admins use the
+     * algorithm-specific subforms in the create/edit UI to author rules.
+     */
+    public function template(): BinaryFileResponse
+    {
+        Gate::authorize('viewAny', StatutoryContribution::class);
+
+        return Excel::download(
+            new StatutoryContributionExport,
+            'contribution-tables.xlsx',
+        );
+    }
+
     public function index(): Response
     {
         Gate::authorize('viewAny', StatutoryContribution::class);

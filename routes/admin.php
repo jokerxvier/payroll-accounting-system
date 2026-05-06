@@ -19,6 +19,12 @@ Route::middleware(['auth', 'verified'])
             ->name('contribution-tables.index');
         Route::get('contribution-tables/create', [StatutoryContributionController::class, 'create'])
             ->name('contribution-tables.create');
+        // Phase 3 W12 Stage B — Excel snapshot of every contribution row.
+        // Static segment registered BEFORE the {contribution} wildcard so
+        // /contribution-tables/template doesn't get caught by route-model
+        // binding as a literal id.
+        Route::get('contribution-tables/template', [StatutoryContributionController::class, 'template'])
+            ->name('contribution-tables.template');
         Route::post('contribution-tables', [StatutoryContributionController::class, 'store'])
             ->name('contribution-tables.store');
 

@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
     ChevronRight,
+    Download,
     FileText,
     Pencil,
     Plus,
@@ -37,6 +38,7 @@ import {
     edit as contributionTablesEdit,
     index as contributionTablesIndex,
     show as contributionTablesShow,
+    template as contributionTablesTemplate,
     voidMethod as contributionTablesVoid,
 } from '@/routes/admin/contribution-tables';
 import type {
@@ -177,12 +179,20 @@ export default function ContributionTablesIndex({
                     title="Contribution tables"
                     description="Versioned, effective-dated rates for statutory contributions. Adding a new version supersedes the current one."
                     actions={
-                        <Button asChild>
-                            <Link href={contributionTablesCreate().url}>
-                                <Plus className="mr-1 h-4 w-4" />
-                                Add new version
-                            </Link>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button asChild variant="outline" size="sm">
+                                <a href={contributionTablesTemplate().url}>
+                                    <Download className="mr-1 h-4 w-4" />
+                                    Export Excel
+                                </a>
+                            </Button>
+                            <Button asChild>
+                                <Link href={contributionTablesCreate().url}>
+                                    <Plus className="mr-1 h-4 w-4" />
+                                    Add new version
+                                </Link>
+                            </Button>
+                        </div>
                     }
                 />
 
