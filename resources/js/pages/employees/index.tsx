@@ -4,6 +4,7 @@ import {
     ArrowRight,
     ChevronDown,
     ChevronRight,
+    FileSpreadsheet,
     Search,
     Sparkles,
     Users,
@@ -362,63 +363,74 @@ export default function EmployeesIndex({
                     title="Employees"
                     description={`${totalLabel} drawn from the LMS staff roster`}
                     actions={
-                        can?.seedDemoSalaries ? (
-                            <AlertDialog
-                                open={seedDialogOpen}
-                                onOpenChange={setSeedDialogOpen}
-                            >
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="outline" size="sm">
-                                        <Sparkles className="mr-1 h-3.5 w-3.5" />
-                                        Seed demo salaries
-                                    </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>
+                        <div className="flex items-center gap-2">
+                            <Button asChild variant="outline" size="sm">
+                                <Link href="/admin/employees/import">
+                                    <FileSpreadsheet className="mr-1 h-3.5 w-3.5" />
+                                    Bulk edit (Excel)
+                                </Link>
+                            </Button>
+                            {can?.seedDemoSalaries ? (
+                                <AlertDialog
+                                    open={seedDialogOpen}
+                                    onOpenChange={setSeedDialogOpen}
+                                >
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="outline" size="sm">
+                                            <Sparkles className="mr-1 h-3.5 w-3.5" />
                                             Seed demo salaries
-                                        </AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            Assigns a random round-thousand
-                                            basic salary (₱25,000 – ₱75,000) to
-                                            every active employee currently at
-                                            zero. Idempotent — non-zero rows are
-                                            never touched. Dev/demo only;
-                                            disabled in production.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>
-                                            Cancel
-                                        </AlertDialogCancel>
-                                        <AlertDialogAction
-                                            disabled={seeding}
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                setSeeding(true);
-                                                router.post(
-                                                    '/admin/dev/seed-demo-salaries',
-                                                    {},
-                                                    {
-                                                        preserveScroll: true,
-                                                        onFinish: () => {
-                                                            setSeeding(false);
-                                                            setSeedDialogOpen(
-                                                                false,
-                                                            );
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>
+                                                Seed demo salaries
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Assigns a random round-thousand
+                                                basic salary (₱25,000 – ₱75,000)
+                                                to every active employee
+                                                currently at zero. Idempotent —
+                                                non-zero rows are never touched.
+                                                Dev/demo only; disabled in
+                                                production.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>
+                                                Cancel
+                                            </AlertDialogCancel>
+                                            <AlertDialogAction
+                                                disabled={seeding}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    setSeeding(true);
+                                                    router.post(
+                                                        '/admin/dev/seed-demo-salaries',
+                                                        {},
+                                                        {
+                                                            preserveScroll: true,
+                                                            onFinish: () => {
+                                                                setSeeding(
+                                                                    false,
+                                                                );
+                                                                setSeedDialogOpen(
+                                                                    false,
+                                                                );
+                                                            },
                                                         },
-                                                    },
-                                                );
-                                            }}
-                                        >
-                                            {seeding
-                                                ? 'Seeding…'
-                                                : 'Seed salaries'}
-                                        </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-                        ) : undefined
+                                                    );
+                                                }}
+                                            >
+                                                {seeding
+                                                    ? 'Seeding…'
+                                                    : 'Seed salaries'}
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            ) : null}
+                        </div>
                     }
                 />
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\AllowanceController;
 use App\Http\Controllers\Admin\DeductionTypeController;
 use App\Http\Controllers\Admin\DevSeedController;
+use App\Http\Controllers\Admin\EmployeeBulkImportController;
 use App\Http\Controllers\Admin\PayPeriodController;
 use App\Http\Controllers\Admin\PayrollRunController;
 use App\Http\Controllers\Admin\StatutoryContributionController;
@@ -94,6 +95,17 @@ Route::middleware(['auth', 'verified'])
             ->name('payroll-runs.bulk-pdfs.build');
         Route::get('payroll-runs/{payrollRun}/bulk-pdfs', [PayrollRunController::class, 'downloadBulkPdfs'])
             ->name('payroll-runs.bulk-pdfs.download');
+
+        // Phase 3 W12 Stage A — employee bulk-edit via Excel. Three-step
+        // flow: download template → upload+preview → confirm.
+        Route::get('employees/import', [EmployeeBulkImportController::class, 'index'])
+            ->name('employees.import.index');
+        Route::get('employees/import/template', [EmployeeBulkImportController::class, 'template'])
+            ->name('employees.import.template');
+        Route::post('employees/import/preview', [EmployeeBulkImportController::class, 'preview'])
+            ->name('employees.import.preview');
+        Route::post('employees/import/confirm/{token}', [EmployeeBulkImportController::class, 'confirm'])
+            ->name('employees.import.confirm');
 
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-
