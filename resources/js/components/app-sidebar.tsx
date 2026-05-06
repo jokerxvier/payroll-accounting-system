@@ -1,11 +1,9 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     BarChart3,
-    BookOpen,
     Calculator,
     CalendarDays,
     FileSearch,
-    FolderGit2,
     LayoutGrid,
     MinusCircle,
     PlayCircle,
@@ -109,18 +107,7 @@ const adminNavItems: NavItem[] = [
     },
 ];
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
-];
+const footerNavItems: NavItem[] = [];
 
 /**
  * Roles allowed to see the Payroll preview entry. Mirrors
