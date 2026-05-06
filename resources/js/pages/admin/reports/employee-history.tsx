@@ -1,16 +1,23 @@
 import { Head, router } from '@inertiajs/react';
-import { Download, Users } from 'lucide-react';
+import { Check, ChevronsUpDown, Download, Users } from 'lucide-react';
+import { useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '@/components/ui/command';
 import { Label } from '@/components/ui/label';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import {
     Table,
     TableBody,
@@ -19,6 +26,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
 interface EmployeeOption {
     lms_staff_id: number;
@@ -87,6 +95,8 @@ export default function EmployeeHistoryReport({
     rows,
     totals,
 }: Props) {
+    const [pickerOpen, setPickerOpen] = useState(false);
+
     const exportUrl = filters.employee
         ? `/admin/reports/employee-history/export?employee=${filters.employee}`
         : null;
@@ -98,6 +108,10 @@ export default function EmployeeHistoryReport({
             { preserveScroll: true, preserveState: true },
         );
     };
+
+    const triggerLabel = employee
+        ? `${employee.full_name ?? `Staff #${employee.lms_staff_id}`} · ${employee.lms_staff_id}`
+        : 'Select an employee…';
 
     return (
         <>
@@ -129,36 +143,82 @@ export default function EmployeeHistoryReport({
                     <CardContent className="space-y-3">
                         <div className="space-y-1">
                             <Label htmlFor="employee-pick">Pick employee</Label>
-                            <Select
-                                value={
-                                    filters.employee
-                                        ? String(filters.employee)
-                                        : ''
-                                }
-                                onValueChange={onPick}
+                            <Popover
+                                open={pickerOpen}
+                                onOpenChange={setPickerOpen}
                             >
-                                <SelectTrigger
-                                    id="employee-pick"
-                                    className="max-w-md"
-                                >
-                                    <SelectValue placeholder="Select an employee…" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {employees.map((e) => (
-                                        <SelectItem
-                                            key={e.lms_staff_id}
-                                            value={String(e.lms_staff_id)}
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        id="employee-pick"
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={pickerOpen}
+                                        className="w-full max-w-md justify-between font-normal"
+                                    >
+                                        <span
+                                            className={cn(
+                                                'truncate',
+                                                !employee &&
+                                                    'text-muted-foreground',
+                                            )}
                                         >
-                                            <span className="font-mono text-xs text-muted-foreground">
-                                                {e.lms_staff_id}
-                                            </span>
-                                            <span className="ml-2">
-                                                {e.full_name ?? 'Unknown staff'}
-                                            </span>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                            {triggerLabel}
+                                        </span>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                    className="w-(--radix-popover-trigger-width) p-0"
+                                    align="start"
+                                >
+                                    <Command>
+                                        <CommandInput placeholder="Search by name or staff id…" />
+                                        <CommandList>
+                                            <CommandEmpty>
+                                                No employee found.
+                                            </CommandEmpty>
+                                            <CommandGroup>
+                                                {employees.map((e) => (
+                                                    <CommandItem
+                                                        key={e.lms_staff_id}
+                                                        // cmdk filters on this string —
+                                                        // include both name and id so
+                                                        // either matches the search.
+                                                        value={`${e.full_name ?? ''} ${e.lms_staff_id}`}
+                                                        onSelect={() => {
+                                                            setPickerOpen(
+                                                                false,
+                                                            );
+                                                            onPick(
+                                                                String(
+                                                                    e.lms_staff_id,
+                                                                ),
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                'mr-2 h-4 w-4',
+                                                                filters.employee ===
+                                                                    e.lms_staff_id
+                                                                    ? 'opacity-100'
+                                                                    : 'opacity-0',
+                                                            )}
+                                                        />
+                                                        <span className="font-mono text-xs text-muted-foreground">
+                                                            {e.lms_staff_id}
+                                                        </span>
+                                                        <span className="ml-2">
+                                                            {e.full_name ??
+                                                                'Unknown staff'}
+                                                        </span>
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
 
                         {employee ? (
