@@ -77,9 +77,10 @@ final class ReportsController extends Controller
         $employee = null;
         $rows = [];
         $totals = self::zeroHistoryTotals();
+        $ytdByYear = [];
 
         if ($staffId !== null) {
-            [$employee, $rows, $totals] = $this->buildEmployeeHistoryRows($staffId);
+            [$employee, $rows, $totals, $ytdByYear] = $this->buildEmployeeHistoryRows($staffId);
         }
 
         return Inertia::render('admin/reports/employee-history', [
@@ -88,6 +89,7 @@ final class ReportsController extends Controller
             'employee' => $employee,
             'rows' => $rows,
             'totals' => $totals,
+            'ytd_by_year' => $ytdByYear,
         ]);
     }
 
@@ -100,7 +102,7 @@ final class ReportsController extends Controller
             abort(422, 'Pick an employee before exporting.');
         }
 
-        [$employee, $rows] = $this->buildEmployeeHistoryRows($staffId);
+        [$employee, $rows, $totals, $ytdByYear] = $this->buildEmployeeHistoryRows($staffId);
 
         $filename = sprintf(
             'employee-history_staff%d_%s.xlsx',
@@ -109,7 +111,7 @@ final class ReportsController extends Controller
         );
 
         return Excel::download(
-            new EmployeeHistoryReportExport($employee, $rows),
+            new EmployeeHistoryReportExport($employee, $rows, $ytdByYear),
             $filename,
         );
     }
@@ -147,7 +149,7 @@ final class ReportsController extends Controller
     }
 
     /**
-     * @return array{0: array<string, mixed>|null, 1: list<array<string, mixed>>, 2: array<string, int>}
+     * @return array{0: array<string, mixed>|null, 1: list<array<string, mixed>>, 2: array<string, int>, 3: list<array<string, int>>}
      */
     private function buildEmployeeHistoryRows(int $lmsStaffId): array
     {
@@ -172,10 +174,33 @@ final class ReportsController extends Controller
         $cumulativeDeductions = 0;
         $cumulativeNet = 0;
 
-        $rows = $payslips->map(function (Payslip $p) use (&$cumulativeGross, &$cumulativeDeductions, &$cumulativeNet): array {
+        /** @var array<int, array<string, int>> $perYear */
+        $perYear = [];
+
+        $rows = $payslips->map(function (Payslip $p) use (&$cumulativeGross, &$cumulativeDeductions, &$cumulativeNet, &$perYear): array {
             $cumulativeGross += $p->gross_pay_centavos;
             $cumulativeDeductions += $p->total_employee_deductions_centavos;
             $cumulativeNet += $p->net_pay_centavos;
+
+            // YTD aggregation by calendar year of computed_at. Falls
+            // back to the pay-period end_date when computed_at is null
+            // (defensive — should never happen for persisted rows).
+            $stampYear = $p->computed_at
+                ? (int) $p->computed_at->year
+                : (int) ($p->payrollRun?->payPeriod?->end_date?->year ?? CarbonImmutable::now()->year);
+
+            $perYear[$stampYear] ??= [
+                'payslip_count' => 0,
+                'gross_pay_centavos' => 0,
+                'total_employee_deductions_centavos' => 0,
+                'total_employer_contributions_centavos' => 0,
+                'total_net_pay_centavos' => 0,
+            ];
+            $perYear[$stampYear]['payslip_count']++;
+            $perYear[$stampYear]['gross_pay_centavos'] += $p->gross_pay_centavos;
+            $perYear[$stampYear]['total_employee_deductions_centavos'] += $p->total_employee_deductions_centavos;
+            $perYear[$stampYear]['total_employer_contributions_centavos'] += $p->total_employer_contributions_centavos;
+            $perYear[$stampYear]['total_net_pay_centavos'] += $p->net_pay_centavos;
 
             return [
                 'payslip_id' => $p->id,
@@ -193,6 +218,15 @@ final class ReportsController extends Controller
             ];
         })->values()->all();
 
+        // Sort years descending — most recent first matches how a user
+        // skimming a YTD list reads it (this year, then last year, then
+        // older).
+        krsort($perYear);
+        $ytdByYear = [];
+        foreach ($perYear as $year => $totals) {
+            $ytdByYear[] = ['year' => $year] + $totals;
+        }
+
         return [
             $employee,
             $rows,
@@ -202,6 +236,7 @@ final class ReportsController extends Controller
                 'total_employee_deductions_centavos' => $cumulativeDeductions,
                 'total_net_pay_centavos' => $cumulativeNet,
             ],
+            $ytdByYear,
         ];
     }
 

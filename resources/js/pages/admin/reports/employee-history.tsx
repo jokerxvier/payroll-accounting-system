@@ -62,12 +62,22 @@ interface HistoryTotals {
     total_net_pay_centavos: number;
 }
 
+interface YtdYear {
+    year: number;
+    payslip_count: number;
+    gross_pay_centavos: number;
+    total_employee_deductions_centavos: number;
+    total_employer_contributions_centavos: number;
+    total_net_pay_centavos: number;
+}
+
 interface Props {
     filters: { employee: number | null };
     employees: EmployeeOption[];
     employee: EmployeeIdentity | null;
     rows: HistoryRow[];
     totals: HistoryTotals;
+    ytd_by_year: YtdYear[];
 }
 
 function formatCurrency(centavos: number): string {
@@ -94,6 +104,7 @@ export default function EmployeeHistoryReport({
     employee,
     rows,
     totals,
+    ytd_by_year: ytdByYear,
 }: Props) {
     const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -252,6 +263,52 @@ export default function EmployeeHistoryReport({
                     </CardContent>
                 </Card>
 
+                {filters.employee && ytdByYear.length > 0 ? (
+                    <div className="space-y-2">
+                        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                            Year-to-date
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {ytdByYear.map((y) => (
+                                <Card key={y.year}>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="font-serif text-2xl tracking-tight">
+                                            {y.year}
+                                        </CardTitle>
+                                        <p className="text-xs text-muted-foreground">
+                                            {y.payslip_count} payslip
+                                            {y.payslip_count === 1 ? '' : 's'}
+                                        </p>
+                                    </CardHeader>
+                                    <CardContent className="space-y-1 text-sm">
+                                        <YtdRow
+                                            label="Gross"
+                                            centavos={y.gross_pay_centavos}
+                                        />
+                                        <YtdRow
+                                            label="EE Deductions"
+                                            centavos={
+                                                y.total_employee_deductions_centavos
+                                            }
+                                        />
+                                        <YtdRow
+                                            label="ER Contributions"
+                                            centavos={
+                                                y.total_employer_contributions_centavos
+                                            }
+                                        />
+                                        <YtdRow
+                                            label="Net Pay"
+                                            centavos={y.total_net_pay_centavos}
+                                            emphasis
+                                        />
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </div>
+                ) : null}
+
                 {filters.employee ? (
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between">
@@ -333,6 +390,29 @@ export default function EmployeeHistoryReport({
                 ) : null}
             </div>
         </>
+    );
+}
+
+function YtdRow({
+    label,
+    centavos,
+    emphasis,
+}: {
+    label: string;
+    centavos: number;
+    emphasis?: boolean;
+}) {
+    return (
+        <div className="flex items-baseline justify-between">
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span
+                className={
+                    emphasis ? 'font-semibold tabular-nums' : 'tabular-nums'
+                }
+            >
+                {formatCurrency(centavos)}
+            </span>
+        </div>
     );
 }
 

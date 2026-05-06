@@ -39,7 +39,8 @@ it('renders the employee-history page with no employee picked', function () {
                 ->has('employees', 2)
                 ->where('employee', null)
                 ->has('rows', 0)
-                ->where('totals.payslip_count', 0),
+                ->where('totals.payslip_count', 0)
+                ->has('ytd_by_year', 0),
         );
 });
 
@@ -140,4 +141,90 @@ it('rejects the Excel export when no employee is given', function () {
     $this->actingAs($user)
         ->get('/admin/reports/employee-history/export')
         ->assertStatus(422);
+});
+
+/*
+ * Phase 4 W13 Stage C — YTD per-employee aggregates.
+ */
+
+it('groups payslips by calendar year for YTD totals', function () {
+    $user = authHistoryAs('super-admin');
+    EmployeeProfile::factory()->create(['lms_staff_id' => 5151]);
+
+    $r1 = PayrollRun::factory()->computed()->create();
+    $r2 = PayrollRun::factory()->computed()->create();
+    $r3 = PayrollRun::factory()->computed()->create();
+
+    Payslip::factory()->for($r1, 'payrollRun')->create([
+        'lms_staff_id' => 5151,
+        'gross_pay_centavos' => 1_000_000,
+        'total_employee_deductions_centavos' => 100_000,
+        'total_employer_contributions_centavos' => 50_000,
+        'net_pay_centavos' => 900_000,
+        'computed_at' => '2025-12-15 10:00:00',
+    ]);
+    Payslip::factory()->for($r2, 'payrollRun')->create([
+        'lms_staff_id' => 5151,
+        'gross_pay_centavos' => 2_000_000,
+        'total_employee_deductions_centavos' => 200_000,
+        'total_employer_contributions_centavos' => 100_000,
+        'net_pay_centavos' => 1_800_000,
+        'computed_at' => '2026-01-31 10:00:00',
+    ]);
+    Payslip::factory()->for($r3, 'payrollRun')->create([
+        'lms_staff_id' => 5151,
+        'gross_pay_centavos' => 3_000_000,
+        'total_employee_deductions_centavos' => 300_000,
+        'total_employer_contributions_centavos' => 150_000,
+        'net_pay_centavos' => 2_700_000,
+        'computed_at' => '2026-05-31 10:00:00',
+    ]);
+
+    $this->actingAs($user)
+        ->get('/admin/reports/employee-history?employee=5151')
+        ->assertInertia(
+            fn ($page) => $page
+                ->has('ytd_by_year', 2)
+                // Most recent year first.
+                ->where('ytd_by_year.0.year', 2026)
+                ->where('ytd_by_year.0.payslip_count', 2)
+                ->where('ytd_by_year.0.gross_pay_centavos', 5_000_000)
+                ->where('ytd_by_year.0.total_employee_deductions_centavos', 500_000)
+                ->where('ytd_by_year.0.total_employer_contributions_centavos', 250_000)
+                ->where('ytd_by_year.0.total_net_pay_centavos', 4_500_000)
+                ->where('ytd_by_year.1.year', 2025)
+                ->where('ytd_by_year.1.payslip_count', 1)
+                ->where('ytd_by_year.1.gross_pay_centavos', 1_000_000),
+        );
+});
+
+it('excludes payslips from voided runs from YTD aggregates', function () {
+    $user = authHistoryAs('super-admin');
+    EmployeeProfile::factory()->create(['lms_staff_id' => 9090]);
+
+    $voided = PayrollRun::factory()->voided()->create();
+    $computed = PayrollRun::factory()->computed()->create();
+
+    Payslip::factory()->for($voided, 'payrollRun')->create([
+        'lms_staff_id' => 9090,
+        'gross_pay_centavos' => 9_999_999,
+        'net_pay_centavos' => 9_999_999,
+        'computed_at' => '2026-05-15 10:00:00',
+    ]);
+    Payslip::factory()->for($computed, 'payrollRun')->create([
+        'lms_staff_id' => 9090,
+        'gross_pay_centavos' => 1_000_000,
+        'net_pay_centavos' => 800_000,
+        'computed_at' => '2026-05-20 10:00:00',
+    ]);
+
+    $this->actingAs($user)
+        ->get('/admin/reports/employee-history?employee=9090')
+        ->assertInertia(
+            fn ($page) => $page
+                ->has('ytd_by_year', 1)
+                ->where('ytd_by_year.0.payslip_count', 1)
+                ->where('ytd_by_year.0.gross_pay_centavos', 1_000_000)
+                ->where('ytd_by_year.0.total_net_pay_centavos', 800_000),
+        );
 });

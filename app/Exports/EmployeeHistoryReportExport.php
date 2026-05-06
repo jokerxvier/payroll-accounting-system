@@ -19,10 +19,12 @@ final class EmployeeHistoryReportExport implements FromCollection, ShouldAutoSiz
     /**
      * @param  array<string, mixed>|null  $employee
      * @param  list<array<string, mixed>>  $rows
+     * @param  list<array<string, int>>  $ytdByYear
      */
     public function __construct(
         private readonly ?array $employee,
         private readonly array $rows,
+        private readonly array $ytdByYear = [],
     ) {}
 
     /**
@@ -64,6 +66,35 @@ final class EmployeeHistoryReportExport implements FromCollection, ShouldAutoSiz
             number_format($r['cumulative_net_centavos'] / 100, 2, '.', ''),
         ]);
 
-        return collect([$columnHeader])->concat($body);
+        $output = collect([$columnHeader])->concat($body);
+
+        // YTD section (Phase 4 W13 Stage C). Groups the same payslips by
+        // calendar year for groundwork toward year-end annualization.
+        if (count($this->ytdByYear) > 0) {
+            $output = $output
+                ->push([])
+                ->push(['YEAR-TO-DATE'])
+                ->push([
+                    'Year',
+                    'Payslips',
+                    'Gross Pay',
+                    'Employee Deductions',
+                    'Employer Contributions',
+                    'Net Pay',
+                ]);
+
+            foreach ($this->ytdByYear as $yearTotals) {
+                $output = $output->push([
+                    $yearTotals['year'],
+                    $yearTotals['payslip_count'],
+                    number_format($yearTotals['gross_pay_centavos'] / 100, 2, '.', ''),
+                    number_format($yearTotals['total_employee_deductions_centavos'] / 100, 2, '.', ''),
+                    number_format($yearTotals['total_employer_contributions_centavos'] / 100, 2, '.', ''),
+                    number_format($yearTotals['total_net_pay_centavos'] / 100, 2, '.', ''),
+                ]);
+            }
+        }
+
+        return $output;
     }
 }
