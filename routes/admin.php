@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\DevSeedController;
 use App\Http\Controllers\Admin\EmployeeBulkImportController;
 use App\Http\Controllers\Admin\PayPeriodController;
 use App\Http\Controllers\Admin\PayrollRunController;
+use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\StatutoryContributionController;
 use Illuminate\Support\Facades\Route;
 
@@ -112,6 +113,14 @@ Route::middleware(['auth', 'verified'])
             ->name('employees.import.preview');
         Route::post('employees/import/confirm/{token}', [EmployeeBulkImportController::class, 'confirm'])
             ->name('employees.import.confirm');
+
+        // Phase 4 W13 — Reports module. Read-only aggregates over payslips.
+        // Auth widens to super-admin + payroll-officer + hr because reports
+        // are an analytical surface needed by HR for monthly review.
+        Route::get('reports/payroll-summary', [ReportsController::class, 'payrollSummary'])
+            ->name('reports.payroll-summary');
+        Route::get('reports/payroll-summary/export', [ReportsController::class, 'payrollSummaryExport'])
+            ->name('reports.payroll-summary.export');
 
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-

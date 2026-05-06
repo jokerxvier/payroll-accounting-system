@@ -1,5 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
+    BarChart3,
     BookOpen,
     Calculator,
     CalendarDays,
@@ -61,6 +62,11 @@ const payrollNavItems: NavItem[] = [
         title: 'Preview',
         href: payrollPreviewShow(),
         icon: Calculator,
+    },
+    {
+        title: 'Payroll summary',
+        href: '/admin/reports/payroll-summary',
+        icon: BarChart3,
     },
 ];
 
