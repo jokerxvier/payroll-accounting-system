@@ -1,4 +1,5 @@
 import { Form, Head } from '@inertiajs/react';
+import { useRef } from 'react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -15,13 +16,44 @@ type Props = {
     status?: string;
     canResetPassword: boolean;
     canRegister: boolean;
+    showDemoLogin?: boolean;
 };
+
+const DEMO_ACCOUNTS = [
+    {
+        label: 'Super Admin',
+        email: 'super-admin@demo.test',
+        password: 'password',
+    },
+    {
+        label: 'Payroll Officer',
+        email: 'payroll-officer@demo.test',
+        password: 'password',
+    },
+    { label: 'HR', email: 'hr@demo.test', password: 'password' },
+    { label: 'Auditor', email: 'auditor@demo.test', password: 'password' },
+] as const;
 
 export default function Login({
     status,
     canResetPassword,
     canRegister,
+    showDemoLogin = false,
 }: Props) {
+    const emailRef = useRef<HTMLInputElement>(null);
+    const passwordRef = useRef<HTMLInputElement>(null);
+
+    function fillCredentials(email: string, password: string) {
+        if (emailRef.current) {
+            emailRef.current.value = email;
+        }
+
+        if (passwordRef.current) {
+            passwordRef.current.value = password;
+            passwordRef.current.focus();
+        }
+    }
+
     return (
         <>
             <Head title="Log in" />
@@ -37,6 +69,7 @@ export default function Login({
                             <div className="grid gap-2">
                                 <Label htmlFor="email">Email address</Label>
                                 <Input
+                                    ref={emailRef}
                                     id="email"
                                     type="email"
                                     name="email"
@@ -63,6 +96,7 @@ export default function Login({
                                     )}
                                 </div>
                                 <PasswordInput
+                                    ref={passwordRef}
                                     id="password"
                                     name="password"
                                     required
@@ -105,6 +139,39 @@ export default function Login({
                     </>
                 )}
             </Form>
+
+            {showDemoLogin && (
+                <div className="mt-6 space-y-2 rounded-lg border border-dashed border-border p-3">
+                    <p className="text-xs font-medium text-muted-foreground">
+                        Demo accounts — fill credentials with one click
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                        {DEMO_ACCOUNTS.map((account) => (
+                            <Button
+                                key={account.email}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                    fillCredentials(
+                                        account.email,
+                                        account.password,
+                                    )
+                                }
+                            >
+                                {account.label}
+                            </Button>
+                        ))}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                        Hidden in production. Run{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">
+                            php artisan db:seed --class=DemoUsersSeeder
+                        </code>{' '}
+                        once to create the accounts.
+                    </p>
+                </div>
+            )}
 
             {status && (
                 <div className="mb-4 text-center text-sm font-medium text-green-600">
