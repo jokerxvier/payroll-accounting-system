@@ -1,9 +1,11 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowLeft,
+    Archive,
     CheckCircle2,
     ChevronDown,
     ChevronRight,
+    Download,
     FileText,
     Loader2,
     Lock,
@@ -35,6 +37,10 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { index as payrollRunsIndex } from '@/routes/admin/payroll-runs';
+import {
+    build as bulkPdfsBuild,
+    download as bulkPdfsDownload,
+} from '@/routes/admin/payroll-runs/bulk-pdfs';
 import { show as payslipShow } from '@/routes/admin/payroll-runs/payslips';
 import { PAYROLL_RUN_STATUS_LABELS } from '@/types/payroll-run';
 import type {
@@ -350,10 +356,40 @@ export default function PayrollRunShow({
                 </div>
 
                 <Card>
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2">
                         <CardTitle className="text-sm font-medium">
                             Payslips
                         </CardTitle>
+                        {payslips.length > 0 ? (
+                            <div className="flex items-center gap-2">
+                                {run.has_bulk_pdf ? (
+                                    <Button asChild size="sm" variant="outline">
+                                        <a href={bulkPdfsDownload(run.id).url}>
+                                            <Download className="mr-1 h-4 w-4" />
+                                            Download all (ZIP)
+                                        </a>
+                                    </Button>
+                                ) : null}
+                                <Button
+                                    size="sm"
+                                    variant={
+                                        run.has_bulk_pdf ? 'ghost' : 'outline'
+                                    }
+                                    onClick={() => {
+                                        router.post(
+                                            bulkPdfsBuild(run.id).url,
+                                            {},
+                                            { preserveScroll: true },
+                                        );
+                                    }}
+                                >
+                                    <Archive className="mr-1 h-4 w-4" />
+                                    {run.has_bulk_pdf
+                                        ? 'Rebuild ZIP'
+                                        : 'Build ZIP'}
+                                </Button>
+                            </div>
+                        ) : null}
                     </CardHeader>
                     <CardContent>
                         {payslips.length === 0 ? (

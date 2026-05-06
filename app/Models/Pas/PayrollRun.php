@@ -90,6 +90,8 @@ final class PayrollRun extends Model
         'posted_by_user_id',
         'voided_at',
         'voided_by_user_id',
+        'bulk_pdf_zip_path',
+        'bulk_pdf_built_at',
     ];
 
     protected static function newFactory(): Factory
@@ -111,6 +113,7 @@ final class PayrollRun extends Model
             'approved_at' => 'immutable_datetime',
             'posted_at' => 'immutable_datetime',
             'voided_at' => 'immutable_datetime',
+            'bulk_pdf_built_at' => 'immutable_datetime',
             'submitted_by_user_id' => 'integer',
             'approved_by_user_id' => 'integer',
             'posted_by_user_id' => 'integer',

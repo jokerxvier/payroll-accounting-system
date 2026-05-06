@@ -88,6 +88,13 @@ Route::middleware(['auth', 'verified'])
         Route::get('payroll-runs/{payrollRun}/payslips/{payslip}/pdf', [PayrollRunController::class, 'downloadPayslipPdf'])
             ->name('payroll-runs.payslips.pdf');
 
+        // Phase 3 W11 Stage C — bulk payslips ZIP. POST kicks off the
+        // queued build; GET streams the assembled artefact.
+        Route::post('payroll-runs/{payrollRun}/bulk-pdfs', [PayrollRunController::class, 'buildBulkPdfs'])
+            ->name('payroll-runs.bulk-pdfs.build');
+        Route::get('payroll-runs/{payrollRun}/bulk-pdfs', [PayrollRunController::class, 'downloadBulkPdfs'])
+            ->name('payroll-runs.bulk-pdfs.download');
+
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-
         // in-depth abort for the production case.

@@ -40,6 +40,8 @@ export interface PayrollRunSummary {
     approved_by: PayrollRunActor | null;
     posted_by: PayrollRunActor | null;
     voided_by: PayrollRunActor | null;
+    bulk_pdf_built_at: string | null;
+    has_bulk_pdf: boolean;
 }
 
 export interface PayrollRunCanFlags {

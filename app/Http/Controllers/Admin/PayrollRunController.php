@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\Payroll\ApprovePayrollRunAction;
+use App\Actions\Payroll\BuildBulkPayslipsZipAction;
 use App\Actions\Payroll\GeneratePayrollRunAction;
 use App\Actions\Payroll\PostPayrollRunAction;
 use App\Actions\Payroll\SubmitPayrollRunForApprovalAction;
@@ -20,9 +21,11 @@ use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 /**
@@ -322,6 +325,50 @@ final class PayrollRunController extends Controller
     }
 
     /**
+     * Phase 3 W11 Stage C — kick off the bulk-payslips zip build.
+     * Idempotent on the action side; a second click while a build is
+     * still running is harmless (per-job idempotence at the storage
+     * layer).
+     */
+    public function buildBulkPdfs(PayrollRun $payrollRun, BuildBulkPayslipsZipAction $action): RedirectResponse
+    {
+        Gate::authorize('view', $payrollRun);
+
+        $action->execute($payrollRun);
+
+        return redirect()
+            ->route('admin.payroll-runs.show', $payrollRun->id)
+            ->with('success', 'Building bulk payslips ZIP. Refresh in a moment to download.');
+    }
+
+    /**
+     * Stream the assembled zip back to the user. 404 when the zip
+     * hasn't been built (or has been deleted from disk).
+     */
+    public function downloadBulkPdfs(PayrollRun $payrollRun): BinaryFileResponse
+    {
+        Gate::authorize('view', $payrollRun);
+
+        if ($payrollRun->bulk_pdf_zip_path === null) {
+            abort(404, 'Bulk payslips ZIP has not been built yet.');
+        }
+
+        if (! Storage::exists($payrollRun->bulk_pdf_zip_path)) {
+            abort(404, 'Bulk payslips ZIP is missing from storage.');
+        }
+
+        $filename = sprintf(
+            'payslips-%s.zip',
+            $payrollRun->payPeriod?->code ?? ('run'.$payrollRun->id),
+        );
+
+        return response()->download(
+            (string) Storage::path($payrollRun->bulk_pdf_zip_path),
+            $filename,
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private static function serialiseRun(PayrollRun $run): array
@@ -341,6 +388,8 @@ final class PayrollRunController extends Controller
             'posted_at' => $run->posted_at?->toIso8601String(),
             'voided_at' => $run->voided_at?->toIso8601String(),
             'created_at' => $run->created_at?->toIso8601String(),
+            'bulk_pdf_built_at' => $run->bulk_pdf_built_at?->toIso8601String(),
+            'has_bulk_pdf' => $run->bulk_pdf_zip_path !== null,
             'pay_period' => $run->payPeriod ? [
                 'id' => $run->payPeriod->id,
                 'code' => $run->payPeriod->code,
