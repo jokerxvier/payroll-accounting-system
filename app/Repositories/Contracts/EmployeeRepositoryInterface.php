@@ -65,4 +65,25 @@ interface EmployeeRepositoryInterface
      * @param  array<string, mixed>  $defaults
      */
     public function firstOrCreateForStaff(int $staffId, array $defaults = []): EmployeeProfile;
+
+    /**
+     * Count of LMS staff filtered by the payroll role allowlist that are
+     * marked active in the LMS (`active_status = 1`).
+     *
+     * Read-only against the `lms` connection.
+     */
+    public function countActiveStaff(): int;
+
+    /**
+     * Count of LMS staff (filtered by the payroll role allowlist) whose
+     * `date_of_joining` falls within the current Asia/Manila calendar
+     * month. Used as a "delta this month" headline figure.
+     *
+     * sm_staffs has no separation column, so subtractions are not modeled
+     * here for v1 — the dashboard renders this as joins-only and the user
+     * will see at most a positive delta.
+     *
+     * Read-only against the `lms` connection.
+     */
+    public function countStaffJoinedThisMonth(): int;
 }

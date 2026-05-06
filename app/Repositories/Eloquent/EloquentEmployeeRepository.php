@@ -7,6 +7,7 @@ namespace App\Repositories\Eloquent;
 use App\Models\Lms\Staff;
 use App\Models\Pas\EmployeeProfile;
 use App\Repositories\Contracts\EmployeeRepositoryInterface;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\LengthAwarePaginator as LengthAwarePaginatorImpl;
 use Illuminate\Pagination\Paginator;
@@ -220,5 +221,31 @@ final class EloquentEmployeeRepository implements EmployeeRepositoryInterface
             ['lms_staff_id' => $staffId],
             $defaults,
         );
+    }
+
+    public function countActiveStaff(): int
+    {
+        /** @var array<int, int> $allowlist */
+        $allowlist = (array) config('payroll.employee_role_allowlist', []);
+
+        return Staff::query()
+            ->active()
+            ->when($allowlist !== [], fn ($q) => $q->whereIn('role_id', $allowlist))
+            ->count();
+    }
+
+    public function countStaffJoinedThisMonth(): int
+    {
+        /** @var array<int, int> $allowlist */
+        $allowlist = (array) config('payroll.employee_role_allowlist', []);
+
+        $now = CarbonImmutable::now('Asia/Manila');
+        $start = $now->startOfMonth()->toDateString();
+        $end = $now->endOfMonth()->toDateString();
+
+        return Staff::query()
+            ->when($allowlist !== [], fn ($q) => $q->whereIn('role_id', $allowlist))
+            ->whereBetween('date_of_joining', [$start, $end])
+            ->count();
     }
 }

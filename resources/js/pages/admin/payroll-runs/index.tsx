@@ -2,7 +2,7 @@ import { Head, Link } from '@inertiajs/react';
 import { ChevronRight, FileText, Plus } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
+import { PayrollRunStatusBadge } from '@/components/payroll-run-status-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -17,26 +17,12 @@ import {
     create as payrollRunsCreate,
     show as payrollRunsShow,
 } from '@/routes/admin/payroll-runs';
-import { PAYROLL_RUN_STATUS_LABELS } from '@/types/payroll-run';
-import type { PayrollRunStatus, PayrollRunSummary } from '@/types/payroll-run';
+import type { PayrollRunSummary } from '@/types/payroll-run';
 
 interface Props {
     runs: PayrollRunSummary[];
     can: { create: boolean };
 }
-
-const STATUS_VARIANT: Record<
-    PayrollRunStatus,
-    'default' | 'secondary' | 'destructive' | 'outline'
-> = {
-    draft: 'outline',
-    computing: 'secondary',
-    computed: 'default',
-    pending_approval: 'secondary',
-    approved: 'default',
-    posted: 'default',
-    voided: 'destructive',
-};
 
 function formatCurrency(centavos: number): string {
     return new Intl.NumberFormat('en-PH', {
@@ -139,19 +125,9 @@ export default function PayrollRunsIndex({ runs, can }: Props) {
                                                         '—'}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge
-                                                        variant={
-                                                            STATUS_VARIANT[
-                                                                run.status
-                                                            ]
-                                                        }
-                                                    >
-                                                        {
-                                                            PAYROLL_RUN_STATUS_LABELS[
-                                                                run.status
-                                                            ]
-                                                        }
-                                                    </Badge>
+                                                    <PayrollRunStatusBadge
+                                                        status={run.status}
+                                                    />
                                                 </TableCell>
                                                 <TableCell className="tabular-nums">
                                                     {run.total_employees}
