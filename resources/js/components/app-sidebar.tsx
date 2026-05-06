@@ -68,6 +68,11 @@ const payrollNavItems: NavItem[] = [
         href: '/admin/reports/payroll-summary',
         icon: BarChart3,
     },
+    {
+        title: 'Employee history',
+        href: '/admin/reports/employee-history',
+        icon: Users,
+    },
 ];
 
 const adminNavItems: NavItem[] = [

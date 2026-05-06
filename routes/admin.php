@@ -121,6 +121,10 @@ Route::middleware(['auth', 'verified'])
             ->name('reports.payroll-summary');
         Route::get('reports/payroll-summary/export', [ReportsController::class, 'payrollSummaryExport'])
             ->name('reports.payroll-summary.export');
+        Route::get('reports/employee-history', [ReportsController::class, 'employeeHistory'])
+            ->name('reports.employee-history');
+        Route::get('reports/employee-history/export', [ReportsController::class, 'employeeHistoryExport'])
+            ->name('reports.employee-history.export');
 
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-

@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exports\EmployeeHistoryReportExport;
 use App\Exports\PayrollSummaryReportExport;
 use App\Http\Controllers\Controller;
+use App\Models\Lms\Staff;
+use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\Payslip;
@@ -66,11 +69,153 @@ final class ReportsController extends Controller
         return Excel::download(new PayrollSummaryReportExport($rows, $from, $to), $filename);
     }
 
+    public function employeeHistory(Request $request): Response
+    {
+        $this->authorizeReports();
+
+        $staffId = $request->integer('employee') ?: null;
+        $employee = null;
+        $rows = [];
+        $totals = self::zeroHistoryTotals();
+
+        if ($staffId !== null) {
+            [$employee, $rows, $totals] = $this->buildEmployeeHistoryRows($staffId);
+        }
+
+        return Inertia::render('admin/reports/employee-history', [
+            'filters' => ['employee' => $staffId],
+            'employees' => $this->employeePickerOptions(),
+            'employee' => $employee,
+            'rows' => $rows,
+            'totals' => $totals,
+        ]);
+    }
+
+    public function employeeHistoryExport(Request $request): BinaryFileResponse
+    {
+        $this->authorizeReports();
+
+        $staffId = $request->integer('employee') ?: null;
+        if ($staffId === null) {
+            abort(422, 'Pick an employee before exporting.');
+        }
+
+        [$employee, $rows] = $this->buildEmployeeHistoryRows($staffId);
+
+        $filename = sprintf(
+            'employee-history_staff%d_%s.xlsx',
+            $staffId,
+            CarbonImmutable::now()->toDateString(),
+        );
+
+        return Excel::download(
+            new EmployeeHistoryReportExport($employee, $rows),
+            $filename,
+        );
+    }
+
     private function authorizeReports(): void
     {
         if (! auth()->user()?->hasAnyRole(self::REPORT_ROLES)) {
             abort(403);
         }
+    }
+
+    /**
+     * @return list<array{lms_staff_id: int, full_name: string|null}>
+     */
+    private function employeePickerOptions(): array
+    {
+        $profileIds = EmployeeProfile::query()
+            ->pluck('lms_staff_id')
+            ->unique()
+            ->values();
+
+        $names = Staff::query()
+            ->whereIn('id', $profileIds)
+            ->get(['id', 'full_name'])
+            ->keyBy('id');
+
+        return $profileIds
+            ->map(fn (int $id): array => [
+                'lms_staff_id' => $id,
+                'full_name' => $names->get($id)?->full_name,
+            ])
+            ->sortBy(fn (array $r): string => (string) ($r['full_name'] ?? ''))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{0: array<string, mixed>|null, 1: list<array<string, mixed>>, 2: array<string, int>}
+     */
+    private function buildEmployeeHistoryRows(int $lmsStaffId): array
+    {
+        $staff = Staff::query()
+            ->where('id', $lmsStaffId)
+            ->first(['id', 'full_name', 'staff_no', 'email']);
+        $employee = $staff ? [
+            'lms_staff_id' => (int) $staff->id,
+            'full_name' => $staff->full_name,
+            'staff_no' => $staff->staff_no,
+            'email' => $staff->email,
+        ] : null;
+
+        $payslips = Payslip::query()
+            ->with(['payrollRun.payPeriod'])
+            ->where('lms_staff_id', $lmsStaffId)
+            ->whereHas('payrollRun', fn ($q) => $q->whereNot('status', PayrollRun::STATUS_VOIDED))
+            ->orderBy('computed_at')
+            ->get();
+
+        $cumulativeGross = 0;
+        $cumulativeDeductions = 0;
+        $cumulativeNet = 0;
+
+        $rows = $payslips->map(function (Payslip $p) use (&$cumulativeGross, &$cumulativeDeductions, &$cumulativeNet): array {
+            $cumulativeGross += $p->gross_pay_centavos;
+            $cumulativeDeductions += $p->total_employee_deductions_centavos;
+            $cumulativeNet += $p->net_pay_centavos;
+
+            return [
+                'payslip_id' => $p->id,
+                'run_id' => $p->payroll_run_id,
+                'pay_period_code' => $p->payrollRun?->payPeriod?->code,
+                'pay_period_start' => $p->payrollRun?->payPeriod?->start_date->toDateString(),
+                'pay_period_end' => $p->payrollRun?->payPeriod?->end_date->toDateString(),
+                'computed_at' => $p->computed_at?->toIso8601String(),
+                'gross_pay_centavos' => $p->gross_pay_centavos,
+                'total_employee_deductions_centavos' => $p->total_employee_deductions_centavos,
+                'net_pay_centavos' => $p->net_pay_centavos,
+                'cumulative_gross_centavos' => $cumulativeGross,
+                'cumulative_deductions_centavos' => $cumulativeDeductions,
+                'cumulative_net_centavos' => $cumulativeNet,
+            ];
+        })->values()->all();
+
+        return [
+            $employee,
+            $rows,
+            [
+                'payslip_count' => count($rows),
+                'gross_pay_centavos' => $cumulativeGross,
+                'total_employee_deductions_centavos' => $cumulativeDeductions,
+                'total_net_pay_centavos' => $cumulativeNet,
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private static function zeroHistoryTotals(): array
+    {
+        return [
+            'payslip_count' => 0,
+            'gross_pay_centavos' => 0,
+            'total_employee_deductions_centavos' => 0,
+            'total_net_pay_centavos' => 0,
+        ];
     }
 
     /**
