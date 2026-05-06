@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Admin\AllowanceController;
+use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DeductionTypeController;
 use App\Http\Controllers\Admin\DevSeedController;
 use App\Http\Controllers\Admin\EmployeeBulkImportController;
@@ -113,6 +114,13 @@ Route::middleware(['auth', 'verified'])
             ->name('employees.import.preview');
         Route::post('employees/import/confirm/{token}', [EmployeeBulkImportController::class, 'confirm'])
             ->name('employees.import.confirm');
+
+        // Phase 4 W14 — Audit log viewer. Read-only surface for auditors
+        // + super-admin. Stage B's sibling /export streams CSV.
+        Route::get('audit-logs', [AuditLogController::class, 'index'])
+            ->name('audit-logs.index');
+        Route::get('audit-logs/export', [AuditLogController::class, 'export'])
+            ->name('audit-logs.export');
 
         // Phase 4 W13 — Reports module. Read-only aggregates over payslips.
         // Auth widens to super-admin + payroll-officer + hr because reports

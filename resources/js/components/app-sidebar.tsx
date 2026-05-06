@@ -4,6 +4,7 @@ import {
     BookOpen,
     Calculator,
     CalendarDays,
+    FileSearch,
     FolderGit2,
     LayoutGrid,
     MinusCircle,
@@ -100,6 +101,11 @@ const adminNavItems: NavItem[] = [
         title: 'Payroll runs',
         href: adminPayrollRunsIndex(),
         icon: PlayCircle,
+    },
+    {
+        title: 'Audit log',
+        href: '/admin/audit-logs',
+        icon: FileSearch,
     },
 ];
 
