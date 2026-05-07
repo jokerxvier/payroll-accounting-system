@@ -59,10 +59,21 @@ class EmployeeController extends Controller
 
         $employees = $this->repo->paginate($filters, $perPage);
 
+        // Wrap the LMS departments lookup so a connection / auth failure on
+        // the `lms` connection (misconfigured LMS_DB_* on Forge, etc.)
+        // degrades to an empty filter dropdown instead of crashing the page.
+        // The repo->paginate() above is already protected the same way.
+        try {
+            $departmentOptions = Department::query()->orderBy('name')->get(['id', 'name']);
+        } catch (\Throwable $e) {
+            report($e);
+            $departmentOptions = collect();
+        }
+
         return Inertia::render('employees/index', [
             'employees' => $employees,
             'filters' => $request->only(['search', 'status', 'department_id', 'employment_classification', 'sort_by', 'sort_dir', 'per_page']),
-            'departmentOptions' => Department::query()->orderBy('name')->get(['id', 'name']),
+            'departmentOptions' => $departmentOptions,
             'employmentTypeOptions' => EmployeeProfile::employmentTypeOptions(),
             'can' => [
                 // Dev/demo affordance — gated to super-admin AND non-production
