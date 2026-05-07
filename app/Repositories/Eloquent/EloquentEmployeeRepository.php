@@ -89,8 +89,27 @@ final class EloquentEmployeeRepository implements EmployeeRepositoryInterface
             ->orderBy($sortColumn, $sortDirection)
             ->orderBy('id'); // deterministic tiebreaker
 
-        /** @var LengthAwarePaginator $staffPage */
-        $staffPage = $staffQuery->paginate($perPage, ['*'], 'page', $page);
+        // Wrap the LMS pagination call so a connection / auth failure on the
+        // `lms` connection (misconfigured LMS_DB_* on Forge, MySQL down, etc.)
+        // degrades to an empty employee directory with the exception
+        // reported, instead of 500-ing every page load.
+        try {
+            /** @var LengthAwarePaginator $staffPage */
+            $staffPage = $staffQuery->paginate($perPage, ['*'], 'page', $page);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return new LengthAwarePaginatorImpl(
+                items: collect(),
+                total: 0,
+                perPage: $perPage,
+                currentPage: $page,
+                options: [
+                    'path' => Paginator::resolveCurrentPath(),
+                    'pageName' => 'page',
+                ],
+            );
+        }
 
         /** @var Collection<int, Staff> $staffItems */
         $staffItems = $staffPage->getCollection();
@@ -169,14 +188,23 @@ final class EloquentEmployeeRepository implements EmployeeRepositoryInterface
         // Step 1: load LMS staff with department / designation / role joined on
         // the LMS connection. JOINs *within* a single connection are allowed —
         // only cross-connection JOINs are banned (see the class docblock).
-        $staff = Staff::query()
-            ->with(['department', 'designation', 'role'])
-            ->whereKey($staffId)
-            ->when(
-                $allowlist !== [],
-                fn ($q) => $q->whereIn('role_id', $allowlist),
-            )
-            ->first();
+        //
+        // Wrapped in try/catch so an unreachable `lms` connection degrades to
+        // "staff not found" (callers already handle null) instead of 500.
+        try {
+            $staff = Staff::query()
+                ->with(['department', 'designation', 'role'])
+                ->whereKey($staffId)
+                ->when(
+                    $allowlist !== [],
+                    fn ($q) => $q->whereIn('role_id', $allowlist),
+                )
+                ->first();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
 
         if ($staff === null) {
             return null;
