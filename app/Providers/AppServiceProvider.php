@@ -12,6 +12,7 @@ use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollAdjustment;
 use App\Models\Pas\PayrollRun;
+use App\Models\Pas\School;
 use App\Models\Pas\StatutoryContribution;
 use App\Policies\Pas\AllowancePolicy;
 use App\Policies\Pas\DeductionTypePolicy;
@@ -22,6 +23,7 @@ use App\Policies\Pas\EmployeeProfilePolicy;
 use App\Policies\Pas\PayPeriodPolicy;
 use App\Policies\Pas\PayrollAdjustmentPolicy;
 use App\Policies\Pas\PayrollRunPolicy;
+use App\Policies\Pas\SchoolPolicy;
 use App\Policies\Pas\StatutoryContributionPolicy;
 use App\Policies\PayrollPreviewPolicy;
 use App\Services\Statutory\StatutoryContributionResolver;
@@ -90,6 +92,10 @@ class AppServiceProvider extends ServiceProvider
         // Phase 3 Week 9 — pay periods + payroll runs (admin batch generation).
         Gate::policy(PayPeriod::class, PayPeriodPolicy::class);
         Gate::policy(PayrollRun::class, PayrollRunPolicy::class);
+
+        // Phase B.2 — multi-tenant schools registry. Super-admin only via
+        // SchoolPolicy's before() hook.
+        Gate::policy(School::class, SchoolPolicy::class);
 
         // Week 8 — real-time gross-to-net preview. Class-level Gate (no
         // underlying model), so it lives outside Gate::policy() registrations.
