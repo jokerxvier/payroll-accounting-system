@@ -28,6 +28,8 @@ class DatabaseSeeder extends Seeder
         ]);
 
         if (app()->environment('local', 'staging')) {
+            $this->call(DemoUsersSeeder::class);
+            $this->call(DemoCatalogSeeder::class);
             $this->call(DemoPayrollSeeder::class);
         }
     }
