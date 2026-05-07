@@ -130,6 +130,10 @@ it('forbids storing a school for non-super-admin roles', function (string $role)
 
 it('rejects a store request with missing required fields', function (): void {
     $user = schoolAuthAs('super-admin');
+    // Phase C.1 — global Pest beforeEach seeds the default school for the
+    // NeedsTenant middleware. A failed validation must not create a row
+    // beyond the seeded default.
+    $baseline = School::query()->count();
 
     $this->actingAs($user)
         ->from('/admin/schools/create')
@@ -146,7 +150,7 @@ it('rejects a store request with missing required fields', function (): void {
             'is_active',
         ]);
 
-    expect(School::query()->count())->toBe(0);
+    expect(School::query()->count())->toBe($baseline);
 });
 
 it('rejects a store request with a duplicate slug', function (): void {

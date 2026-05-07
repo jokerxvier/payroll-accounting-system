@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Models\Pas\School;
+use App\Multitenancy\Finders\SchoolTenantFinder;
+use App\Multitenancy\Tasks\SwitchLmsConnection;
 use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Events\CallQueuedListener;
 use Illuminate\Mail\SendQueuedMailable;
@@ -39,8 +41,23 @@ return [
      *
      * Phase B.1: null — no resolution. Phase C wires either DomainTenantFinder
      * (production) or a custom PathTenantFinder (local dev).
+     *
+     * Phase C.1: SchoolTenantFinder resolves a `pas_schools` row from the
+     * request (subdomain → path → header). When PAYROLL_MULTI_TENANT=false
+     * it falls through to the seeded `slug=default` school so the pipeline
+     * runs uniformly without changing observable behavior.
      */
-    'tenant_finder' => null,
+    'tenant_finder' => SchoolTenantFinder::class,
+
+    /*
+     * Project-specific feature flag — read by SchoolTenantFinder to decide
+     * whether to apply the subdomain/path/header resolution strategies
+     * (true) or fall through to the seeded `slug=default` school (false).
+     *
+     * Defined in `config()` rather than via raw `env()` at the call site so
+     * the value remains correct under `php artisan config:cache`.
+     */
+    'payroll_multi_tenant_enabled' => env('PAYROLL_MULTI_TENANT', false),
 
     /*
      * These fields are used by tenant:artisan command to match one or more tenant.
@@ -61,7 +78,9 @@ return [
      * is intentionally NOT registered — payroll DB is the default connection
      * and never switches; only the `lms` connection does.
      */
-    'switch_tenant_tasks' => [],
+    'switch_tenant_tasks' => [
+        SwitchLmsConnection::class,
+    ],
 
     /*
      * This class is the model used for storing configuration on tenants.

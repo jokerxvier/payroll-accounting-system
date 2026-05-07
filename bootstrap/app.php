@@ -7,6 +7,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Inertia\Inertia;
+use Spatie\Multitenancy\Http\Middleware\NeedsTenant;
 use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -22,6 +23,10 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            // Phase C.1 — resolves the active tenant via SchoolTenantFinder
+            // and runs the SwitchLmsConnection task. Appended so it runs
+            // after session/cookie middleware in the framework's web group.
+            NeedsTenant::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
