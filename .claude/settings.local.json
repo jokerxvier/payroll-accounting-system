@@ -33,7 +33,8 @@
       "Bash(vendor/bin/phpstan analyse *)",
       "Bash(php *)",
       "Bash(git stash *)",
-      "mcp__plugin_playwright_playwright__browser_type"
+      "mcp__plugin_playwright_playwright__browser_type",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\(f'{k}: {v}' for k,v in d.get\\('scripts',{}\\).items\\(\\)\\)\\)\")"
     ]
   }
 }
