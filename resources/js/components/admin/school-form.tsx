@@ -122,6 +122,16 @@ export function SchoolForm({ mode }: SchoolFormProps) {
         try {
             const csrfToken = getXsrfToken();
 
+            // Edit mode keeps the password field blank by default so a save
+            // without typing a new password preserves the existing credential.
+            // For the connection probe we need a real password — fall back to
+            // the saved school's plaintext (already exposed in the props via
+            // the model's `encrypted` cast). Create mode has no fallback;
+            // the field validation will reject empty submissions.
+            const password =
+                form.data.lms_db_password ||
+                (mode.kind === 'edit' ? mode.school.lms_db_password : '');
+
             const response = await fetch(schoolsTestConnection().url, {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -139,16 +149,38 @@ export function SchoolForm({ mode }: SchoolFormProps) {
                             : form.data.lms_db_port,
                     lms_db_database: form.data.lms_db_database,
                     lms_db_username: form.data.lms_db_username,
-                    lms_db_password: form.data.lms_db_password,
+                    lms_db_password: password,
                     lms_db_charset: form.data.lms_db_charset,
                 }),
             });
 
             if (!response.ok) {
-                const message =
-                    response.status === 422
-                        ? 'Fill all connection fields before testing.'
-                        : `Test failed with HTTP ${response.status}.`;
+                // Surface server-side validation errors when available so the
+                // operator knows exactly which field is missing. Falls back to
+                // a generic message if the body is unparseable.
+                let message = `Test failed with HTTP ${response.status}.`;
+
+                if (response.status === 422) {
+                    try {
+                        const body = (await response.json()) as {
+                            errors?: Record<string, string[]>;
+                            message?: string;
+                        };
+
+                        const fields = body.errors
+                            ? Object.keys(body.errors)
+                            : [];
+
+                        message =
+                            fields.length > 0
+                                ? `Fill these fields before testing: ${fields.join(', ')}.`
+                                : (body.message ??
+                                  'Fill all connection fields before testing.');
+                    } catch {
+                        message = 'Fill all connection fields before testing.';
+                    }
+                }
+
                 setTestResult({ ok: false, message });
 
                 return;
