@@ -220,12 +220,31 @@ final class DemoPayrollSeeder extends Seeder
     {
         // Read from the read-only `lms` connection. Limited to ACTIVE staff,
         // ordered deterministically by id so re-runs always pick the same set.
-        $staffRows = DB::connection('lms')
-            ->table('sm_staffs')
-            ->where('active_status', 1)
-            ->orderBy('id')
-            ->limit(self::DEMO_EMPLOYEE_COUNT)
-            ->get(['id', 'staff_no', 'full_name']);
+        //
+        // Catches connection / query failures (auth denied, missing schema,
+        // sm_staffs table absent) and degrades to "no demo profiles" instead
+        // of crashing the entire deploy. The empty-result branch in run()
+        // logs a clear warning and skips the rest of the seed. Lets staging
+        // / Forge environments deploy cleanly even when the LMS schema
+        // hasn't been provisioned yet.
+        try {
+            $staffRows = DB::connection('lms')
+                ->table('sm_staffs')
+                ->where('active_status', 1)
+                ->orderBy('id')
+                ->limit(self::DEMO_EMPLOYEE_COUNT)
+                ->get(['id', 'staff_no', 'full_name']);
+        } catch (\Throwable $e) {
+            if (isset($this->command)) {
+                $this->command->warn(
+                    'DemoPayrollSeeder: could not read from `lms` connection ('
+                    .$e->getMessage()
+                    .'). Skipping demo payroll seed.',
+                );
+            }
+
+            return collect();
+        }
 
         $profiles = collect();
 
