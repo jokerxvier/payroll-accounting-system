@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     BarChart3,
+    Building2,
     Calculator,
     CalendarDays,
     FileSearch,
@@ -33,6 +34,7 @@ import { index as adminContributionTablesIndex } from '@/routes/admin/contributi
 import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
 import { index as adminPayPeriodsIndex } from '@/routes/admin/pay-periods';
 import { index as adminPayrollRunsIndex } from '@/routes/admin/payroll-runs';
+import { index as adminSchoolsIndex } from '@/routes/admin/schools';
 import { index as employeesIndex } from '@/routes/employees';
 import { show as payrollPreviewShow } from '@/routes/payroll/preview';
 import type { NavItem } from '@/types';
@@ -65,6 +67,9 @@ const CATALOG_READ_ROLES = ['super-admin', 'payroll-officer', 'hr'] as const;
 
 // Mirrors AuditLogController::ALLOWED_ROLES.
 const AUDIT_ROLES = ['super-admin', 'auditor'] as const;
+
+// Mirrors app/Policies/Pas/SchoolPolicy.php — super-admin only.
+const SCHOOLS_ADMIN_ROLES = ['super-admin'] as const;
 
 const mainNavItems: NavItem[] = [
     {
@@ -136,6 +141,14 @@ const auditNavItems: NavItem[] = [
     },
 ];
 
+const schoolsAdminNavItems: NavItem[] = [
+    {
+        title: 'Schools',
+        href: adminSchoolsIndex(),
+        icon: Building2,
+    },
+];
+
 const footerNavItems: NavItem[] = [];
 
 function hasAnyRole(
@@ -153,6 +166,7 @@ export function AppSidebar() {
     const canViewPayroll = hasAnyRole(userRoles, PAYROLL_MAKER_ROLES);
     const canViewCatalog = hasAnyRole(userRoles, CATALOG_READ_ROLES);
     const canViewAudit = hasAnyRole(userRoles, AUDIT_ROLES);
+    const canManageSchools = hasAnyRole(userRoles, SCHOOLS_ADMIN_ROLES);
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -184,6 +198,12 @@ export function AppSidebar() {
                 )}
                 {canViewAudit && (
                     <SidebarSection label="Audit" items={auditNavItems} />
+                )}
+                {canManageSchools && (
+                    <SidebarSection
+                        label="Tenants"
+                        items={schoolsAdminNavItems}
+                    />
                 )}
             </SidebarContent>
 
