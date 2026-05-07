@@ -228,10 +228,20 @@ final class EloquentEmployeeRepository implements EmployeeRepositoryInterface
         /** @var array<int, int> $allowlist */
         $allowlist = (array) config('payroll.employee_role_allowlist', []);
 
-        return Staff::query()
-            ->active()
-            ->when($allowlist !== [], fn ($q) => $q->whereIn('role_id', $allowlist))
-            ->count();
+        // Wrap the LMS read so a connection / auth failure on the `lms`
+        // connection (e.g., misconfigured LMS_DB_* on a fresh Forge env)
+        // degrades to "0 active employees" with the exception reported,
+        // instead of crashing every dashboard render with a 500.
+        try {
+            return Staff::query()
+                ->active()
+                ->when($allowlist !== [], fn ($q) => $q->whereIn('role_id', $allowlist))
+                ->count();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return 0;
+        }
     }
 
     public function countStaffJoinedThisMonth(): int
@@ -243,9 +253,16 @@ final class EloquentEmployeeRepository implements EmployeeRepositoryInterface
         $start = $now->startOfMonth()->toDateString();
         $end = $now->endOfMonth()->toDateString();
 
-        return Staff::query()
-            ->when($allowlist !== [], fn ($q) => $q->whereIn('role_id', $allowlist))
-            ->whereBetween('date_of_joining', [$start, $end])
-            ->count();
+        // Same defensive wrap as countActiveStaff() — see note there.
+        try {
+            return Staff::query()
+                ->when($allowlist !== [], fn ($q) => $q->whereIn('role_id', $allowlist))
+                ->whereBetween('date_of_joining', [$start, $end])
+                ->count();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return 0;
+        }
     }
 }
