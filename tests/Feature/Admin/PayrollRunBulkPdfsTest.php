@@ -55,7 +55,7 @@ it('build endpoint short-circuits when the run has no payslips', function () {
     Bus::assertNothingBatched();
 });
 
-it('build endpoint is forbidden for non-super-admin roles', function (string $role) {
+it('build endpoint is forbidden for auditor and employee', function (string $role) {
     Bus::fake();
     $user = authBulkPdfsAs($role);
     $run = PayrollRun::factory()->computed()->create();
@@ -63,7 +63,7 @@ it('build endpoint is forbidden for non-super-admin roles', function (string $ro
     $this->actingAs($user)
         ->post('/admin/payroll-runs/'.$run->id.'/bulk-pdfs')
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['auditor', 'employee']);
 
 it('download endpoint streams the assembled zip when the run has one', function () {
     Storage::fake();
@@ -108,7 +108,7 @@ it('download endpoint returns 404 when the run claims a zip path but the file is
         ->assertNotFound();
 });
 
-it('download endpoint is forbidden for non-super-admin roles', function (string $role) {
+it('download endpoint is forbidden for auditor and employee', function (string $role) {
     Storage::fake();
     $user = authBulkPdfsAs($role);
     $run = PayrollRun::factory()->computed()->create([
@@ -118,7 +118,7 @@ it('download endpoint is forbidden for non-super-admin roles', function (string 
     $this->actingAs($user)
         ->get('/admin/payroll-runs/'.$run->id.'/bulk-pdfs')
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['auditor', 'employee']);
 
 it('show payload includes has_bulk_pdf flag', function () {
     $user = authBulkPdfsAs('super-admin');

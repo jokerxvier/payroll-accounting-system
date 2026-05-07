@@ -70,13 +70,21 @@ it('renders the index for a super-admin', function () {
         );
 });
 
-it('forbids index for non-super-admin roles', function (string $role) {
+it('allows payroll-officer and hr to view the index (maker roles)', function (string $role) {
+    $user = authPayrollRunsAs($role);
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs')
+        ->assertOk();
+})->with(['payroll-officer', 'hr']);
+
+it('forbids the index for auditor and employee', function (string $role) {
     $user = authPayrollRunsAs($role);
 
     $this->actingAs($user)
         ->get('/admin/payroll-runs')
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['auditor', 'employee']);
 
 it('renders the create form with open periods', function () {
     $user = authPayrollRunsAs('super-admin');
@@ -158,11 +166,20 @@ it('shows a run with payslips and progress props', function () {
         );
 });
 
-it('forbids show for non-super-admin roles', function (string $role) {
+it('allows payroll-officer and hr to view a run (maker roles)', function (string $role) {
+    $user = authPayrollRunsAs($role);
+    $run = PayrollRun::factory()->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id)
+        ->assertOk();
+})->with(['payroll-officer', 'hr']);
+
+it('forbids show for auditor and employee', function (string $role) {
     $user = authPayrollRunsAs($role);
     $run = PayrollRun::factory()->create();
 
     $this->actingAs($user)
         ->get('/admin/payroll-runs/'.$run->id)
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['auditor', 'employee']);

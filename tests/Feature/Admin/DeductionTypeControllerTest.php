@@ -63,13 +63,21 @@ it('allows super-admin to view the index and lists existing rows', function () {
         );
 });
 
-it('forbids non-super-admin roles from the index', function (string $role) {
+it('allows payroll-officer and hr to view the index (read-only)', function (string $role) {
+    $user = deductionTypeAuthAs($role);
+
+    $this->actingAs($user)
+        ->get('/admin/deduction-types')
+        ->assertOk();
+})->with(['payroll-officer', 'hr']);
+
+it('forbids the index for auditor and employee', function (string $role) {
     $user = deductionTypeAuthAs($role);
 
     $this->actingAs($user)
         ->get('/admin/deduction-types')
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['auditor', 'employee']);
 
 it('allows super-admin to render the create form and persist a new row', function () {
     $user = deductionTypeAuthAs('super-admin');
@@ -106,7 +114,17 @@ it('rejects a store request with missing required fields', function () {
     expect(DeductionType::query()->count())->toBe(0);
 });
 
-it('forbids non-super-admin roles from storing a new row', function (string $role) {
+it('allows payroll-officer and hr to store a new row', function (string $role) {
+    $user = deductionTypeAuthAs($role);
+
+    $this->actingAs($user)
+        ->post('/admin/deduction-types', validDeductionTypePayload())
+        ->assertRedirect('/admin/deduction-types');
+
+    expect(DeductionType::query()->count())->toBe(1);
+})->with(['payroll-officer', 'hr']);
+
+it('forbids storing a new row for auditor and employee', function (string $role) {
     $user = deductionTypeAuthAs($role);
 
     $this->actingAs($user)
@@ -114,7 +132,7 @@ it('forbids non-super-admin roles from storing a new row', function (string $rol
         ->assertForbidden();
 
     expect(DeductionType::query()->count())->toBe(0);
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['auditor', 'employee']);
 
 it('allows super-admin to update an existing row', function () {
     $user = deductionTypeAuthAs('super-admin');

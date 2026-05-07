@@ -98,20 +98,20 @@ it('redirects unauthenticated users to the login screen on store', function () {
         ->assertRedirect('/login');
 });
 
-it('forbids the payroll-officer role on store', function () {
+it('allows the payroll-officer role on store', function () {
     $user = storeAuthAs('payroll-officer');
 
     $this->actingAs($user)
         ->post('/admin/contribution-tables', validBirPayload())
-        ->assertForbidden();
+        ->assertRedirect('/admin/contribution-tables');
 });
 
-it('forbids the hr role on store', function () {
+it('allows the hr role on store', function () {
     $user = storeAuthAs('hr');
 
     $this->actingAs($user)
         ->post('/admin/contribution-tables', validBirPayload())
-        ->assertForbidden();
+        ->assertRedirect('/admin/contribution-tables');
 });
 
 it('forbids the auditor role on store', function () {

@@ -31,20 +31,20 @@ it('redirects unauthenticated users to the login screen', function () {
     $this->get('/admin/contribution-tables')->assertRedirect('/login');
 });
 
-it('forbids the payroll-officer role on index', function () {
+it('allows the payroll-officer role on index (read-only)', function () {
     $user = indexAuthAs('payroll-officer');
 
     $this->actingAs($user)
         ->get('/admin/contribution-tables')
-        ->assertForbidden();
+        ->assertOk();
 });
 
-it('forbids the hr role on index', function () {
+it('allows the hr role on index (read-only)', function () {
     $user = indexAuthAs('hr');
 
     $this->actingAs($user)
         ->get('/admin/contribution-tables')
-        ->assertForbidden();
+        ->assertOk();
 });
 
 it('forbids the auditor role on index', function () {
@@ -149,12 +149,11 @@ it('decorates each grouped row with an is_editable boolean', function () {
 });
 
 it('exposes can.modify=false for forbidden roles', function () {
-    // The forbidden roles already 403 on the index, so they never see `can`.
-    // Sanity-check that the prop resolves to false for any user that lacks
-    // the super-admin role by hitting the controller's allow check directly
-    // through Gate. Since the request itself is forbidden upstream, the
-    // assertion below is on the gate not the response.
-    foreach (['payroll-officer', 'hr', 'auditor', 'employee'] as $roleName) {
+    // The forbidden roles (auditor, employee) 403 on the index, so they never
+    // see `can`. Sanity-check that `create` returns false for them via Gate.
+    // payroll-officer + hr now manage the catalog (see policy) so they're
+    // intentionally excluded from this matrix.
+    foreach (['auditor', 'employee'] as $roleName) {
         $user = indexAuthAs($roleName);
         expect($user->can('create', StatutoryContribution::class))->toBeFalse();
     }
@@ -182,10 +181,18 @@ it('super-admin downloads the contribution-tables Excel snapshot', function () {
     );
 });
 
-it('forbids the contribution-tables Excel snapshot for non-super-admin roles', function (string $role) {
+it('allows payroll-officer and hr to download the Excel snapshot', function (string $role) {
+    $user = indexAuthAs($role);
+
+    $this->actingAs($user)
+        ->get('/admin/contribution-tables/template')
+        ->assertOk();
+})->with(['payroll-officer', 'hr']);
+
+it('forbids the contribution-tables Excel snapshot for auditor and employee', function (string $role) {
     $user = indexAuthAs($role);
 
     $this->actingAs($user)
         ->get('/admin/contribution-tables/template')
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['auditor', 'employee']);

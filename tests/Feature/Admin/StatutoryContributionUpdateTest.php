@@ -86,7 +86,22 @@ it('redirects unauthenticated users to login on update', function () {
         ->assertRedirect('/login');
 });
 
-it('forbids non-super-admin roles on update', function (string $role) {
+it('allows payroll-officer and hr to update an editable row', function (string $role) {
+    $user = updateAuthAs($role);
+    $row = StatutoryContribution::factory()->sss()->create([
+        'effective_from' => CarbonImmutable::now()->addDays(7)->toDateString(),
+        'effective_to' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->patch("/admin/contribution-tables/{$row->id}", validSssPatchPayload($row->effective_from->toDateString()))
+        ->assertRedirect("/admin/contribution-tables/{$row->id}");
+})->with([
+    'payroll-officer',
+    'hr',
+]);
+
+it('forbids update for auditor and employee', function (string $role) {
     $user = updateAuthAs($role);
     $row = StatutoryContribution::factory()->sss()->create([
         'effective_from' => CarbonImmutable::now()->addDays(7)->toDateString(),
@@ -97,8 +112,6 @@ it('forbids non-super-admin roles on update', function (string $role) {
         ->patch("/admin/contribution-tables/{$row->id}", validSssPatchPayload($row->effective_from->toDateString()))
         ->assertForbidden();
 })->with([
-    'payroll-officer',
-    'hr',
     'auditor',
     'employee',
 ]);

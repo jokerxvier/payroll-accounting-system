@@ -39,7 +39,22 @@ it('redirects unauthenticated users to login on show', function () {
         ->assertRedirect('/login');
 });
 
-it('forbids non-super-admin roles on show', function (string $role) {
+it('allows payroll-officer and hr on show (read-only)', function (string $role) {
+    $user = showAuthAs($role);
+    $row = StatutoryContribution::factory()->sss()->create([
+        'effective_from' => CarbonImmutable::now()->addDays(7)->toDateString(),
+        'effective_to' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get("/admin/contribution-tables/{$row->id}")
+        ->assertOk();
+})->with([
+    'payroll-officer',
+    'hr',
+]);
+
+it('forbids show for auditor and employee', function (string $role) {
     $user = showAuthAs($role);
     $row = StatutoryContribution::factory()->sss()->create([
         'effective_from' => CarbonImmutable::now()->addDays(7)->toDateString(),
@@ -50,8 +65,6 @@ it('forbids non-super-admin roles on show', function (string $role) {
         ->get("/admin/contribution-tables/{$row->id}")
         ->assertForbidden();
 })->with([
-    'payroll-officer',
-    'hr',
     'auditor',
     'employee',
 ]);

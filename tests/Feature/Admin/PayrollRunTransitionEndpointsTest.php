@@ -84,7 +84,7 @@ it('void on an approved run moves to voided', function () {
     expect($run->fresh()->status)->toBe(PayrollRun::STATUS_VOIDED);
 });
 
-it('all four transitions are forbidden for non-super-admin roles', function (string $role, string $endpoint) {
+it('approver-only transitions are forbidden for makers', function (string $role, string $endpoint) {
     $user = authTransitionsAs($role);
     $run = PayrollRun::factory()->computed()->create();
 
@@ -92,9 +92,29 @@ it('all four transitions are forbidden for non-super-admin roles', function (str
         ->post('/admin/payroll-runs/'.$run->id.'/'.$endpoint)
         ->assertForbidden();
 })->with([
-    ['payroll-officer', 'submit'],
+    ['payroll-officer', 'approve'],
+    ['payroll-officer', 'post'],
+    ['payroll-officer', 'void'],
     ['hr', 'approve'],
+    ['hr', 'post'],
+    ['hr', 'void'],
+]);
+
+it('all transitions are forbidden for auditor and employee', function (string $role, string $endpoint) {
+    $user = authTransitionsAs($role);
+    $run = PayrollRun::factory()->computed()->create();
+
+    $this->actingAs($user)
+        ->post('/admin/payroll-runs/'.$run->id.'/'.$endpoint)
+        ->assertForbidden();
+})->with([
+    ['auditor', 'submit'],
+    ['auditor', 'approve'],
     ['auditor', 'post'],
+    ['auditor', 'void'],
+    ['employee', 'submit'],
+    ['employee', 'approve'],
+    ['employee', 'post'],
     ['employee', 'void'],
 ]);
 

@@ -37,12 +37,44 @@ import { index as employeesIndex } from '@/routes/employees';
 import { show as payrollPreviewShow } from '@/routes/payroll/preview';
 import type { NavItem } from '@/types';
 
+/**
+ * Sidebar visibility constants — each one mirrors the role list in a
+ * specific backend policy or controller gate. Keep these in sync with the
+ * source of truth on every PR. Per CLAUDE.md "Sidebar gating must mirror
+ * the page's authorization": the visible-to-role set must equal the
+ * page's policy/gate set.
+ */
+
+// Mirrors EmployeeProfilePolicy::viewAny().
+const EMPLOYEE_DIRECTORY_ROLES = [
+    'super-admin',
+    'payroll-officer',
+    'hr',
+    'auditor',
+] as const;
+
+// Mirrors PayrollPreviewPolicy::preview() (Gate) and PayrollRunPolicy::viewAny()
+// + ReportsController::REPORT_ROLES. The "maker" half of the maker-checker
+// payroll workflow.
+const PAYROLL_MAKER_ROLES = ['super-admin', 'payroll-officer', 'hr'] as const;
+
+// Mirrors viewAny() on AllowancePolicy, DeductionTypePolicy,
+// StatutoryContributionPolicy, and PayPeriodPolicy. Catalog read-only for
+// makers; catalog mutation is super-admin (gated server-side via `can`).
+const CATALOG_READ_ROLES = ['super-admin', 'payroll-officer', 'hr'] as const;
+
+// Mirrors AuditLogController::ALLOWED_ROLES.
+const AUDIT_ROLES = ['super-admin', 'auditor'] as const;
+
 const mainNavItems: NavItem[] = [
     {
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
     },
+];
+
+const employeeNavItems: NavItem[] = [
     {
         title: 'Employees',
         href: employeesIndex(),
@@ -50,17 +82,16 @@ const mainNavItems: NavItem[] = [
     },
 ];
 
-/**
- * Payroll section. Mirrors the `payroll.preview` Gate envelope from
- * {@see \App\Policies\PayrollPreviewPolicy} — visible to super-admin,
- * payroll-officer, and hr roles. Auditor is intentionally excluded
- * (auditors review the immutable record, not speculative figures).
- */
 const payrollNavItems: NavItem[] = [
     {
         title: 'Preview',
         href: payrollPreviewShow(),
         icon: Calculator,
+    },
+    {
+        title: 'Payroll runs',
+        href: adminPayrollRunsIndex(),
+        icon: PlayCircle,
     },
     {
         title: 'Payroll summary',
@@ -74,7 +105,7 @@ const payrollNavItems: NavItem[] = [
     },
 ];
 
-const adminNavItems: NavItem[] = [
+const catalogNavItems: NavItem[] = [
     {
         title: 'Contribution tables',
         href: adminContributionTablesIndex(),
@@ -95,11 +126,9 @@ const adminNavItems: NavItem[] = [
         href: adminPayPeriodsIndex(),
         icon: CalendarDays,
     },
-    {
-        title: 'Payroll runs',
-        href: adminPayrollRunsIndex(),
-        icon: PlayCircle,
-    },
+];
+
+const auditNavItems: NavItem[] = [
     {
         title: 'Audit log',
         href: '/admin/audit-logs',
@@ -109,21 +138,21 @@ const adminNavItems: NavItem[] = [
 
 const footerNavItems: NavItem[] = [];
 
-/**
- * Roles allowed to see the Payroll preview entry. Mirrors
- * {@see \App\Policies\PayrollPreviewPolicy::preview()}. Keep these in sync —
- * the gate is the source of truth, this list is purely a UI affordance to
- * avoid surfacing a link that would 403 on click.
- */
-const PAYROLL_PREVIEW_ROLES = ['super-admin', 'payroll-officer', 'hr'] as const;
+function hasAnyRole(
+    userRoles: readonly string[],
+    allowed: readonly string[],
+): boolean {
+    return allowed.some((role) => userRoles.includes(role));
+}
 
 export function AppSidebar() {
     const { auth } = usePage().props;
     const userRoles = auth.user?.roles ?? [];
-    const isSuperAdmin = userRoles.includes('super-admin');
-    const canPreviewPayroll = PAYROLL_PREVIEW_ROLES.some((role) =>
-        userRoles.includes(role),
-    );
+
+    const canViewEmployees = hasAnyRole(userRoles, EMPLOYEE_DIRECTORY_ROLES);
+    const canViewPayroll = hasAnyRole(userRoles, PAYROLL_MAKER_ROLES);
+    const canViewCatalog = hasAnyRole(userRoles, CATALOG_READ_ROLES);
+    const canViewAudit = hasAnyRole(userRoles, AUDIT_ROLES);
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -141,11 +170,20 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={mainNavItems} />
-                {canPreviewPayroll && (
+                {canViewEmployees && (
+                    <SidebarSection
+                        label="Directory"
+                        items={employeeNavItems}
+                    />
+                )}
+                {canViewPayroll && (
                     <SidebarSection label="Payroll" items={payrollNavItems} />
                 )}
-                {isSuperAdmin && (
-                    <SidebarSection label="Admin" items={adminNavItems} />
+                {canViewCatalog && (
+                    <SidebarSection label="Catalog" items={catalogNavItems} />
+                )}
+                {canViewAudit && (
+                    <SidebarSection label="Audit" items={auditNavItems} />
                 )}
             </SidebarContent>
 

@@ -142,6 +142,9 @@ For any non-trivial task, prefer the project-specific subagents in `.claude/agen
 ### Register every new page in the sidebar
 Every new authenticated Inertia page must have a corresponding entry in the sidebar nav. Add it to `mainNavItems` in `resources/js/components/app-sidebar.tsx`, importing the route helper from `@/routes/<resource>` (Wayfinder) and a Lucide icon. Public/auth pages (login, register, forgot password) and settings pages (already grouped under their own layout) are exempt. If a page should only appear for certain roles, gate it at the nav-item level via `auth.user` role checks rather than omitting it. The diff of `app-sidebar.tsx` is the audit trail of what's reachable.
 
+### Sidebar gating must mirror the page's authorization
+Every gated nav item lives in a constant at the top of `app-sidebar.tsx` (e.g., `PAYROLL_MAKER_ROLES`, `CATALOG_READ_ROLES`, `AUDIT_ROLES`) that names the roles allowed by the page's policy or controller gate. Adding or modifying a policy MUST update the matching sidebar constant in the same PR — the visible-to-role set must equal the page's policy/gate set, not merely a subset. This prevents two failure modes: dead links (visible nav → 403 on click) and hidden-but-allowed pages (the user can't find the page they're authorized for). When you add a sidebar constant, cite the source policy in a one-line comment above it so future readers know what to keep in sync.
+
 ### Never wrap pages in AppLayout
 The global Inertia resolver in `resources/js/app.tsx` automatically wraps every authenticated page in `AppLayout`. Page components must NOT import or wrap with `<AppLayout>` themselves — doing so renders a second `SidebarProvider` inside the first, injecting a phantom 256 px gap that pushes all page content right by the sidebar width. The correct pattern is:
 

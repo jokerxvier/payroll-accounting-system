@@ -39,7 +39,22 @@ it('redirects unauthenticated users to login on edit', function () {
         ->assertRedirect('/login');
 });
 
-it('forbids non-super-admin roles on edit', function (string $role) {
+it('allows payroll-officer and hr to render edit on an editable row', function (string $role) {
+    $user = editAuthAs($role);
+    $row = StatutoryContribution::factory()->sss()->create([
+        'effective_from' => CarbonImmutable::now()->addDays(7)->toDateString(),
+        'effective_to' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get("/admin/contribution-tables/{$row->id}/edit")
+        ->assertOk();
+})->with([
+    'payroll-officer',
+    'hr',
+]);
+
+it('forbids edit for auditor and employee', function (string $role) {
     $user = editAuthAs($role);
     $row = StatutoryContribution::factory()->sss()->create([
         'effective_from' => CarbonImmutable::now()->addDays(7)->toDateString(),
@@ -50,8 +65,6 @@ it('forbids non-super-admin roles on edit', function (string $role) {
         ->get("/admin/contribution-tables/{$row->id}/edit")
         ->assertForbidden();
 })->with([
-    'payroll-officer',
-    'hr',
     'auditor',
     'employee',
 ]);

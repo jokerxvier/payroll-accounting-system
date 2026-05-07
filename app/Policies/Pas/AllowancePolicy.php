@@ -10,33 +10,34 @@ use App\Models\User;
 /**
  * Authorization for the allowance catalog admin surface.
  *
- * v1 scope: only super-admin manages the catalog. Mirrors
- * `StatutoryContributionPolicy`. Per-employee subscriptions to an allowance
- * live on `pas_employee_allowances` and are gated separately by
- * `EmployeeAllowancePolicy` (HR + payroll-officer + super-admin).
+ * Open to super-admin, payroll-officer, and hr — all three manage the
+ * catalog (create/update/delete) since allowance composition is a daily
+ * payroll-ops task, not a system-config one. Per-employee subscriptions to
+ * an allowance live on `pas_employee_allowances` and are gated separately
+ * by `EmployeeAllowancePolicy`.
  */
 final class AllowancePolicy
 {
     /** @var list<string> */
-    private const SUPER_ADMIN_ROLES = ['super-admin'];
+    private const MANAGE_ROLES = ['super-admin', 'payroll-officer', 'hr'];
 
     public function viewAny(User $user): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES);
+        return $user->hasAnyRole(self::MANAGE_ROLES);
     }
 
     public function create(User $user): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES);
+        return $user->hasAnyRole(self::MANAGE_ROLES);
     }
 
     public function update(User $user, Allowance $row): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES);
+        return $user->hasAnyRole(self::MANAGE_ROLES);
     }
 
     public function delete(User $user, Allowance $row): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES);
+        return $user->hasAnyRole(self::MANAGE_ROLES);
     }
 }

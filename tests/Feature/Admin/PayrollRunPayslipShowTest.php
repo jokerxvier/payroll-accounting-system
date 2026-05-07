@@ -52,7 +52,17 @@ it('returns 404 when the payslip belongs to a different run', function () {
         ->assertNotFound();
 });
 
-it('forbids the payslip page for non-super-admin roles', function (string $role) {
+it('allows payroll-officer and hr to view a payslip (maker roles)', function (string $role) {
+    $user = authPayslipShowAs($role);
+    $run = PayrollRun::factory()->computed()->create();
+    $payslip = Payslip::factory()->for($run, 'payrollRun')->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id.'/payslips/'.$payslip->id)
+        ->assertOk();
+})->with(['payroll-officer', 'hr']);
+
+it('forbids the payslip page for auditor and employee', function (string $role) {
     $user = authPayslipShowAs($role);
     $run = PayrollRun::factory()->computed()->create();
     $payslip = Payslip::factory()->for($run, 'payrollRun')->create();
@@ -60,7 +70,7 @@ it('forbids the payslip page for non-super-admin roles', function (string $role)
     $this->actingAs($user)
         ->get('/admin/payroll-runs/'.$run->id.'/payslips/'.$payslip->id)
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['auditor', 'employee']);
 
 it('streams a PDF for super-admin', function () {
     $user = authPayslipShowAs('super-admin');
@@ -92,7 +102,17 @@ it('returns 404 on the PDF route when the payslip belongs to a different run', f
         ->assertNotFound();
 });
 
-it('forbids the PDF route for non-super-admin roles', function (string $role) {
+it('allows payroll-officer and hr to download the PDF (maker roles)', function (string $role) {
+    $user = authPayslipShowAs($role);
+    $run = PayrollRun::factory()->computed()->create();
+    $payslip = Payslip::factory()->for($run, 'payrollRun')->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id.'/payslips/'.$payslip->id.'/pdf')
+        ->assertOk();
+})->with(['payroll-officer', 'hr']);
+
+it('forbids the PDF route for auditor and employee', function (string $role) {
     $user = authPayslipShowAs($role);
     $run = PayrollRun::factory()->computed()->create();
     $payslip = Payslip::factory()->for($run, 'payrollRun')->create();
@@ -100,4 +120,4 @@ it('forbids the PDF route for non-super-admin roles', function (string $role) {
     $this->actingAs($user)
         ->get('/admin/payroll-runs/'.$run->id.'/payslips/'.$payslip->id.'/pdf')
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['auditor', 'employee']);

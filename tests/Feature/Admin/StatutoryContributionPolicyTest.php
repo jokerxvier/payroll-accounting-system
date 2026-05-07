@@ -12,13 +12,11 @@ uses(RefreshDatabase::class);
 /*
  * Pins the role + edit-eligibility matrix for StatutoryContributionPolicy.
  *
- *   - super-admin is the only role that can do anything on this surface
- *     (matches the existing Admin\StatutoryContributionIndexTest.php and
- *     Admin\StatutoryContributionStoreTest.php contract).
+ *   - super-admin, payroll-officer, and hr all manage the rate tables —
+ *     they can read, create, update, and void.
  *   - update + void additionally require $row->isEditable() — voided or
- *     past-dated or superseded rows reject mutation even for super-admin.
- *   - Every other role (payroll-officer, hr, auditor, employee) gets a flat
- *     denial across the board.
+ *     past-dated or superseded rows reject mutation for every role.
+ *   - auditor + employee get a flat denial across the board.
  */
 
 function policyAuthAs(string $role): User
@@ -86,7 +84,21 @@ it('denies update and void on a voided row even for super-admin', function () {
         ->and($user->can('void', $row))->toBeFalse();
 });
 
-it('denies every action for non-super-admin roles', function (string $role) {
+it('allows full management for payroll-officer and hr on editable rows', function (string $role) {
+    $user = policyAuthAs($role);
+    $row = editableContribution();
+
+    expect($user->can('viewAny', StatutoryContribution::class))->toBeTrue()
+        ->and($user->can('view', $row))->toBeTrue()
+        ->and($user->can('create', StatutoryContribution::class))->toBeTrue()
+        ->and($user->can('update', $row))->toBeTrue()
+        ->and($user->can('void', $row))->toBeTrue();
+})->with([
+    'payroll-officer',
+    'hr',
+]);
+
+it('denies every action for auditor and employee', function (string $role) {
     $user = policyAuthAs($role);
     $row = editableContribution();
 
@@ -96,8 +108,6 @@ it('denies every action for non-super-admin roles', function (string $role) {
         ->and($user->can('update', $row))->toBeFalse()
         ->and($user->can('void', $row))->toBeFalse();
 })->with([
-    'payroll-officer',
-    'hr',
     'auditor',
     'employee',
 ]);

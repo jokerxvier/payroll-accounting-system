@@ -36,13 +36,21 @@ it('renders the index for super-admin', function () {
         );
 });
 
-it('forbids index for non-super-admin roles', function (string $role) {
+it('allows payroll-officer and hr to view the index (read-only)', function (string $role) {
+    $user = authPayPeriodsAs($role);
+
+    $this->actingAs($user)
+        ->get('/admin/pay-periods')
+        ->assertOk();
+})->with(['payroll-officer', 'hr']);
+
+it('forbids the index for auditor and employee', function (string $role) {
     $user = authPayPeriodsAs($role);
 
     $this->actingAs($user)
         ->get('/admin/pay-periods')
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['auditor', 'employee']);
 
 it('renders the create form', function () {
     $user = authPayPeriodsAs('super-admin');

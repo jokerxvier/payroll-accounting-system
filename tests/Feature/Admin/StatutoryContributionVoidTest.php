@@ -43,7 +43,26 @@ it('redirects unauthenticated users to login on void', function () {
         ->assertRedirect('/login');
 });
 
-it('forbids non-super-admin roles on void', function (string $role) {
+it('allows payroll-officer and hr to void an editable row', function (string $role) {
+    $user = voidAuthAs($role);
+    $row = StatutoryContribution::factory()->sss()->create([
+        'effective_from' => CarbonImmutable::now()->addDays(7)->toDateString(),
+        'effective_to' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->post("/admin/contribution-tables/{$row->id}/void")
+        ->assertRedirect("/admin/contribution-tables/{$row->id}");
+
+    $row->refresh();
+
+    expect($row->voided_at)->not->toBeNull();
+})->with([
+    'payroll-officer',
+    'hr',
+]);
+
+it('forbids void for auditor and employee', function (string $role) {
     $user = voidAuthAs($role);
     $row = StatutoryContribution::factory()->sss()->create([
         'effective_from' => CarbonImmutable::now()->addDays(7)->toDateString(),
@@ -58,8 +77,6 @@ it('forbids non-super-admin roles on void', function (string $role) {
 
     expect($row->voided_at)->toBeNull();
 })->with([
-    'payroll-officer',
-    'hr',
     'auditor',
     'employee',
 ]);

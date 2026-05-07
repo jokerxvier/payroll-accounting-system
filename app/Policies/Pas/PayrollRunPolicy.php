@@ -10,68 +10,71 @@ use App\Models\User;
 /**
  * Authorization for the payroll-runs admin surface.
  *
- * v1 scope (Phase 3 Week 9): only super-admin can list/view/create runs.
- * Approval (`approve`) and posting (`post`) are reserved for Week 10 when
- * the policy will widen to payroll-officer + an approval-specific role gate.
+ * Maker-checker split: payroll-officer + hr (the "makers") create and submit
+ * runs; super-admin (the "approver") owns approve, post, and void. View and
+ * list are open to all makers + the approver so officers can see the runs
+ * they kicked through approval.
  *
  * Voiding follows the project's "void don't delete" convention — the action
- * is in this policy but only legal while the run is still draft/computed
- * (`PayrollRun::isMutable()`). Once approved/posted the run is frozen.
+ * is in this policy but only legal while the run is still pre-posted.
+ * Once posted the run is frozen.
  */
 final class PayrollRunPolicy
 {
     /** @var list<string> */
-    private const SUPER_ADMIN_ROLES = ['super-admin'];
+    private const MAKER_ROLES = ['super-admin', 'payroll-officer', 'hr'];
+
+    /** @var list<string> */
+    private const APPROVAL_ROLES = ['super-admin'];
 
     public function viewAny(User $user): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES);
+        return $user->hasAnyRole(self::MAKER_ROLES);
     }
 
     public function view(User $user, PayrollRun $run): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES);
+        return $user->hasAnyRole(self::MAKER_ROLES);
     }
 
     public function create(User $user): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES);
+        return $user->hasAnyRole(self::MAKER_ROLES);
     }
 
     /**
-     * Submit a `computed` run for approval. Only super-admin in v1.
+     * Submit a `computed` run for approval. Maker action.
      */
     public function submit(User $user, PayrollRun $run): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES)
+        return $user->hasAnyRole(self::MAKER_ROLES)
             && $run->status === PayrollRun::STATUS_COMPUTED;
     }
 
     /**
-     * Approve a `pending_approval` run. Only super-admin in v1; widening
-     * to a payroll-officer "approver" role lands later.
+     * Approve a `pending_approval` run. Approver action.
      */
     public function approve(User $user, PayrollRun $run): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES)
+        return $user->hasAnyRole(self::APPROVAL_ROLES)
             && $run->status === PayrollRun::STATUS_PENDING_APPROVAL;
     }
 
     /**
-     * Post an `approved` run. Final transition; only super-admin.
+     * Post an `approved` run. Final transition; approver action.
      */
     public function post(User $user, PayrollRun $run): bool
     {
-        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES)
+        return $user->hasAnyRole(self::APPROVAL_ROLES)
             && $run->status === PayrollRun::STATUS_APPROVED;
     }
 
     /**
-     * Void any non-posted, non-voided run.
+     * Void any non-posted, non-voided run. Approver action.
      */
     public function void(User $user, PayrollRun $run): bool
     {
-        if (! $user->hasAnyRole(self::SUPER_ADMIN_ROLES)) {
+        if (! $user->hasAnyRole(self::APPROVAL_ROLES)) {
             return false;
         }
 
