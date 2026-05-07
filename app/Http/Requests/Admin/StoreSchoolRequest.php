@@ -38,10 +38,13 @@ final class StoreSchoolRequest extends FormRequest
             'lms_db_port' => ['required', 'integer', 'between:1,65535'],
             'lms_db_database' => ['required', 'string', 'max:64'],
             'lms_db_username' => ['required', 'string', 'max:64'],
-            // `present` not `required` so passwordless MySQL setups (common
-            // in local dev) can be onboarded. The field must be in the
-            // payload (catches client-side typos) but an empty value passes.
-            'lms_db_password' => ['present', 'string', 'max:255'],
+            // `present|nullable|string` — the field must be in the payload
+            // (catches client-side typos) but the value may be null OR an
+            // empty string. Both shapes represent the same passwordless
+            // MySQL state; `null` reaches us when the encrypted cast
+            // roundtrips a NULL column from the DB, `""` when the operator
+            // explicitly cleared the field.
+            'lms_db_password' => ['present', 'nullable', 'string', 'max:255'],
             'lms_db_charset' => ['required', 'string', 'max:32'],
             'is_active' => ['required', 'boolean'],
         ];
