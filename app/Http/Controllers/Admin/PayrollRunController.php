@@ -47,10 +47,10 @@ final class PayrollRunController extends Controller
         $runs = PayrollRun::query()
             ->with([
                 'payPeriod',
-                'submittedBy:id,full_name',
-                'approvedBy:id,full_name',
-                'postedBy:id,full_name',
-                'voidedBy:id,full_name',
+                'submittedBy:id,name',
+                'approvedBy:id,name',
+                'postedBy:id,name',
+                'voidedBy:id,name',
             ])
             ->orderByDesc('created_at')
             ->limit(50)
@@ -118,10 +118,10 @@ final class PayrollRunController extends Controller
 
         $payrollRun->load([
             'payPeriod',
-            'submittedBy:id,full_name',
-            'approvedBy:id,full_name',
-            'postedBy:id,full_name',
-            'voidedBy:id,full_name',
+            'submittedBy:id,name',
+            'approvedBy:id,name',
+            'postedBy:id,name',
+            'voidedBy:id,name',
         ]);
         $rawPayslips = $payrollRun
             ->payslips()
