@@ -27,6 +27,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('pas_payslips')) {
+            return;
+        }
+
         Schema::create('pas_payslips', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('payroll_run_id')

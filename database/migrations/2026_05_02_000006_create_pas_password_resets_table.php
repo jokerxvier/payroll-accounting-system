@@ -15,6 +15,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('pas_password_resets')) {
+            return;
+        }
+
         Schema::create('pas_password_resets', function (Blueprint $table) {
             $table->string('email')->index();
             $table->string('token');

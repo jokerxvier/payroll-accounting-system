@@ -17,6 +17,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('pas_audit_logs')) {
+            return;
+        }
+
         Schema::create('pas_audit_logs', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('auditable_type');

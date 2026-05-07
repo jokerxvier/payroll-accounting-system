@@ -18,6 +18,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('pas_pay_periods')) {
+            return;
+        }
+
         Schema::create('pas_pay_periods', function (Blueprint $table): void {
             $table->id();
             $table->string('code', 32)->unique();

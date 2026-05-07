@@ -21,6 +21,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('pas_job_batches')) {
+            return;
+        }
+
         Schema::create('pas_job_batches', function (Blueprint $table): void {
             $table->string('id')->primary();
             $table->string('name');

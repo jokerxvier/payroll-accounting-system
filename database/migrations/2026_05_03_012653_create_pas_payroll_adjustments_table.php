@@ -29,6 +29,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('pas_payroll_adjustments')) {
+            return;
+        }
+
         Schema::create('pas_payroll_adjustments', function (Blueprint $table) {
             $table->bigIncrements('id');
 

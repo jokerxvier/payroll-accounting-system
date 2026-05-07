@@ -14,6 +14,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('pas_notifications')) {
+            return;
+        }
+
         Schema::create('pas_notifications', function (Blueprint $table) {
             $table->char('id', 36)->primary();
             $table->string('type');

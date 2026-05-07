@@ -10,6 +10,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('pas_statutory_contributions')) {
+            return;
+        }
+
         Schema::create('pas_statutory_contributions', function (Blueprint $table) {
             $table->id();
             $table->string('contribution_code', 32);
