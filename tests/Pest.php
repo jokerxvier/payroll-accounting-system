@@ -5,7 +5,6 @@ use Database\Seeders\RoleSeeder;
 use Database\Seeders\SchoolSeeder;
 use Illuminate\Database\Events\ConnectionEstablished;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
@@ -69,16 +68,17 @@ pest()->extend(TestCase::class)
             // defaults — so behavior is unchanged.
             $defaultSchool->makeCurrent();
 
-            // Spatie's MakeQueueTenantAwareAction calls `forgetCurrent()`
-            // after every non-tenant-aware job (which is every job in C.1,
-            // since `queues_are_tenant_aware_by_default = false`). Under
-            // sync queues this fires inside a test method, after which any
-            // subsequent `$this->get(...)` aborts with NoCurrentTenant.
-            // Restore the tenant on JobProcessed so tests using sync jobs
-            // can continue making HTTP requests in the same method.
-            Event::listen(JobProcessed::class, function () use ($defaultSchool): void {
-                $defaultSchool->makeCurrent();
-            });
+            // Phase C.2 — `queues_are_tenant_aware_by_default = true`.
+            // Spatie's MakeQueueTenantAwareAction now treats every job as
+            // tenant-aware unless it implements NotTenantAware: on
+            // JobProcessing it re-binds the dispatcher's tenant from the
+            // serialized Context and DOES NOT call forgetCurrent() after
+            // handle(), so the previously-needed JobProcessed listener
+            // (which compensated for the C.1 forgetCurrent leak) is gone.
+            // NotTenantAware fixture jobs in tests/Fixtures/Jobs do clear
+            // the current tenant after handle, but no test depends on the
+            // tenant surviving across that opt-out, so no compensation is
+            // wired up here.
         }
     })
     ->in('Feature', 'Browser');

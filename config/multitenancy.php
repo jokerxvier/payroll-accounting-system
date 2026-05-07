@@ -18,18 +18,25 @@ use Spatie\Multitenancy\Jobs\NotTenantAware;
 use Spatie\Multitenancy\Jobs\TenantAware;
 
 /*
- * Phase B.1 — multi-tenant foundation.
+ * Phase C.2 — queue tenant awareness.
  *
- * The package is installed and configured to recognise our `pas_schools`
- * tenant model, but no tenant resolution happens yet:
- *   - `tenant_finder` is null, so Spatie's NeedsTenant middleware (when
- *     registered in Phase C) is a no-op until a finder is provided.
- *   - `switch_tenant_tasks` is empty; Phase C ships SwitchLmsConnection.
- *   - `queues_are_tenant_aware_by_default` is false; Phase C flips it on
- *     once the finder + middleware + task pipeline are wired up.
+ * The full tenant pipeline is now live:
+ *   - SchoolTenantFinder resolves a school per request (or falls through
+ *     to the seeded `slug=default` school when PAYROLL_MULTI_TENANT=false).
+ *   - SwitchLmsConnection rebinds `database.connections.lms` on
+ *     makeCurrent / forgetCurrent.
+ *   - `queues_are_tenant_aware_by_default` = true (Phase C.2): Spatie's
+ *     MakeQueueTenantAwareAction now (a) reads the current tenant ID from
+ *     Laravel Context at dispatch time and serializes it onto the job
+ *     payload, then (b) rebinds CurrentTenant + runs SwitchLmsConnection
+ *     before `handle()`. Production behaviour is unchanged because every
+ *     request still resolves the seeded `default` school under
+ *     PAYROLL_MULTI_TENANT=false; queued jobs simply route through the
+ *     same school explicitly instead of relying on ambient state.
  *
- * Single-tenant runtime behaviour is unchanged — the static `lms`
- * connection from `.env` continues to serve every request.
+ * Per-job opt-out: implement `Spatie\Multitenancy\Jobs\NotTenantAware`.
+ * Per-job opt-in (when the global default flips back to false): implement
+ * `Spatie\Multitenancy\Jobs\TenantAware`.
  */
 
 return [
@@ -95,11 +102,15 @@ return [
      * will be automatically set on the job. When the job is executed, the set
      * tenant on the job will be made current.
      *
-     * Phase B.1: false (no jobs are tenant-aware yet because no tenant is
-     * ever current). Phase C flips this to true once tenant resolution is
-     * wired up so background jobs inherit the dispatcher's tenant context.
+     * Phase C.2: true. Spatie's MakeQueueTenantAwareAction listens on
+     * JobProcessing/JobRetryRequested and (a) for tenant-aware jobs reads
+     * the serialized tenant id from Laravel Context, calls makeCurrent()
+     * — which fires the SwitchLmsConnection task — and binds the tenant
+     * into the container; (b) for non-tenant-aware jobs calls
+     * forgetCurrent() so they run without an ambient tenant. To opt a
+     * specific job out, implement Spatie\Multitenancy\Jobs\NotTenantAware.
      */
-    'queues_are_tenant_aware_by_default' => false,
+    'queues_are_tenant_aware_by_default' => true,
 
     /*
      * The connection name to reach the tenant database.
