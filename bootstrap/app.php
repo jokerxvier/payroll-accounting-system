@@ -27,11 +27,21 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         // Render branded Inertia error pages for HTML requests on the codes
         // we have a dedicated React page for. JSON / API responses keep
-        // Laravel's default behavior. Local/testing keeps the framework
-        // error pages so stack traces stay visible during development and
-        // existing feature tests can still assert `assertForbidden()` etc.
+        // Laravel's default behavior. Three bypass conditions:
+        //   1. `local` / `testing` env — keeps Whoops + framework error
+        //      pages for development; existing feature tests can still
+        //      assert assertForbidden() etc.
+        //   2. APP_DEBUG=true — operators flipping debug on staging /
+        //      production to troubleshoot a 500 need to see the stack
+        //      trace, not the friendly page.
+        //   3. expectsJson() — APIs / Inertia partial reloads expect
+        //      structured responses, not a rendered Inertia page.
         $exceptions->respond(function (Response $response, Throwable $exception, $request) {
             if (app()->environment('local', 'testing')) {
+                return $response;
+            }
+
+            if (config('app.debug')) {
                 return $response;
             }
 
