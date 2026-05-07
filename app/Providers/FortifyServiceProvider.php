@@ -56,12 +56,11 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureViews(): void
     {
+        // Password reset (Fortify resetPasswords feature) is disabled in
+        // Phase A.2 — users reset via their LMS admin since LMS is the
+        // identity master. The login view no longer surfaces a "Forgot
+        // password?" link, so `canResetPassword` is no longer passed.
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/login', [
-            // Phase A.2: password reset is disabled. The flag is forced to false
-            // even when Fortify's resetPasswords() feature would be enabled by
-            // config so the login view does not link to a route we no longer
-            // register.
-            'canResetPassword' => false,
             'canRegister' => Features::enabled(Features::registration()),
             'status' => $request->session()->get('status'),
             'showDemoLogin' => ! app()->isProduction(),
