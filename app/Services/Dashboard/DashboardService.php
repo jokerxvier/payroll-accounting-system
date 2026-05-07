@@ -158,7 +158,7 @@ final class DashboardService
             ? []
             : User::query()
                 ->whereIn('id', $actorIds)
-                ->pluck('full_name', 'id')
+                ->pluck('name', 'id')
                 ->all();
 
         $rows = [];

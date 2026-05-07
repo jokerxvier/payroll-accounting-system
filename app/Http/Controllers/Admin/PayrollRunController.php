@@ -397,21 +397,22 @@ final class PayrollRunController extends Controller
                 'start_date' => $run->payPeriod->start_date->toDateString(),
                 'end_date' => $run->payPeriod->end_date->toDateString(),
             ] : null,
+            // Phase A.2: User relation now points at pas_users (column `name`).
             'submitted_by' => $run->submittedBy ? [
                 'id' => $run->submittedBy->id,
-                'name' => $run->submittedBy->full_name,
+                'name' => $run->submittedBy->name,
             ] : null,
             'approved_by' => $run->approvedBy ? [
                 'id' => $run->approvedBy->id,
-                'name' => $run->approvedBy->full_name,
+                'name' => $run->approvedBy->name,
             ] : null,
             'posted_by' => $run->postedBy ? [
                 'id' => $run->postedBy->id,
-                'name' => $run->postedBy->full_name,
+                'name' => $run->postedBy->name,
             ] : null,
             'voided_by' => $run->voidedBy ? [
                 'id' => $run->voidedBy->id,
-                'name' => $run->voidedBy->full_name,
+                'name' => $run->voidedBy->name,
             ] : null,
         ];
     }

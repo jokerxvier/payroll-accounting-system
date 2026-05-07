@@ -3,15 +3,18 @@
 namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
-use App\Actions\Fortify\ResetUserPassword;
+use App\Models\Lms\User as LmsUser;
+use App\Services\Auth\UpsertPasUserFromLms;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
+use Throwable;
 
 class FortifyServiceProvider extends ServiceProvider
 {
@@ -31,6 +34,7 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+        $this->configureAuthentication();
     }
 
     /**
@@ -38,7 +42,12 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureActions(): void
     {
-        Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
+        // Password reset is intentionally NOT registered. Phase A.2 of the
+        // multi-tenant refactor (docs/improvement/plan-2.md, "Open question —
+        // password resets" → option (b)) makes the LMS the identity master;
+        // password resets are handled out-of-band by the LMS admin. The
+        // app/Actions/Fortify/ResetUserPassword.php file is retained
+        // (orphan but harmless) for the eventual cleanup PR.
         Fortify::createUsersUsing(CreateNewUser::class);
     }
 
@@ -48,20 +57,18 @@ class FortifyServiceProvider extends ServiceProvider
     private function configureViews(): void
     {
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/login', [
-            'canResetPassword' => Features::enabled(Features::resetPasswords()),
+            // Phase A.2: password reset is disabled. The flag is forced to false
+            // even when Fortify's resetPasswords() feature would be enabled by
+            // config so the login view does not link to a route we no longer
+            // register.
+            'canResetPassword' => false,
             'canRegister' => Features::enabled(Features::registration()),
             'status' => $request->session()->get('status'),
             'showDemoLogin' => ! app()->isProduction(),
         ]));
 
-        Fortify::resetPasswordView(fn (Request $request) => Inertia::render('auth/reset-password', [
-            'email' => $request->email,
-            'token' => $request->route('token'),
-        ]));
-
-        Fortify::requestPasswordResetLinkView(fn (Request $request) => Inertia::render('auth/forgot-password', [
-            'status' => $request->session()->get('status'),
-        ]));
+        // Password reset views are intentionally not registered (LMS is
+        // identity master; resets are out-of-band per Phase A.2 decision).
 
         Fortify::verifyEmailView(fn (Request $request) => Inertia::render('auth/verify-email', [
             'status' => $request->session()->get('status'),
@@ -87,6 +94,52 @@ class FortifyServiceProvider extends ServiceProvider
             $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
 
             return Limit::perMinute(5)->by($throttleKey);
+        });
+    }
+
+    /**
+     * Configure the Fortify authentication callback.
+     *
+     * Phase A.2 swap: the LMS is the identity master. Fortify's default
+     * model-password lookup is replaced with a callback that:
+     *
+     *   1. Looks up the LMS user by email (read-only `lms` connection).
+     *   2. Verifies the supplied password against the LMS's bcrypt hash.
+     *   3. Upserts a row in `pas_users` (id-preserved from the LMS row) so
+     *      the rest of Fortify (session continuity, password confirmation,
+     *      2FA, email verification) operates on the payroll-DB-owned table.
+     *   4. Returns the resolved `App\Models\User` so Fortify can log it in.
+     *
+     * The defensive try/catch on the LMS read mirrors the pattern in
+     * `EloquentEmployeeRepository::countActiveStaff()`, etc. — an
+     * unreachable LMS degrades to "credentials don't match" UX rather than
+     * a 500.
+     */
+    private function configureAuthentication(): void
+    {
+        Fortify::authenticateUsing(function (Request $request) {
+            $email = (string) $request->input('email', '');
+            $password = (string) $request->input('password', '');
+
+            if ($email === '' || $password === '') {
+                return null;
+            }
+
+            try {
+                $lmsUser = LmsUser::query()->where('email', $email)->first();
+            } catch (Throwable $e) {
+                // LMS unreachable — login fails gracefully (same UX as
+                // wrong credentials). Logged for ops via report().
+                report($e);
+
+                return null;
+            }
+
+            if ($lmsUser === null || ! Hash::check($password, (string) $lmsUser->password)) {
+                return null;
+            }
+
+            return app(UpsertPasUserFromLms::class)($lmsUser);
         });
     }
 }

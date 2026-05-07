@@ -4,18 +4,28 @@ declare(strict_types=1);
 
 namespace App\Listeners;
 
+use App\Models\Lms\User as LmsUser;
 use App\Models\User;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Maps the authenticated user's LMS role_id to a payroll Spatie role on login.
  *
+ * Phase A.2 update: `App\Models\User` now lives on `pas_users`, which has no
+ * `role_id` column. The role lookup follows the cross-reference column:
+ *   pas_users.lms_user_id → lms.users.id → lms.users.role_id
+ *
  * Behaviour:
- *  - LMS role_id is read from the user row.
- *  - If role_id is NOT in payroll.employee_role_allowlist, no role is
+ *  - If pas_users.lms_user_id is null (the row was provisioned outside the
+ *    LMS auth flow — e.g., a future invite-only path), the listener returns
+ *    early and logs a warning.
+ *  - LMS read failures degrade gracefully (log + return early without
+ *    touching roles). Same defensive pattern as the dashboard / employees
+ *    index / payroll preview controllers.
+ *  - If LMS role_id is NOT in payroll.employee_role_allowlist, no role is
  *    assigned (a Student or Parent must never receive a payroll role).
- *    A warning is logged so we can detect surprise role_ids in production.
  *  - If role_id IS allowlisted, look up payroll.lms_role_to_payroll_role
  *    and syncRoles([...]) the corresponding payroll role. If the role_id is
  *    allowlisted but unmapped, fall back to the 'employee' role.
@@ -37,7 +47,27 @@ final class AssignPayrollRoleOnLogin
             return;
         }
 
-        $rawRoleId = $user->getAttribute('role_id');
+        $lmsUserId = $user->getAttribute('lms_user_id');
+
+        if ($lmsUserId === null) {
+            Log::warning('Login: pas_user has no lms_user_id; cannot resolve role.', [
+                'user_id' => $user->getKey(),
+            ]);
+
+            return;
+        }
+
+        try {
+            $lmsRow = LmsUser::query()->whereKey($lmsUserId)->first();
+            $rawRoleId = $lmsRow?->getAttribute('role_id');
+        } catch (Throwable $e) {
+            // LMS unreachable — leave existing roles untouched. Mirrors the
+            // defensive pattern in EloquentEmployeeRepository / the dashboard.
+            report($e);
+
+            return;
+        }
+
         $roleId = $rawRoleId === null ? null : (int) $rawRoleId;
 
         /** @var array<int, int> $allowlist */
@@ -46,6 +76,7 @@ final class AssignPayrollRoleOnLogin
         if ($roleId === null || ! in_array($roleId, $allowlist, true)) {
             Log::warning('Login: LMS role_id outside payroll allowlist; no role assigned.', [
                 'user_id' => $user->getKey(),
+                'lms_user_id' => $lmsUserId,
                 'lms_role_id' => $roleId,
             ]);
 

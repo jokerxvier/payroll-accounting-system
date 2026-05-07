@@ -7,6 +7,14 @@ use Database\Seeders\DemoUsersSeeder;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Event;
 
+beforeEach(function (): void {
+    // Phase A.2: the seeder writes both an LMS-side row (via the `lms`
+    // connection) and a pas_users row id-preserved. Point the `lms`
+    // connection at the same sqlite as the default for these tests so
+    // the LMS write hits the testing mirror table.
+    useLmsSqliteMirror();
+});
+
 /*
  * DemoUsersSeeder coverage.
  *

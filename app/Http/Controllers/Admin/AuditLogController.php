@@ -49,7 +49,7 @@ final class AuditLogController extends Controller
             ->unique();
         $actorNames = User::query()
             ->whereIn('id', $actorIds)
-            ->get(['id', 'full_name'])
+            ->get(['id', 'name'])
             ->keyBy('id');
 
         return Inertia::render('admin/audit-logs/index', [
@@ -84,7 +84,7 @@ final class AuditLogController extends Controller
         $actorIds = $entries->pluck('actor_id')->filter()->unique();
         $actorNames = User::query()
             ->whereIn('id', $actorIds)
-            ->get(['id', 'full_name'])
+            ->get(['id', 'name'])
             ->keyBy('id');
 
         return Excel::download(
@@ -161,7 +161,7 @@ final class AuditLogController extends Controller
             'auditable_short_type' => self::shortType($log->auditable_type),
             'auditable_id' => $log->auditable_id,
             'actor_id' => $log->actor_id,
-            'actor_name' => $log->actor_id ? $actorNames->get($log->actor_id)?->full_name : null,
+            'actor_name' => $log->actor_id ? $actorNames->get($log->actor_id)?->name : null,
             'before' => $log->before,
             'after' => $log->after,
             'ip' => $log->ip,

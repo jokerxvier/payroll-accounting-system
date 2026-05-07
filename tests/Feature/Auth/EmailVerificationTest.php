@@ -32,6 +32,9 @@ test('email can be verified', function () {
     $response = $this->actingAs($user)->get($verificationUrl);
 
     Event::assertDispatched(Verified::class);
+    // Phase A.2: email_verified_at now writes to pas_users (the User model's
+    // table), no longer the LMS-owned `users` table. The fresh() reload
+    // reads from pas_users.
     expect($user->fresh()->hasVerifiedEmail())->toBeTrue();
     $response->assertRedirect(route('dashboard', absolute: false).'?verified=1');
 });
