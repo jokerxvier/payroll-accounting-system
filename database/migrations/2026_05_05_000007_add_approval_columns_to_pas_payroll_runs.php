@@ -23,23 +23,39 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('pas_payroll_runs', function (Blueprint $table): void {
-            $table->timestamp('submitted_at')->nullable()->after('computed_at');
-            $table->unsignedInteger('submitted_by_user_id')->nullable()->after('submitted_at');
-            $table->timestamp('posted_at')->nullable()->after('approved_by_user_id');
-            $table->unsignedInteger('posted_by_user_id')->nullable()->after('posted_at');
-
-            $table->foreign('submitted_by_user_id')
-                ->references('id')->on('users')->nullOnDelete();
-            $table->foreign('posted_by_user_id')
-                ->references('id')->on('users')->nullOnDelete();
+            if (! Schema::hasColumn('pas_payroll_runs', 'submitted_at')) {
+                $table->timestamp('submitted_at')->nullable()->after('computed_at');
+            }
+            if (! Schema::hasColumn('pas_payroll_runs', 'submitted_by_user_id')) {
+                $table->unsignedInteger('submitted_by_user_id')->nullable()->after('submitted_at');
+            }
+            if (! Schema::hasColumn('pas_payroll_runs', 'posted_at')) {
+                $table->timestamp('posted_at')->nullable()->after('approved_by_user_id');
+            }
+            if (! Schema::hasColumn('pas_payroll_runs', 'posted_by_user_id')) {
+                $table->unsignedInteger('posted_by_user_id')->nullable()->after('posted_at');
+            }
         });
+
+        // FKs to LMS-owned `users` are guarded — the table may not exist on
+        // bootstrap of a fresh environment.
+        if (Schema::hasTable('users')) {
+            Schema::table('pas_payroll_runs', function (Blueprint $table): void {
+                $table->foreign('submitted_by_user_id')
+                    ->references('id')->on('users')->nullOnDelete();
+                $table->foreign('posted_by_user_id')
+                    ->references('id')->on('users')->nullOnDelete();
+            });
+        }
     }
 
     public function down(): void
     {
         Schema::table('pas_payroll_runs', function (Blueprint $table): void {
-            $table->dropForeign(['submitted_by_user_id']);
-            $table->dropForeign(['posted_by_user_id']);
+            if (Schema::hasTable('users')) {
+                $table->dropForeign(['submitted_by_user_id']);
+                $table->dropForeign(['posted_by_user_id']);
+            }
             $table->dropColumn([
                 'submitted_at',
                 'submitted_by_user_id',

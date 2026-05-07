@@ -25,8 +25,17 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->timestamps();
 
-            $table->index(['contribution_code', 'effective_from']);
-            $table->index(['effective_from', 'effective_to']);
+            // Explicit index names — Laravel's auto-generated name
+            // `pas_statutory_contributions_contribution_code_effective_from_index`
+            // exceeds MySQL's 64-character identifier limit.
+            $table->index(
+                ['contribution_code', 'effective_from'],
+                'pas_statutory_contributions_code_eff_from_idx',
+            );
+            $table->index(
+                ['effective_from', 'effective_to'],
+                'pas_statutory_contributions_eff_dates_idx',
+            );
         });
     }
 

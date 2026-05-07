@@ -58,7 +58,14 @@ return new class extends Migration
 
         // FK and index live outside the column-add closure so the column-existence
         // guard above doesn't suppress them when we hit a half-applied state.
-        if (! $this->hasForeignKey('pas_statutory_contributions', 'voided_by_user_id')) {
+        // The FK additionally requires the LMS-owned `users` table to be
+        // present — on bootstrap of a fresh environment it may not be. Skip
+        // FK creation in that case; it can be applied later via a follow-up
+        // migration once LMS schema is in place.
+        if (
+            Schema::hasTable('users')
+            && ! $this->hasForeignKey('pas_statutory_contributions', 'voided_by_user_id')
+        ) {
             Schema::table('pas_statutory_contributions', function (Blueprint $table): void {
                 $table->foreign('voided_by_user_id')
                     ->references('id')

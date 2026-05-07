@@ -52,17 +52,23 @@ return new class extends Migration
             $table->index(['pay_period_id', 'status'], 'pas_payroll_runs_period_status_idx');
             $table->index('status', 'pas_payroll_runs_status_idx');
             $table->index('voided_at', 'pas_payroll_runs_voided_at_idx');
-
-            $table->foreign('approved_by_user_id')
-                ->references('id')
-                ->on('users')
-                ->nullOnDelete();
-
-            $table->foreign('voided_by_user_id')
-                ->references('id')
-                ->on('users')
-                ->nullOnDelete();
         });
+
+        // FKs to LMS-owned `users` are added separately and guarded — the
+        // table may not exist on bootstrap of a fresh environment.
+        if (Schema::hasTable('users')) {
+            Schema::table('pas_payroll_runs', function (Blueprint $table): void {
+                $table->foreign('approved_by_user_id')
+                    ->references('id')
+                    ->on('users')
+                    ->nullOnDelete();
+
+                $table->foreign('voided_by_user_id')
+                    ->references('id')
+                    ->on('users')
+                    ->nullOnDelete();
+            });
+        }
     }
 
     public function down(): void
