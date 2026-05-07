@@ -38,7 +38,10 @@ final class StoreSchoolRequest extends FormRequest
             'lms_db_port' => ['required', 'integer', 'between:1,65535'],
             'lms_db_database' => ['required', 'string', 'max:64'],
             'lms_db_username' => ['required', 'string', 'max:64'],
-            'lms_db_password' => ['required', 'string', 'max:255'],
+            // `present` not `required` so passwordless MySQL setups (common
+            // in local dev) can be onboarded. The field must be in the
+            // payload (catches client-side typos) but an empty value passes.
+            'lms_db_password' => ['present', 'string', 'max:255'],
             'lms_db_charset' => ['required', 'string', 'max:32'],
             'is_active' => ['required', 'boolean'],
         ];
