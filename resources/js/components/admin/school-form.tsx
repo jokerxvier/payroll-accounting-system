@@ -35,6 +35,20 @@ interface FormShape extends SchoolFormData {
     [key: string]: string | number | boolean;
 }
 
+/**
+ * Read the Laravel-issued XSRF-TOKEN cookie set by `EncryptCookies` +
+ * `VerifyCsrfToken` middleware. This is the canonical CSRF transport for
+ * Inertia SPAs — `app.blade.php` does not emit a `<meta name="csrf-token">`
+ * tag, so the cookie path is the only one wired up. Returns null if the
+ * cookie is missing (which means the session bootstrapped without
+ * EncryptCookies — no CSRF header is sent and the request will 419).
+ */
+function getXsrfToken(): string | null {
+    const match = document.cookie.match(/(^|; )XSRF-TOKEN=([^;]+)/);
+
+    return match ? decodeURIComponent(match[2]) : null;
+}
+
 function buildDefaults(mode: Mode): FormShape {
     if (mode.kind === 'create') {
         return {
@@ -106,9 +120,7 @@ export function SchoolForm({ mode }: SchoolFormProps) {
         setTestResult(null);
 
         try {
-            const csrfMeta = document.querySelector(
-                'meta[name="csrf-token"]',
-            ) as HTMLMetaElement | null;
+            const csrfToken = getXsrfToken();
 
             const response = await fetch(schoolsTestConnection().url, {
                 method: 'POST',
@@ -117,7 +129,7 @@ export function SchoolForm({ mode }: SchoolFormProps) {
                     'Content-Type': 'application/json',
                     Accept: 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    ...(csrfMeta ? { 'X-CSRF-TOKEN': csrfMeta.content } : {}),
+                    ...(csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : {}),
                 },
                 body: JSON.stringify({
                     lms_db_host: form.data.lms_db_host,
