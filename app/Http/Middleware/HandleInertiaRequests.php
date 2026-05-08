@@ -2,8 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Pas\School;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Spatie\Multitenancy\Models\Tenant;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -36,6 +38,7 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $tenant = Tenant::current();
 
         return [
             ...parent::share($request),
@@ -50,6 +53,16 @@ class HandleInertiaRequests extends Middleware
                     ['roles' => $user->getRoleNames()->all()],
                 ),
             ],
+            // Surface the active tenant so the React sidebar can render a
+            // context badge — operators always know which school's data they're
+            // looking at. Sourced from Spatie's current-tenant facade so the
+            // badge reflects whichever resolution strategy fired (subdomain /
+            // path / header / single-tenant fallback).
+            'currentTenant' => $tenant instanceof School ? [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'slug' => $tenant->slug,
+            ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

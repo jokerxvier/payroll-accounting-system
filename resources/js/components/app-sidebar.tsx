@@ -159,7 +159,7 @@ function hasAnyRole(
 }
 
 export function AppSidebar() {
-    const { auth } = usePage().props;
+    const { auth, currentTenant } = usePage().props;
     const userRoles = auth.user?.roles ?? [];
 
     const canViewEmployees = hasAnyRole(userRoles, EMPLOYEE_DIRECTORY_ROLES);
@@ -180,6 +180,20 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>
+                {currentTenant ? (
+                    <div
+                        className="mx-2 mt-1 flex items-center gap-1.5 rounded-md border border-sidebar-border/60 bg-sidebar-accent/40 px-2 py-1 text-xs group-data-[collapsible=icon]:hidden"
+                        title={`Active tenant: ${currentTenant.name} (${currentTenant.slug})`}
+                    >
+                        <Building2
+                            className="h-3 w-3 flex-shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                        <span className="truncate font-medium text-sidebar-foreground">
+                            {currentTenant.name}
+                        </span>
+                    </div>
+                ) : null}
             </SidebarHeader>
 
             <SidebarContent>
