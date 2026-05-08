@@ -78,6 +78,20 @@ it('places a non-unique index on school_id', function (): void {
     ))->toBeTrue();
 });
 
+it('places a composite unique on (school_id, lms_user_id)', function (): void {
+    // Phase D.3 — cross-LMS collision safety. Two distinct LMS deployments
+    // can both have a user at internal id=5; the composite key keeps
+    // their pas_users rows distinct. NULL-distinct semantics on both
+    // MySQL and SQLite allow multiple platform-admin (NULL, NULL) rows.
+    $indexes = collect(Schema::getIndexes('pas_users'));
+
+    expect($indexes->contains(
+        fn ($idx) => $idx['name'] === 'pas_users_school_lms_user_uq'
+            && $idx['columns'] === ['school_id', 'lms_user_id']
+            && $idx['unique'],
+    ))->toBeTrue();
+});
+
 it('declares no foreign key constraints on lms_user_id or school_id', function (): void {
     // lms_user_id: LMS lives on a different connection — no FK possible.
     // school_id: pas_schools doesn't exist yet (Phase B) — no FK yet.

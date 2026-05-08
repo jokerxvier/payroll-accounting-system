@@ -14,10 +14,11 @@ use Spatie\Multitenancy\Models\Tenant;
 /**
  * Upserts a row in `pas_users` from the canonical LMS user record.
  *
- * Id-preserving: `pas_users.id` always equals `users.id` (from LMS) for
- * users that originate in the LMS. This invariant is load-bearing — the
- * five FKs from `pas_*` to `users(id)` will be redirected to `pas_users(id)`
- * in Phase A.3 without any data migration.
+ * Phase D.3 dropped id-preservation. The composite unique
+ * `(school_id, lms_user_id)` is the authoritative key for an LMS user's
+ * payroll mirror. New rows take an auto-increment id; the 5 FKs from
+ * `pas_*` into `pas_users(id)` continue to work because `Auth::id()`
+ * returns `pas_users.id` at write time, never the LMS `users.id`.
  *
  * Mirrors the LMS password hash so Fortify's session continuity (password
  * confirmation, 2FA challenge) works without re-querying LMS on every
@@ -33,20 +34,6 @@ final class UpsertPasUserFromLms
     {
         $now = Carbon::now();
 
-        // Look up an existing row by email FIRST, then fall back to id. Email
-        // is the stable identity from the user's perspective and the only
-        // column with a unique constraint on pas_users.email. The id-by-id
-        // lookup catches the original A.1 backfill where pas_users.id was
-        // preserved from LMS users.id, but seeders or earlier pas_users
-        // generations may have stored the same email under a different id
-        // (e.g., DemoUsersSeeder uses high ids 9_000_001+ to dodge LMS
-        // collisions). Without the email lookup the insert path tries to
-        // re-create the row and trips the unique-email constraint.
-        $existing = DB::table('pas_users')->where('email', $lmsUser->email)->first();
-        if ($existing === null) {
-            $existing = DB::table('pas_users')->where('id', $lmsUser->id)->first();
-        }
-
         // Pin the pas_users row to the tenant whose LMS just verified the
         // password. This is the source of truth for non-super-admin tenant
         // resolution: ApplyTenantOverride uses pas_users.school_id to lock
@@ -56,6 +43,29 @@ final class UpsertPasUserFromLms
         // SchoolTenantFinder always resolves something).
         $currentTenant = Tenant::current();
         $tenantSchoolId = $currentTenant?->getKey();
+
+        // Primary lookup — composite (school_id, lms_user_id) is the
+        // authoritative identifier for an LMS user's payroll mirror
+        // post-D.3. Two distinct LMS deployments can both have a user at
+        // internal id=5; the composite key keeps their pas_users rows
+        // distinct.
+        $existing = null;
+        if ($tenantSchoolId !== null) {
+            $existing = DB::table('pas_users')
+                ->where('school_id', $tenantSchoolId)
+                ->where('lms_user_id', $lmsUser->id)
+                ->first();
+        }
+
+        // Legacy fallback — pre-D.3 rows may have lms_user_id set but
+        // school_id NULL, or vice versa. Match by email which is still
+        // globally unique. Used during the transition window for rows
+        // seeded before the tenant-aware upsert wired up.
+        if ($existing === null) {
+            $existing = DB::table('pas_users')
+                ->where('email', $lmsUser->email)
+                ->first();
+        }
 
         $payload = [
             'lms_user_id' => $lmsUser->id,
@@ -69,13 +79,16 @@ final class UpsertPasUserFromLms
         ];
 
         if ($existing === null) {
-            $payload['id'] = $lmsUser->id;
+            // No `id` preset — let auto-increment assign. The new row's id
+            // will not match $lmsUser->id; that's fine because Auth::id()
+            // returns pas_users.id (whatever it is) at write time, so all
+            // subsequent FK writes from pas_* into pas_users(id) continue
+            // to work.
             $payload['created_at'] = $now;
             // Fortify-owned columns are left at their schema defaults (null)
             // on first insert; the user enrolls into 2FA / verifies email
             // through the normal Fortify flows after login.
-            DB::table('pas_users')->insert($payload);
-            $resolvedId = $lmsUser->id;
+            $resolvedId = (int) DB::table('pas_users')->insertGetId($payload);
         } else {
             DB::table('pas_users')->where('id', $existing->id)->update($payload);
             $resolvedId = (int) $existing->id;

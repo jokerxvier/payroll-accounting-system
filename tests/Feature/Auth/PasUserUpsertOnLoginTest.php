@@ -54,7 +54,7 @@ it('creates pas_users on first successful login', function () {
     $password = 'secret123';
     $lmsId = seedLmsOnlyUser($email, $password);
 
-    expect(DB::table('pas_users')->where('id', $lmsId)->exists())->toBeFalse();
+    expect(DB::table('pas_users')->where('lms_user_id', $lmsId)->exists())->toBeFalse();
 
     $response = $this->post(route('login.store'), [
         'email' => $email,
@@ -64,10 +64,11 @@ it('creates pas_users on first successful login', function () {
     $this->assertAuthenticated();
     $response->assertRedirect(route('dashboard', absolute: false));
 
-    $row = DB::table('pas_users')->where('id', $lmsId)->first();
+    // Phase D.3 dropped id-preservation; cross-reference the row via
+    // lms_user_id (the authoritative LMS-side identifier).
+    $row = DB::table('pas_users')->where('lms_user_id', $lmsId)->first();
 
     expect($row)->not->toBeNull();
-    expect((int) $row->id)->toBe($lmsId);
     expect((int) $row->lms_user_id)->toBe($lmsId);
     expect((string) $row->email)->toBe($email);
     expect((string) $row->name)->toBe('LMS-Only User');
@@ -89,7 +90,8 @@ it('updates pas_users on subsequent successful login when LMS password rotates',
     ]);
     $this->assertAuthenticated();
 
-    $oldPasHash = (string) DB::table('pas_users')->where('id', $lmsId)->value('password');
+    // Phase D.3 dropped id-preservation; look up by lms_user_id.
+    $oldPasHash = (string) DB::table('pas_users')->where('lms_user_id', $lmsId)->value('password');
 
     // Simulate LMS-side password rotation (admin reset by some external
     // process). Logout to clear the session.
@@ -108,11 +110,11 @@ it('updates pas_users on subsequent successful login when LMS password rotates',
     $this->assertAuthenticated();
     $response->assertRedirect(route('dashboard', absolute: false));
 
-    $newPasHash = (string) DB::table('pas_users')->where('id', $lmsId)->value('password');
+    $newPasHash = (string) DB::table('pas_users')->where('lms_user_id', $lmsId)->value('password');
 
     expect($newPasHash)->not->toBe($oldPasHash);
-    // Exactly one pas_users row exists for this id (no duplicates).
-    expect(DB::table('pas_users')->where('id', $lmsId)->count())->toBe(1);
+    // Exactly one pas_users row exists for this LMS user (no duplicates).
+    expect(DB::table('pas_users')->where('lms_user_id', $lmsId)->count())->toBe(1);
 });
 
 it('fails login on wrong password without creating pas_users', function () {
@@ -125,7 +127,7 @@ it('fails login on wrong password without creating pas_users', function () {
     ]);
 
     $this->assertGuest();
-    expect(DB::table('pas_users')->where('id', $lmsId)->exists())->toBeFalse();
+    expect(DB::table('pas_users')->where('lms_user_id', $lmsId)->exists())->toBeFalse();
 });
 
 it('fails login on missing email without creating pas_users', function () {
@@ -148,7 +150,7 @@ it('fails login on non-existent email without creating pas_users', function () {
     expect(DB::table('pas_users')->count())->toBe(0);
 });
 
-it('upsert service is id-preserving and idempotent', function () {
+it('upsert service is idempotent and tracked by lms_user_id', function () {
     $email = 'upsert-direct@example.test';
     $lmsId = seedLmsOnlyUser($email, 'pwd123');
 
@@ -158,9 +160,13 @@ it('upsert service is id-preserving and idempotent', function () {
     $first = $service($lmsUser);
     $second = $service($lmsUser);
 
-    expect($first->id)->toBe($lmsId);
-    expect($second->id)->toBe($lmsId);
-    expect(DB::table('pas_users')->where('id', $lmsId)->count())->toBe(1);
+    // Phase D.3 dropped id-preservation; the service returns the same
+    // pas_users row both times (idempotency) and the row tracks the LMS
+    // user via lms_user_id, not via id.
+    expect($first->id)->toBe($second->id);
+    expect((int) $first->lms_user_id)->toBe($lmsId);
+    expect((int) $second->lms_user_id)->toBe($lmsId);
+    expect(DB::table('pas_users')->where('lms_user_id', $lmsId)->count())->toBe(1);
 });
 
 /*
