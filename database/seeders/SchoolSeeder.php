@@ -32,11 +32,19 @@ final class SchoolSeeder extends Seeder
         // flags raw env() calls outside `config/` for exactly this reason.
         $mysql = (array) config('database.connections.mysql', []);
 
+        // Seed `domain` to the APP_URL host so the SchoolTenantFinder's
+        // subdomain strategy resolves the bare local host to this row when
+        // PAYROLL_MULTI_TENANT=true. Without this, a fresh local env that
+        // flips the flag hits NoCurrentTenant on every URL — annoying for
+        // dev. Production still overrides via the admin UI per real tenant.
+        $appHost = parse_url((string) config('app.url'), PHP_URL_HOST);
+        $domain = is_string($appHost) && $appHost !== '' ? $appHost : null;
+
         School::query()->updateOrCreate(
             ['slug' => 'default'],
             [
                 'name' => $appName !== '' ? $appName : 'Default School',
-                'domain' => null,
+                'domain' => $domain,
                 'lms_db_host' => (string) ($mysql['host'] ?? '127.0.0.1'),
                 'lms_db_port' => (int) ($mysql['port'] ?? 3306),
                 'lms_db_database' => (string) ($mysql['database'] ?? 'payroll_db'),
