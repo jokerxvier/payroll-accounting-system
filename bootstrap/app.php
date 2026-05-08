@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\ApplyTenantOverride;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -21,6 +22,14 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             HandleAppearance::class,
+            // Phase E preview — re-pivots the tenant from the super-admin's
+            // session-stored override (the in-app switcher). Must run BEFORE
+            // HandleInertiaRequests because Inertia calls share() at the
+            // start of its handle() (before $next), so the currentTenant
+            // prop is captured at THAT point. Spatie resolves the tenant
+            // at service-provider boot (before session is available), so
+            // this middleware re-resolves once session + auth are ready.
+            ApplyTenantOverride::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
             // Phase C.1 — resolves the active tenant via SchoolTenantFinder

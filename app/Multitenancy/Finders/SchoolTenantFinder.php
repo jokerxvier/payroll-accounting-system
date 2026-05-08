@@ -98,25 +98,16 @@ final class SchoolTenantFinder extends TenantFinder
      * Returns null when the override is absent, the user isn't a super-admin,
      * or the referenced school is missing/inactive.
      */
+    /**
+     * Session-based override is intentionally NOT read here — Spatie resolves
+     * the tenant at service-provider boot time, BEFORE the StartSession
+     * middleware has fired, so `$request->session()` is unavailable. The
+     * `App\Http\Middleware\ApplyTenantOverride` middleware runs after session
+     * is started, reads the override, and re-pivots the active tenant via
+     * `Tenant::forgetCurrent()` + `$school->makeCurrent()`.
+     */
     private function resolveSessionOverride(Request $request): ?School
     {
-        if (! $request->hasSession()) {
-            return null;
-        }
-
-        $overrideId = $request->session()->get('current_school_id_override');
-        if (! is_int($overrideId) && ! (is_string($overrideId) && ctype_digit($overrideId))) {
-            return null;
-        }
-
-        $user = $request->user();
-        if ($user === null || ! method_exists($user, 'hasRole') || ! $user->hasRole('super-admin')) {
-            return null;
-        }
-
-        return School::query()
-            ->whereKey((int) $overrideId)
-            ->where('is_active', true)
-            ->first();
+        return null;
     }
 }
