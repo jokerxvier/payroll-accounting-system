@@ -68,6 +68,50 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
         $this->registerEventListeners();
         $this->registerPolicies();
+        $this->registerPlatformAdminGate();
+    }
+
+    /**
+     * Short-circuit every Gate / policy check for the `platform-admin` role.
+     *
+     * Platform admins are payroll-native operators (lms_user_id IS NULL) who
+     * manage the multi-school deployment. Within whichever tenant they've
+     * switched to via the in-app dropdown, they should be able to do anything
+     * — view employees, manage payroll runs, edit catalog, audit logs, etc.
+     * Per-policy role lists exist for the LMS-derived role hierarchy
+     * (super-admin / payroll-officer / hr / auditor / employee); the
+     * platform-admin sits above that hierarchy as the cross-tenant operator.
+     *
+     * The Gate::before short-circuit means a single check at the gate level
+     * grants every ability without each policy individually listing
+     * `platform-admin` in its allowlist. Policies still own the
+     * lower-precedence role logic for everyone else.
+     *
+     * Returning `null` (not `false`) lets the policy fall through to its
+     * normal evaluation when the user is not platform-admin.
+     */
+    protected function registerPlatformAdminGate(): void
+    {
+        Gate::before(function ($user, string $ability): ?bool {
+            if (! method_exists($user, 'hasRole')) {
+                return null;
+            }
+
+            // Defense in depth: only PAYROLL-NATIVE users (lms_user_id NULL)
+            // with the platform-admin role get the short-circuit. An
+            // LMS-derived user that somehow has the platform-admin role
+            // assigned (shouldn't happen but possible if seeders are
+            // misconfigured) falls through to per-policy evaluation, which
+            // SchoolPolicy further gates by the same lms_user_id IS NULL
+            // check. Both layers must agree.
+            $isPayrollNative = $user->getAttribute('lms_user_id') === null;
+
+            if ($isPayrollNative && $user->hasRole('platform-admin')) {
+                return true;
+            }
+
+            return null;
+        });
     }
 
     /**

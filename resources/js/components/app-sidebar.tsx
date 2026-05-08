@@ -62,8 +62,12 @@ import type { NavItem } from '@/types';
  * page's policy/gate set.
  */
 
-// Mirrors EmployeeProfilePolicy::viewAny().
+// Mirrors EmployeeProfilePolicy::viewAny() + the global Gate::before
+// in AuthServiceProvider that short-circuits every policy for
+// `platform-admin` (the cross-tenant operator role). Platform admins see
+// every section within whichever tenant they've switched to.
 const EMPLOYEE_DIRECTORY_ROLES = [
+    'platform-admin',
     'super-admin',
     'payroll-officer',
     'hr',
@@ -72,16 +76,27 @@ const EMPLOYEE_DIRECTORY_ROLES = [
 
 // Mirrors PayrollPreviewPolicy::preview() (Gate) and PayrollRunPolicy::viewAny()
 // + ReportsController::REPORT_ROLES. The "maker" half of the maker-checker
-// payroll workflow.
-const PAYROLL_MAKER_ROLES = ['super-admin', 'payroll-officer', 'hr'] as const;
+// payroll workflow. Platform admins included via the Gate::before
+// short-circuit.
+const PAYROLL_MAKER_ROLES = [
+    'platform-admin',
+    'super-admin',
+    'payroll-officer',
+    'hr',
+] as const;
 
 // Mirrors viewAny() on AllowancePolicy, DeductionTypePolicy,
 // StatutoryContributionPolicy, and PayPeriodPolicy. Catalog read-only for
 // makers; catalog mutation is super-admin (gated server-side via `can`).
-const CATALOG_READ_ROLES = ['super-admin', 'payroll-officer', 'hr'] as const;
+const CATALOG_READ_ROLES = [
+    'platform-admin',
+    'super-admin',
+    'payroll-officer',
+    'hr',
+] as const;
 
 // Mirrors AuditLogController::ALLOWED_ROLES.
-const AUDIT_ROLES = ['super-admin', 'auditor'] as const;
+const AUDIT_ROLES = ['platform-admin', 'super-admin', 'auditor'] as const;
 
 // Mirrors app/Policies/Pas/SchoolPolicy.php — platform-admin only
 // (payroll-native users with no LMS counterpart). The role is gated by
