@@ -11,8 +11,7 @@ use Spatie\Multitenancy\Models\Tenant;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Re-pivots the active tenant when a super-admin has pinned a school via the
- * in-app switcher.
+ * Re-pivots the active tenant based on the authenticated user's origin.
  *
  * Why this is a separate middleware instead of part of the SchoolTenantFinder:
  * Spatie's MultitenancyServiceProvider calls `Multitenancy->start()` during
@@ -20,37 +19,53 @@ use Symfony\Component\HttpFoundation\Response;
  * hasn't been started, `$request->session()` throws, and `Auth::user()` is
  * unavailable. So the boot-time finder runs first and resolves a tenant via
  * subdomain/path/header. THIS middleware then runs after StartSession and
- * after Auth, reads the session-stored override id, and rebinds the active
- * tenant if needed.
+ * after Auth, reads the user's origin (LMS-derived vs payroll-native) and
+ * any session-stored override, and rebinds the active tenant if needed.
  *
  * Place this in the web middleware group after session/auth-resolving
  * middleware and before any controller code that reads tenant-scoped data.
  *
+ * Two strategies, gated by user origin (lms_user_id is the discriminator):
+ *
+ *   Strategy 1 — LMS-pinning (lms_user_id NOT NULL).
+ *     Every LMS-derived user is locked to their `school_id` regardless of
+ *     role. This catches super-admin / hr / payroll-officer / auditor /
+ *     employee — they all originated in one specific LMS and have no
+ *     business operating cross-tenant. Even a crafted X-School-Slug header
+ *     or path prefix that pivots the boot-time finder cannot survive this
+ *     middleware.
+ *
+ *   Strategy 2 — Platform-admin session override (lms_user_id NULL +
+ *     `platform-admin` role). Payroll-native operators read the in-app
+ *     switcher's session-stored override id and pivot to that school. This
+ *     is the ONLY path that grants cross-tenant powers, and it's bounded
+ *     by both the NULL lms_user_id and the explicit Spatie role.
+ *
  * Security:
- *   - The override is only honored when the user has the `super-admin` role.
- *     A leaked or guessed cookie on a non-super-admin session is ignored.
+ *   - LMS-derived users (lms_user_id NOT NULL) NEVER read the override; a
+ *     leaked session key on their session is ignored.
+ *   - Payroll-native users without the `platform-admin` role NEVER read the
+ *     override either. The role gate AND the lms_user_id gate are both
+ *     required.
  *   - The override is read from the session, which is signed/encrypted by
  *     Laravel's default cookie pipeline, not from a raw cookie.
- *   - Inactive schools are never resolved.
+ *   - Inactive schools are never resolved (see pivotTo()).
  */
 final class ApplyTenantOverride
 {
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-        $isSuperAdmin = $user !== null
-            && method_exists($user, 'hasRole')
-            && $user->hasRole('super-admin');
 
-        // Strategy 1 — non-super-admin pinning (defense in depth).
-        // Ordinary users (HR, payroll-officer, auditor, employee) are locked
-        // to the school whose LMS authenticated them. The school id is
-        // stamped onto pas_users on every successful login by
-        // UpsertPasUserFromLms. Even if a malicious request crafts a path
-        // prefix or X-School-Slug header to pivot the boot-time finder to
-        // another school, this middleware overrides back to the user's
-        // pinned school.
-        if ($user !== null && ! $isSuperAdmin) {
+        if ($user === null) {
+            return $next($request);
+        }
+
+        // Strategy 1 — LMS-pinning. Every LMS-derived user (lms_user_id
+        // NOT NULL) is locked to their school_id regardless of role.
+        // school_id is stamped onto pas_users on every successful login by
+        // UpsertPasUserFromLms.
+        if ($user->getAttribute('lms_user_id') !== null) {
             $userSchoolId = $user->getAttribute('school_id');
             if (is_int($userSchoolId) || (is_string($userSchoolId) && ctype_digit($userSchoolId))) {
                 $this->pivotTo((int) $userSchoolId);
@@ -59,11 +74,16 @@ final class ApplyTenantOverride
             return $next($request);
         }
 
-        // Strategy 2 — super-admin session override (the in-app switcher).
-        // Only honored for super-admin; the role check happens here, not
-        // just at write-time, so a leaked session override on a downgraded
-        // user's session is ignored.
-        if (! $isSuperAdmin) {
+        // Strategy 2 — Platform-admin session override. Only payroll-native
+        // users (lms_user_id IS NULL) holding the platform-admin role can
+        // pivot via the in-app switcher. Both gates must pass, so an
+        // accidentally role-stripped platform admin cannot pivot, and a
+        // leaked session override on a non-platform-admin payroll-native
+        // user (none exist today, but defense in depth) is ignored.
+        $isPlatformAdmin = method_exists($user, 'hasRole')
+            && $user->hasRole('platform-admin');
+
+        if (! $isPlatformAdmin) {
             return $next($request);
         }
 

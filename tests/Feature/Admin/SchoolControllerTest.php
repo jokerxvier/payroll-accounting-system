@@ -13,7 +13,10 @@ uses(RefreshDatabase::class);
  * /admin/schools resource controller (Phase B.2 backend slice).
  *
  * Pinned behaviors:
- *  - Auth + role gates: super-admin only; every other role + guest is denied.
+ *  - Auth + role gates: platform-admin only (payroll-native users with no
+ *    LMS counterpart); every other role + guest is denied. School-scoped
+ *    super-admin is now denied too — cross-tenant powers moved to
+ *    platform-admin in the multi-tenant role-separation slice.
  *  - Validation: required fields surface as 422 field-level errors; slug
  *    uniqueness enforced; port range enforced; slug regex enforced.
  *  - Update: empty/missing `lms_db_password` keeps the existing credential;
@@ -33,6 +36,21 @@ function schoolAuthAs(string $role): User
     return $user;
 }
 
+/**
+ * Build the canonical "platform admin" test user: payroll-native (no LMS
+ * counterpart) with the platform-admin Spatie role. Mirrors the seeder
+ * payload — both load-bearing gates (lms_user_id IS NULL + role) pass.
+ */
+function platformAdminUser(): User
+{
+    $user = User::factory()->withoutLmsMirror()->create([
+        'name' => 'Test Platform Admin',
+    ]);
+    $user->syncRoles(['platform-admin']);
+
+    return $user->fresh() ?? $user;
+}
+
 /** @return array<string, mixed> */
 function validSchoolPayload(array $overrides = []): array
 {
@@ -50,8 +68,8 @@ function validSchoolPayload(array $overrides = []): array
     ], $overrides);
 }
 
-it('allows super-admin to view the index and lists existing schools', function (): void {
-    $user = schoolAuthAs('super-admin');
+it('allows platform-admin to view the index and lists existing schools', function (): void {
+    $user = platformAdminUser();
     School::factory()->count(2)->create();
 
     $this->actingAs($user)
@@ -63,7 +81,7 @@ it('allows super-admin to view the index and lists existing schools', function (
 });
 
 it('renders the seeded default school in the index', function (): void {
-    $user = schoolAuthAs('super-admin');
+    $user = platformAdminUser();
     $this->seed(SchoolSeeder::class);
 
     $this->actingAs($user)
@@ -73,20 +91,20 @@ it('renders the seeded default school in the index', function (): void {
     expect(School::query()->where('slug', 'default')->exists())->toBeTrue();
 });
 
-it('forbids the index for non-super-admin roles', function (string $role): void {
+it('forbids the index for non-platform-admin roles', function (string $role): void {
     $user = schoolAuthAs($role);
 
     $this->actingAs($user)
         ->get('/admin/schools')
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['super-admin', 'payroll-officer', 'hr', 'auditor', 'employee']);
 
 it('redirects guests from the index to login', function (): void {
     $this->get('/admin/schools')->assertRedirect('/login');
 });
 
-it('allows super-admin to render the create form', function (): void {
-    $user = schoolAuthAs('super-admin');
+it('allows platform-admin to render the create form', function (): void {
+    $user = platformAdminUser();
 
     $this->actingAs($user)
         ->get('/admin/schools/create')
@@ -98,16 +116,16 @@ it('allows super-admin to render the create form', function (): void {
         );
 });
 
-it('forbids the create form for non-super-admin roles', function (string $role): void {
+it('forbids the create form for non-platform-admin roles', function (string $role): void {
     $user = schoolAuthAs($role);
 
     $this->actingAs($user)
         ->get('/admin/schools/create')
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['super-admin', 'payroll-officer', 'hr', 'auditor', 'employee']);
 
-it('allows super-admin to store a valid school', function (): void {
-    $user = schoolAuthAs('super-admin');
+it('allows platform-admin to store a valid school', function (): void {
+    $user = platformAdminUser();
 
     $this->actingAs($user)
         ->from('/admin/schools/create')
@@ -118,7 +136,7 @@ it('allows super-admin to store a valid school', function (): void {
     expect(School::query()->where('slug', 'acme-school')->exists())->toBeTrue();
 });
 
-it('forbids storing a school for non-super-admin roles', function (string $role): void {
+it('forbids storing a school for non-platform-admin roles', function (string $role): void {
     $user = schoolAuthAs($role);
 
     $this->actingAs($user)
@@ -126,10 +144,10 @@ it('forbids storing a school for non-super-admin roles', function (string $role)
         ->assertForbidden();
 
     expect(School::query()->where('slug', 'acme-school')->exists())->toBeFalse();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['super-admin', 'payroll-officer', 'hr', 'auditor', 'employee']);
 
 it('rejects a store request with missing required fields', function (): void {
-    $user = schoolAuthAs('super-admin');
+    $user = platformAdminUser();
     // Phase C.1 — global Pest beforeEach seeds the default school for the
     // NeedsTenant middleware. A failed validation must not create a row
     // beyond the seeded default.
@@ -154,7 +172,7 @@ it('rejects a store request with missing required fields', function (): void {
 });
 
 it('rejects a store request with a duplicate slug', function (): void {
-    $user = schoolAuthAs('super-admin');
+    $user = platformAdminUser();
     School::factory()->create(['slug' => 'taken-slug']);
 
     $this->actingAs($user)
@@ -164,7 +182,7 @@ it('rejects a store request with a duplicate slug', function (): void {
 });
 
 it('rejects a store request with a slug that has invalid characters', function (): void {
-    $user = schoolAuthAs('super-admin');
+    $user = platformAdminUser();
 
     $this->actingAs($user)
         ->from('/admin/schools/create')
@@ -173,7 +191,7 @@ it('rejects a store request with a slug that has invalid characters', function (
 });
 
 it('rejects a store request with an out-of-range port', function (): void {
-    $user = schoolAuthAs('super-admin');
+    $user = platformAdminUser();
 
     $this->actingAs($user)
         ->from('/admin/schools/create')
@@ -181,8 +199,8 @@ it('rejects a store request with an out-of-range port', function (): void {
         ->assertSessionHasErrors('lms_db_port');
 });
 
-it('allows super-admin to render the edit form', function (): void {
-    $user = schoolAuthAs('super-admin');
+it('allows platform-admin to render the edit form', function (): void {
+    $user = platformAdminUser();
     $school = School::factory()->create();
 
     $this->actingAs($user)
@@ -195,8 +213,8 @@ it('allows super-admin to render the edit form', function (): void {
         );
 });
 
-it('allows super-admin to update a school', function (): void {
-    $user = schoolAuthAs('super-admin');
+it('allows platform-admin to update a school', function (): void {
+    $user = platformAdminUser();
     $school = School::factory()->create([
         'name' => 'Original Name',
         'lms_db_password' => 'original-secret',
@@ -218,7 +236,7 @@ it('allows super-admin to update a school', function (): void {
 });
 
 it('rotates the password on update when a non-empty value is supplied', function (): void {
-    $user = schoolAuthAs('super-admin');
+    $user = platformAdminUser();
     $school = School::factory()->create([
         'lms_db_password' => 'original-secret',
     ]);
@@ -235,7 +253,7 @@ it('rotates the password on update when a non-empty value is supplied', function
 });
 
 it('allows update validation to ignore the row being edited (slug uniqueness)', function (): void {
-    $user = schoolAuthAs('super-admin');
+    $user = platformAdminUser();
     $school = School::factory()->create(['slug' => 'pinned-slug']);
 
     $this->actingAs($user)
@@ -249,7 +267,7 @@ it('allows update validation to ignore the row being edited (slug uniqueness)', 
 });
 
 it('rejects an update with a slug taken by a different school', function (): void {
-    $user = schoolAuthAs('super-admin');
+    $user = platformAdminUser();
     $other = School::factory()->create(['slug' => 'other-school']);
     $school = School::factory()->create(['slug' => 'this-school']);
 
@@ -264,7 +282,7 @@ it('rejects an update with a slug taken by a different school', function (): voi
     expect($other->fresh()->slug)->toBe('other-school');
 });
 
-it('forbids update for non-super-admin roles', function (string $role): void {
+it('forbids update for non-platform-admin roles', function (string $role): void {
     $user = schoolAuthAs($role);
     $school = School::factory()->create();
 
@@ -273,10 +291,10 @@ it('forbids update for non-super-admin roles', function (string $role): void {
             'slug' => $school->slug,
         ]))
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['super-admin', 'payroll-officer', 'hr', 'auditor', 'employee']);
 
-it('allows super-admin to delete a non-default school', function (): void {
-    $user = schoolAuthAs('super-admin');
+it('allows platform-admin to delete a non-default school', function (): void {
+    $user = platformAdminUser();
     $school = School::factory()->create(['slug' => 'deletable']);
 
     $this->actingAs($user)
@@ -287,8 +305,8 @@ it('allows super-admin to delete a non-default school', function (): void {
     expect(School::query()->whereKey($school->id)->exists())->toBeFalse();
 });
 
-it('forbids deleting the default school even for super-admin', function (): void {
-    $user = schoolAuthAs('super-admin');
+it('forbids deleting the default school even for platform-admin', function (): void {
+    $user = platformAdminUser();
     $this->seed(SchoolSeeder::class);
     $default = School::query()->where('slug', 'default')->firstOrFail();
 
@@ -299,7 +317,7 @@ it('forbids deleting the default school even for super-admin', function (): void
     expect(School::query()->whereKey($default->id)->exists())->toBeTrue();
 });
 
-it('forbids destroy for non-super-admin roles', function (string $role): void {
+it('forbids destroy for non-platform-admin roles', function (string $role): void {
     $user = schoolAuthAs($role);
     $school = School::factory()->create();
 
@@ -308,7 +326,7 @@ it('forbids destroy for non-super-admin roles', function (string $role): void {
         ->assertForbidden();
 
     expect(School::query()->whereKey($school->id)->exists())->toBeTrue();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['super-admin', 'payroll-officer', 'hr', 'auditor', 'employee']);
 
 it('redirects guest delete attempts to login', function (): void {
     $school = School::factory()->create();

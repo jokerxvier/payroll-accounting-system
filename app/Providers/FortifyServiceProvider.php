@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Models\Lms\User as LmsUser;
+use App\Models\User;
 use App\Services\Auth\UpsertPasUserFromLms;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -113,6 +114,18 @@ class FortifyServiceProvider extends ServiceProvider
      * `EloquentEmployeeRepository::countActiveStaff()`, etc. — an
      * unreachable LMS degrades to "credentials don't match" UX rather than
      * a 500.
+     *
+     * Payroll-native fallback: when the LMS lookup returns null (no LMS user
+     * with that email exists), try a second lookup against pas_users where
+     * lms_user_id IS NULL. This is the platform-admin login path — payroll-
+     * native operators who manage the multi-school deployment have no LMS
+     * counterpart. The fallback is gated on an LMS lookup that returned null
+     * cleanly; if the LMS is unreachable (Throwable), we fail fast rather
+     * than fall through, so a transient LMS outage cannot accidentally
+     * authenticate a tenant-scoped user via the payroll-native path. The
+     * `lms_user_id IS NULL` filter is the load-bearing guard — it ensures
+     * only payroll-native rows can reach this verification, never an LMS-
+     * derived user whose lms_user_id was somehow nulled in the row.
      */
     private function configureAuthentication(): void
     {
@@ -128,17 +141,37 @@ class FortifyServiceProvider extends ServiceProvider
                 $lmsUser = LmsUser::query()->where('email', $email)->first();
             } catch (Throwable $e) {
                 // LMS unreachable — login fails gracefully (same UX as
-                // wrong credentials). Logged for ops via report().
+                // wrong credentials). Logged for ops via report(). The
+                // payroll-native fallback intentionally does NOT run here:
+                // a transient LMS outage must not become an alternate auth
+                // path for LMS-derived users (whose pas_users rows have
+                // lms_user_id NOT NULL anyway, so they wouldn't match —
+                // but defense in depth).
                 report($e);
 
                 return null;
             }
 
-            if ($lmsUser === null || ! Hash::check($password, (string) $lmsUser->password)) {
-                return null;
+            if ($lmsUser !== null && Hash::check($password, (string) $lmsUser->password)) {
+                return app(UpsertPasUserFromLms::class)($lmsUser);
             }
 
-            return app(UpsertPasUserFromLms::class)($lmsUser);
+            // Payroll-native fallback. Only fires when the LMS lookup
+            // succeeded (no Throwable above) but found no row for that
+            // email. Verifies against pas_users.password directly for rows
+            // with lms_user_id IS NULL.
+            if ($lmsUser === null) {
+                $nativeUser = User::query()
+                    ->where('email', $email)
+                    ->whereNull('lms_user_id')
+                    ->first();
+
+                if ($nativeUser !== null && Hash::check($password, (string) $nativeUser->getAuthPassword())) {
+                    return $nativeUser;
+                }
+            }
+
+            return null;
         });
     }
 }

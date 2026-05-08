@@ -83,8 +83,12 @@ const CATALOG_READ_ROLES = ['super-admin', 'payroll-officer', 'hr'] as const;
 // Mirrors AuditLogController::ALLOWED_ROLES.
 const AUDIT_ROLES = ['super-admin', 'auditor'] as const;
 
-// Mirrors app/Policies/Pas/SchoolPolicy.php — super-admin only.
-const SCHOOLS_ADMIN_ROLES = ['super-admin'] as const;
+// Mirrors app/Policies/Pas/SchoolPolicy.php — platform-admin only
+// (payroll-native users with no LMS counterpart). The role is gated by
+// lms_user_id IS NULL on the backend; the frontend trusts auth.user.roles
+// because the prop is computed server-side in HandleInertiaRequests, where
+// the same lms_user_id IS NULL check is applied before the role list ships.
+const SCHOOLS_ADMIN_ROLES = ['platform-admin'] as const;
 
 const mainNavItems: NavItem[] = [
     {

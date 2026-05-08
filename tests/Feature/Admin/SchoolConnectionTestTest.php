@@ -12,7 +12,11 @@ uses(RefreshDatabase::class);
  * /admin/schools/test-connection JSON endpoint.
  *
  * Pinned behaviors:
- *  - Auth gate: super-admin only; every other role + guest is denied.
+ *  - Auth gate: platform-admin only (payroll-native, no LMS counterpart);
+ *    every other role + guest is denied. Cross-tenant powers, including
+ *    "test the LMS connection for a different school", are reserved for
+ *    platform-admin — school-scoped super-admin lost this in the multi-
+ *    tenant role-separation slice.
  *  - Validation: required fields surface as 422.
  *  - Failure path: invalid host returns ok=false with a non-empty message.
  *  - Redaction: when the literal password value appears in the underlying
@@ -31,6 +35,14 @@ function connTestAuthAs(string $role): User
     return $user;
 }
 
+function connTestPlatformAdmin(): User
+{
+    $user = User::factory()->withoutLmsMirror()->create();
+    $user->syncRoles(['platform-admin']);
+
+    return $user->fresh() ?? $user;
+}
+
 /** @return array<string, mixed> */
 function connTestPayload(array $overrides = []): array
 {
@@ -45,7 +57,7 @@ function connTestPayload(array $overrides = []): array
 }
 
 it('returns ok=false with a non-empty message on invalid host', function (): void {
-    $user = connTestAuthAs('super-admin');
+    $user = connTestPlatformAdmin();
 
     $response = $this->actingAs($user)
         ->postJson('/admin/schools/test-connection', connTestPayload());
@@ -57,7 +69,7 @@ it('returns ok=false with a non-empty message on invalid host', function (): voi
 });
 
 it('redacts the password from the error message when it leaks through the driver', function (): void {
-    $user = connTestAuthAs('super-admin');
+    $user = connTestPlatformAdmin();
 
     $secret = 'redact-me-secret-xyz-payroll';
     $response = $this->actingAs($user)
@@ -75,13 +87,13 @@ it('redacts the password from the error message when it leaks through the driver
     expect($message)->not->toContain($secret);
 });
 
-it('forbids the endpoint for non-super-admin roles', function (string $role): void {
+it('forbids the endpoint for non-platform-admin roles', function (string $role): void {
     $user = connTestAuthAs($role);
 
     $this->actingAs($user)
         ->postJson('/admin/schools/test-connection', connTestPayload())
         ->assertForbidden();
-})->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+})->with(['super-admin', 'payroll-officer', 'hr', 'auditor', 'employee']);
 
 it('redirects guests away from the endpoint', function (): void {
     $this->post('/admin/schools/test-connection', connTestPayload())
@@ -89,7 +101,7 @@ it('redirects guests away from the endpoint', function (): void {
 });
 
 it('rejects a request with missing required fields', function (): void {
-    $user = connTestAuthAs('super-admin');
+    $user = connTestPlatformAdmin();
 
     $this->actingAs($user)
         ->postJson('/admin/schools/test-connection', [])
@@ -109,7 +121,7 @@ it('returns ok=true against a reachable MySQL connection', function (): void {
         $this->markTestSkipped('Success path requires a real MySQL connection.');
     }
 
-    $user = connTestAuthAs('super-admin');
+    $user = connTestPlatformAdmin();
 
     $mysql = (array) config('database.connections.mysql', []);
     $response = $this->actingAs($user)

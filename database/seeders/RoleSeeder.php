@@ -9,7 +9,7 @@ use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
- * Seeds the five payroll roles per PLAN.md Week 2.
+ * Seeds the payroll roles per PLAN.md Week 2.
  *
  * Idempotent — running the seeder multiple times will not create duplicates.
  * Roles are guarded under 'web' (the Fortify guard).
@@ -17,12 +17,22 @@ use Spatie\Permission\PermissionRegistrar;
  * Permissions themselves are not seeded here; they are added in later phases
  * as features ship (e.g. payroll.run.create, ledger.post). This seeder only
  * establishes the role taxonomy.
+ *
+ * Role taxonomy:
+ *  - platform-admin    — payroll-native cross-tenant operator (no LMS counterpart).
+ *                        Holds the school switcher and /admin/schools registry.
+ *                        Only assignable to pas_users rows where lms_user_id IS NULL.
+ *  - super-admin       — school-scoped admin originating from an LMS. Approves
+ *                        payroll runs, manages catalog within their school. NO
+ *                        cross-tenant powers.
+ *  - payroll-officer / hr / auditor / employee — LMS-derived, school-scoped.
  */
 final class RoleSeeder extends Seeder
 {
     public function run(): void
     {
         $roles = [
+            'platform-admin',
             'super-admin',
             'payroll-officer',
             'hr',
