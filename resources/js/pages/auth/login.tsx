@@ -18,6 +18,17 @@ type Props = {
 };
 
 const DEMO_ACCOUNTS = [
+    // Payroll Admin = payroll-native (lms_user_id NULL, role `platform-admin`).
+    // Cross-tenant: sees the school switcher, manages /admin/schools.
+    // Listed first so the multi-tenant operator persona is the default click.
+    {
+        label: 'Payroll Admin',
+        email: 'admin@payroll.test',
+        password: 'password',
+    },
+    // The four below are LMS-derived demo accounts — pinned to school_id=1
+    // (default school). They keep their school-scoped roles but no longer
+    // see the switcher or /admin/schools after the platform-admin split.
     {
         label: 'Super Admin',
         email: 'super-admin@demo.test',
@@ -129,12 +140,34 @@ export default function Login({
             </Form>
 
             {showDemoLogin && (
-                <div className="mt-6 space-y-2 rounded-lg border border-dashed border-border p-3">
+                <div className="mt-6 space-y-3 rounded-lg border border-dashed border-border p-3">
                     <p className="text-xs font-medium text-muted-foreground">
                         Demo accounts — fill credentials with one click
                     </p>
+                    {/* Payroll Admin (platform-native) sits on its own row to
+                        signal the cross-tenant persona — sees the switcher
+                        and manages /admin/schools. */}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() =>
+                            fillCredentials(
+                                DEMO_ACCOUNTS[0].email,
+                                DEMO_ACCOUNTS[0].password,
+                            )
+                        }
+                    >
+                        {DEMO_ACCOUNTS[0].label}
+                        <span className="ml-2 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+                            PLATFORM
+                        </span>
+                    </Button>
+                    {/* LMS-derived accounts in a 2x2 grid below. Pinned to the
+                        default school; no switcher; no schools admin. */}
                     <div className="grid grid-cols-2 gap-2">
-                        {DEMO_ACCOUNTS.map((account) => (
+                        {DEMO_ACCOUNTS.slice(1).map((account) => (
                             <Button
                                 key={account.email}
                                 type="button"
