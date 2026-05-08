@@ -33,7 +33,19 @@ final class UpsertPasUserFromLms
     {
         $now = Carbon::now();
 
-        $existing = DB::table('pas_users')->where('id', $lmsUser->id)->first();
+        // Look up an existing row by email FIRST, then fall back to id. Email
+        // is the stable identity from the user's perspective and the only
+        // column with a unique constraint on pas_users.email. The id-by-id
+        // lookup catches the original A.1 backfill where pas_users.id was
+        // preserved from LMS users.id, but seeders or earlier pas_users
+        // generations may have stored the same email under a different id
+        // (e.g., DemoUsersSeeder uses high ids 9_000_001+ to dodge LMS
+        // collisions). Without the email lookup the insert path tries to
+        // re-create the row and trips the unique-email constraint.
+        $existing = DB::table('pas_users')->where('email', $lmsUser->email)->first();
+        if ($existing === null) {
+            $existing = DB::table('pas_users')->where('id', $lmsUser->id)->first();
+        }
 
         // Pin the pas_users row to the tenant whose LMS just verified the
         // password. This is the source of truth for non-super-admin tenant
@@ -63,11 +75,13 @@ final class UpsertPasUserFromLms
             // on first insert; the user enrolls into 2FA / verifies email
             // through the normal Fortify flows after login.
             DB::table('pas_users')->insert($payload);
+            $resolvedId = $lmsUser->id;
         } else {
-            DB::table('pas_users')->where('id', $lmsUser->id)->update($payload);
+            DB::table('pas_users')->where('id', $existing->id)->update($payload);
+            $resolvedId = (int) $existing->id;
         }
 
-        $user = User::query()->find($lmsUser->id);
+        $user = User::query()->find($resolvedId);
 
         if ($user === null) {
             throw new RuntimeException(

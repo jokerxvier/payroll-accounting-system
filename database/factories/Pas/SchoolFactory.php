@@ -28,19 +28,30 @@ class SchoolFactory extends Factory
     {
         $name = (string) fake()->company();
 
+        // Pull from the resolved `lms` connection config — School rows
+        // describe an LMS source, not the central payroll DB. Post-split
+        // (DB_DATABASE != LMS_DB_DATABASE) reading from `mysql` would point
+        // factory rows at the payroll DB which has no LMS schema. `mysql`
+        // stays as a fallback for bootstrap envs where LMS_DB_* aren't set.
+        $lmsDb = (string) (config('database.connections.lms.database')
+            ?? config('database.connections.mysql.database')
+            ?? 'payroll_db');
+        $lmsUser = (string) (config('database.connections.lms.username')
+            ?? config('database.connections.mysql.username')
+            ?? 'root');
+        $lmsPass = (string) (config('database.connections.lms.password')
+            ?? config('database.connections.mysql.password')
+            ?? '');
+
         return [
             'name' => $name,
             'slug' => Str::slug($name).'-'.$this->faker->numerify('###'),
             'domain' => null,
             'lms_db_host' => '127.0.0.1',
             'lms_db_port' => 3306,
-            // Pull from the resolved config (not env() directly) so the
-            // factory remains correct under cached config in testing /
-            // staging environments — Larastan flags raw env() calls
-            // outside `config/` for exactly this reason.
-            'lms_db_database' => (string) config('database.connections.mysql.database', 'payroll_db'),
-            'lms_db_username' => (string) config('database.connections.mysql.username', 'root'),
-            'lms_db_password' => (string) config('database.connections.mysql.password', ''),
+            'lms_db_database' => $lmsDb,
+            'lms_db_username' => $lmsUser,
+            'lms_db_password' => $lmsPass,
             'lms_db_charset' => 'utf8mb4',
             'is_active' => true,
         ];

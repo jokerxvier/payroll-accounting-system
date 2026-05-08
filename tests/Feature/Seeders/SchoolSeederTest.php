@@ -35,10 +35,11 @@ it('is idempotent on re-run', function (): void {
 });
 
 it('encrypts the seeded lms_db_password at rest', function (): void {
-    // The seeder pulls from config('database.connections.mysql.*'); set a
-    // distinctive non-empty value so the assertions below can detect the
-    // ciphertext / plaintext split unambiguously.
-    config(['database.connections.mysql.password' => 'plaintext-from-config']);
+    // The seeder pulls from config('database.connections.lms.*') (post-split
+    // — see SchoolSeeder for context); set a distinctive non-empty value so
+    // the assertions below can detect the ciphertext / plaintext split
+    // unambiguously.
+    config(['database.connections.lms.password' => 'plaintext-from-config']);
 
     $this->seed(SchoolSeeder::class);
 

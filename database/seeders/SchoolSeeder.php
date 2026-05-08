@@ -27,9 +27,18 @@ final class SchoolSeeder extends Seeder
     {
         $appName = (string) config('app.name');
 
-        // Pull from the resolved `database.connections.mysql.*` config so the
-        // seeder works under cached config in staging / production. Larastan
-        // flags raw env() calls outside `config/` for exactly this reason.
+        // Pull from the resolved `database.connections.lms.*` config — the
+        // default school's `lms_db_*` columns describe the LMS source, NOT
+        // the central payroll DB. Pre-split (when mysql and lms shared a
+        // physical DB) reading from `mysql` worked accidentally. Post-split
+        // (DB_DATABASE != LMS_DB_DATABASE) we must read from `lms` or the
+        // SwitchLmsConnection task rebinds the lms connection to the payroll
+        // DB and login fails because there's no `users` table there.
+        //
+        // `mysql` config is kept only as host/port/credentials fallback for
+        // bootstraps where LMS_DB_* env vars aren't set yet (typical first
+        // dev setup before any split happens).
+        $lms = (array) config('database.connections.lms', []);
         $mysql = (array) config('database.connections.mysql', []);
 
         // Seed `domain` to the APP_URL host so the SchoolTenantFinder's
@@ -45,12 +54,12 @@ final class SchoolSeeder extends Seeder
             [
                 'name' => $appName !== '' ? $appName : 'Default School',
                 'domain' => $domain,
-                'lms_db_host' => (string) ($mysql['host'] ?? '127.0.0.1'),
-                'lms_db_port' => (int) ($mysql['port'] ?? 3306),
-                'lms_db_database' => (string) ($mysql['database'] ?? 'payroll_db'),
-                'lms_db_username' => (string) ($mysql['username'] ?? 'root'),
-                'lms_db_password' => (string) ($mysql['password'] ?? ''),
-                'lms_db_charset' => 'utf8mb4',
+                'lms_db_host' => (string) ($lms['host'] ?? $mysql['host'] ?? '127.0.0.1'),
+                'lms_db_port' => (int) ($lms['port'] ?? $mysql['port'] ?? 3306),
+                'lms_db_database' => (string) ($lms['database'] ?? 'payroll_db'),
+                'lms_db_username' => (string) ($lms['username'] ?? $mysql['username'] ?? 'root'),
+                'lms_db_password' => (string) ($lms['password'] ?? $mysql['password'] ?? ''),
+                'lms_db_charset' => (string) ($lms['charset'] ?? 'utf8mb4'),
                 'is_active' => true,
             ],
         );

@@ -9,7 +9,6 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -126,11 +125,20 @@ final class DemoUsersSeeder extends Seeder
             return (int) $pasId;
         }
 
-        if (Schema::hasTable('users')) {
-            $lmsId = DB::table('users')->where('email', $email)->value('id');
-            if ($lmsId !== null) {
-                return (int) $lmsId;
+        // Look up the LMS user via the `lms` connection — post-split the
+        // default `mysql` connection points at the central payroll DB which
+        // has no `users` table.
+        try {
+            $lms = DB::connection('lms');
+            if ($lms->getSchemaBuilder()->hasTable('users')) {
+                $lmsId = $lms->table('users')->where('email', $email)->value('id');
+                if ($lmsId !== null) {
+                    return (int) $lmsId;
+                }
             }
+        } catch (\Throwable $e) {
+            // LMS unreachable — fall through to the synthesized DEMO_ID_BASE.
+            report($e);
         }
 
         return null;
@@ -157,11 +165,28 @@ final class DemoUsersSeeder extends Seeder
      */
     private function upsertLmsUser(int $id, array $account, string $passwordHash, Carbon $now): void
     {
-        if (! Schema::hasTable('users')) {
+        // Post-split, the default connection (mysql) is the central payroll
+        // DB which has no `users` table — that table belongs to the LMS.
+        // Route the demo LMS user upsert through the `lms` connection so
+        // dev/test parity is preserved regardless of whether the two DBs
+        // are physically the same or split.
+        $lms = DB::connection('lms');
+
+        try {
+            if (! $lms->getSchemaBuilder()->hasTable('users')) {
+                return;
+            }
+        } catch (\Throwable $e) {
+            // LMS unreachable — defer to the LMS team's real seed data.
+            report($e);
+
             return;
         }
 
-        $existing = DB::table('users')->where('id', $id)->first();
+        // Match the existing row by email, not id, so we update the row the
+        // login flow will look up (LMS user ids are LMS-owned and may not
+        // match the seeder's nominal id).
+        $existing = $lms->table('users')->where('email', $account['email'])->first();
 
         $payload = [
             'email' => $account['email'],
@@ -170,20 +195,20 @@ final class DemoUsersSeeder extends Seeder
             'updated_at' => $now,
         ];
 
-        if (Schema::hasColumn('users', 'full_name')) {
+        if ($lms->getSchemaBuilder()->hasColumn('users', 'full_name')) {
             $payload['full_name'] = $account['full_name'];
         }
 
-        if (Schema::hasColumn('users', 'email_verified_at')) {
+        if ($lms->getSchemaBuilder()->hasColumn('users', 'email_verified_at')) {
             $payload['email_verified_at'] = $now;
         }
 
         if ($existing === null) {
             $payload['id'] = $id;
             $payload['created_at'] = $now;
-            DB::table('users')->insert($payload);
+            $lms->table('users')->insert($payload);
         } else {
-            DB::table('users')->where('id', $id)->update($payload);
+            $lms->table('users')->where('email', $account['email'])->update($payload);
         }
     }
 
