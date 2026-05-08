@@ -36,6 +36,22 @@ interface FormShape extends SchoolFormData {
 }
 
 /**
+ * Project a school name to a kebab-case slug that satisfies the
+ * server-side `regex:/^[a-z0-9-]+$/` rule. Strips diacritics to ASCII
+ * via `normalize('NFKD')` so "École Saint-Louis" becomes "ecole-saint-louis"
+ * instead of dropping the accented character entirely.
+ */
+function toSlug(value: string): string {
+    return value
+        .normalize('NFKD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+/**
  * Read the Laravel-issued XSRF-TOKEN cookie set by `EncryptCookies` +
  * `VerifyCsrfToken` middleware. This is the canonical CSRF transport for
  * Inertia SPAs — `app.blade.php` does not emit a `<meta name="csrf-token">`
@@ -92,6 +108,10 @@ export function SchoolForm({ mode }: SchoolFormProps) {
     const [testResult, setTestResult] = useState<ConnectionTestResult | null>(
         null,
     );
+    // Slug auto-fills from name in create mode until the operator types in
+    // the slug field. Edit mode starts dirty so a rename doesn't silently
+    // overwrite the existing slug (which may already be referenced elsewhere).
+    const [slugDirty, setSlugDirty] = useState(mode.kind === 'edit');
 
     const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
         event.preventDefault();
@@ -227,9 +247,13 @@ export function SchoolForm({ mode }: SchoolFormProps) {
                                 type="text"
                                 maxLength={255}
                                 value={form.data.name}
-                                onChange={(e) =>
-                                    form.setData('name', e.target.value)
-                                }
+                                onChange={(e) => {
+                                    const next = e.target.value;
+                                    form.setData('name', next);
+                                    if (!slugDirty) {
+                                        form.setData('slug', toSlug(next));
+                                    }
+                                }}
                                 placeholder="e.g. Acme School"
                                 required
                             />
@@ -243,9 +267,10 @@ export function SchoolForm({ mode }: SchoolFormProps) {
                                 type="text"
                                 maxLength={255}
                                 value={form.data.slug}
-                                onChange={(e) =>
-                                    form.setData('slug', e.target.value)
-                                }
+                                onChange={(e) => {
+                                    form.setData('slug', e.target.value);
+                                    setSlugDirty(true);
+                                }}
                                 placeholder="e.g. acme-school"
                                 className="font-mono"
                                 required
