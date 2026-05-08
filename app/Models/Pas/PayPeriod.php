@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Concerns\Auditable;
+use App\Concerns\BelongsToTenant;
 use App\ValueObjects\PayPeriodInput;
 use Carbon\CarbonImmutable;
 use Database\Factories\PayPeriodFactory;
@@ -34,6 +35,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 final class PayPeriod extends Model
 {
     use Auditable;
+    use BelongsToTenant;
     use HasFactory;
 
     public const FREQUENCY_MONTHLY = 'monthly';
@@ -62,6 +64,7 @@ final class PayPeriod extends Model
     protected $table = 'pas_pay_periods';
 
     protected $fillable = [
+        'school_id',
         'code',
         'frequency',
         'start_date',

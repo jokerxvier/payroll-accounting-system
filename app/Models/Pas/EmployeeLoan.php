@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Concerns\Auditable;
+use App\Concerns\BelongsToTenant;
 use App\ValueObjects\Money;
 use Carbon\CarbonImmutable;
 use Database\Factories\Pas\EmployeeLoanFactory;
@@ -43,6 +44,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 final class EmployeeLoan extends Model
 {
     use Auditable;
+    use BelongsToTenant;
 
     /** @use HasFactory<EmployeeLoanFactory> */
     use HasFactory;
@@ -57,6 +59,7 @@ final class EmployeeLoan extends Model
 
     /** @var list<string> */
     protected $fillable = [
+        'school_id',
         'employee_profile_id',
         'code',
         'principal_centavos',

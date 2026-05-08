@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Concerns\Auditable;
+use App\Concerns\BelongsToTenant;
 use App\ValueObjects\PayPeriodInput;
 use Carbon\CarbonImmutable;
 use Database\Factories\Pas\PayrollAdjustmentFactory;
@@ -41,6 +42,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 final class PayrollAdjustment extends Model
 {
     use Auditable;
+    use BelongsToTenant;
 
     /** @use HasFactory<PayrollAdjustmentFactory> */
     use HasFactory;
@@ -64,6 +66,7 @@ final class PayrollAdjustment extends Model
 
     /** @var list<string> */
     protected $fillable = [
+        'school_id',
         'employee_profile_id',
         'kind',
         'is_taxable',

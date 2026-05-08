@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Concerns\Auditable;
+use App\Concerns\BelongsToTenant;
 use App\ValueObjects\PayPeriodInput;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -41,6 +42,7 @@ use InvalidArgumentException;
 final class EmployeeDeduction extends Model
 {
     use Auditable;
+    use BelongsToTenant;
 
     /** @use HasFactory<EmployeeDeductionFactory> */
     use HasFactory;
@@ -73,6 +75,7 @@ final class EmployeeDeduction extends Model
 
     /** @var list<string> */
     protected $fillable = [
+        'school_id',
         'employee_profile_id',
         'deduction_type_id',
         'amount_centavos',

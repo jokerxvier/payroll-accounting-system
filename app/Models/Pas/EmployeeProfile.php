@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Concerns\Auditable;
+use App\Concerns\BelongsToTenant;
 use App\Models\Lms\Staff;
 use Database\Factories\EmployeeProfileFactory;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -28,6 +29,7 @@ use Illuminate\Database\Eloquent\Model;
 final class EmployeeProfile extends Model
 {
     use Auditable;
+    use BelongsToTenant;
     use HasFactory;
 
     public const EMPLOYMENT_CLASSIFICATIONS = ['regular', 'probationary', 'contractual', 'part_time'];
@@ -64,6 +66,7 @@ final class EmployeeProfile extends Model
      * encrypted cast keeps them ciphertext-at-rest regardless.
      */
     protected $fillable = [
+        'school_id',
         'lms_staff_id',
         'employment_classification',
         'pay_frequency',

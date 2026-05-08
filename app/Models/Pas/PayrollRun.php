@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Concerns\Auditable;
+use App\Concerns\BelongsToTenant;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Database\Factories\PayrollRunFactory;
@@ -44,6 +45,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 final class PayrollRun extends Model
 {
     use Auditable;
+    use BelongsToTenant;
     use HasFactory;
 
     public const STATUS_DRAFT = 'draft';
@@ -74,6 +76,7 @@ final class PayrollRun extends Model
     protected $table = 'pas_payroll_runs';
 
     protected $fillable = [
+        'school_id',
         'pay_period_id',
         'status',
         'total_employees',
