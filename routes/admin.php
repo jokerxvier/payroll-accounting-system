@@ -142,6 +142,14 @@ Route::middleware(['auth', 'verified'])
         // mirroring `allowances` / `deduction-types`.
         Route::post('schools/test-connection', [SchoolController::class, 'testConnection'])
             ->name('schools.test-connection');
+        // Phase E preview — super-admin tenant switcher. Stores an override id
+        // in the session that SchoolTenantFinder reads BEFORE its existing
+        // domain/path/header strategies. Static segment registered before the
+        // resource so `schools/switch/{school}` doesn't bind to {school}.
+        Route::post('schools/switch/{school}', [SchoolController::class, 'switchTenant'])
+            ->name('schools.switch');
+        Route::post('schools/switch', [SchoolController::class, 'clearSwitch'])
+            ->name('schools.switch.clear');
         Route::resource('schools', SchoolController::class)->except(['show']);
 
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces

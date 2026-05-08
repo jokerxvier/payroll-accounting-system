@@ -156,6 +156,42 @@ final class SchoolController extends Controller
             ->with('success', "School '{$name}' deleted.");
     }
 
+    /**
+     * Phase E preview — pin the active tenant to the chosen school for this
+     * super-admin's session. SchoolTenantFinder reads this override BEFORE
+     * its domain/path/header strategies, gated by a super-admin role check
+     * so a leaked session key cannot bypass tenant boundaries.
+     */
+    public function switchTenant(Request $request, School $school): RedirectResponse
+    {
+        Gate::authorize('viewAny', School::class);
+
+        if (! $school->is_active) {
+            abort(422, 'Cannot switch to an inactive school.');
+        }
+
+        $request->session()->put('current_school_id_override', $school->id);
+
+        return redirect()
+            ->back()
+            ->with('success', "Switched to '{$school->name}'.");
+    }
+
+    /**
+     * Drop the session-stored tenant override. Resolution falls back to the
+     * normal domain/path/header strategies on the next request.
+     */
+    public function clearSwitch(Request $request): RedirectResponse
+    {
+        Gate::authorize('viewAny', School::class);
+
+        $request->session()->forget('current_school_id_override');
+
+        return redirect()
+            ->back()
+            ->with('success', 'Cleared school override.');
+    }
+
     public function testConnection(TestSchoolConnectionRequest $request): JsonResponse
     {
         /** @var array{lms_db_host: string, lms_db_port: int, lms_db_database: string, lms_db_username: string, lms_db_password: string, lms_db_charset: string} $payload */
