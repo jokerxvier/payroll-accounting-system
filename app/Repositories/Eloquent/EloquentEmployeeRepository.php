@@ -293,4 +293,41 @@ final class EloquentEmployeeRepository implements EmployeeRepositoryInterface
             return 0;
         }
     }
+
+    public function countStaffWithoutProfile(): int
+    {
+        /** @var array<int, int> $allowlist */
+        $allowlist = (array) config('payroll.employee_role_allowlist', []);
+
+        // Pull just the IDs of allowlisted LMS staff so we can ask the
+        // PAS connection how many already have a profile. Two single
+        // queries, no cross-connection JOIN (see class docblock).
+        try {
+            /** @var array<int, int> $staffIds */
+            $staffIds = Staff::query()
+                ->when($allowlist !== [], fn ($q) => $q->whereIn('role_id', $allowlist))
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->all();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return 0;
+        }
+
+        if ($staffIds === []) {
+            return 0;
+        }
+
+        // The BelongsToTenant scope on EmployeeProfile already filters
+        // to the current tenant, so this naturally excludes profiles
+        // owned by other schools — exactly what we want here.
+        $withProfile = EmployeeProfile::query()
+            ->whereIn('lms_staff_id', $staffIds)
+            ->count();
+
+        $total = count($staffIds);
+
+        return $total > $withProfile ? $total - $withProfile : 0;
+    }
 }
