@@ -1,6 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Building2, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Building2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -17,6 +17,14 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -33,15 +41,55 @@ import {
 } from '@/routes/admin/schools';
 import type { Paginator, School } from '@/types';
 
+type StatusFilter = 'all' | 'active' | 'inactive';
+
+interface Filters {
+    search: string;
+    status: StatusFilter;
+}
+
 interface Props {
     schools: Paginator<School>;
+    filters: Filters;
 }
 
 const DEFAULT_SLUG = 'default';
 
-export default function SchoolsIndex({ schools }: Props) {
+export default function SchoolsIndex({ schools, filters }: Props) {
     const [pendingDelete, setPendingDelete] = useState<School | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [search, setSearch] = useState(filters.search);
+    const [status, setStatus] = useState<StatusFilter>(filters.status);
+
+    // Debounced search — push the query string after the user pauses typing
+    // so we're not firing a request on every keystroke.
+    useEffect(() => {
+        if (search === filters.search) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            router.get(
+                schoolsIndex().url,
+                { search, status },
+                { preserveScroll: true, preserveState: true, replace: true },
+            );
+        }, 300);
+
+        return () => window.clearTimeout(timer);
+        // status intentionally excluded — its own onChange handles it instantly.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search]);
+
+    const handleStatusChange = (next: string): void => {
+        const value = next as StatusFilter;
+        setStatus(value);
+        router.get(
+            schoolsIndex().url,
+            { search, status: value },
+            { preserveScroll: true, preserveState: true, replace: true },
+        );
+    };
 
     const handleConfirmDelete = (): void => {
         if (pendingDelete === null) {
@@ -70,10 +118,12 @@ export default function SchoolsIndex({ schools }: Props) {
     const goPage = (page: number): void => {
         router.get(
             schoolsIndex().url,
-            { page },
+            { page, search, status },
             { preserveScroll: true, preserveState: true },
         );
     };
+
+    const isFiltered = search !== '' || status !== 'all';
 
     return (
         <>
@@ -94,18 +144,76 @@ export default function SchoolsIndex({ schools }: Props) {
                     }
                 />
 
+                <Card>
+                    <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
+                        <div className="relative flex-1">
+                            <Search
+                                className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                            <Input
+                                type="search"
+                                placeholder="Search by name, slug, or domain…"
+                                className="pl-9"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                aria-label="Search schools"
+                            />
+                        </div>
+                        <Select
+                            value={status}
+                            onValueChange={handleStatusChange}
+                        >
+                            <SelectTrigger className="sm:w-44">
+                                <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All schools</SelectItem>
+                                <SelectItem value="active">
+                                    Active only
+                                </SelectItem>
+                                <SelectItem value="inactive">
+                                    Inactive only
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </CardContent>
+                </Card>
+
                 {schools.data.length === 0 ? (
                     <EmptyState
                         icon={Building2}
-                        title="No schools registered"
-                        description="Add the first tenant to make it resolvable by domain or path-prefix."
+                        title={
+                            isFiltered
+                                ? 'No schools match your filters'
+                                : 'No schools registered'
+                        }
+                        description={
+                            isFiltered
+                                ? 'Try clearing the search or switching the status filter.'
+                                : 'Add the first tenant to make it resolvable by domain or path-prefix.'
+                        }
                         action={
-                            <Button asChild size="sm">
-                                <Link href={schoolsCreate().url}>
-                                    <Plus className="mr-1 h-4 w-4" />
-                                    New school
-                                </Link>
-                            </Button>
+                            isFiltered ? (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSearch('');
+                                        handleStatusChange('all');
+                                    }}
+                                >
+                                    Clear filters
+                                </Button>
+                            ) : (
+                                <Button asChild size="sm">
+                                    <Link href={schoolsCreate().url}>
+                                        <Plus className="mr-1 h-4 w-4" />
+                                        New school
+                                    </Link>
+                                </Button>
+                            )
                         }
                     />
                 ) : (

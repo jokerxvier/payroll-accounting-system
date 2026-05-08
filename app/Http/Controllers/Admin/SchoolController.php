@@ -50,13 +50,33 @@ final class SchoolController extends Controller
     {
         Gate::authorize('viewAny', School::class);
 
+        $search = trim((string) $request->query('search', ''));
+        $statusRaw = (string) $request->query('status', 'all');
+        $status = in_array($statusRaw, ['active', 'inactive', 'all'], true)
+            ? $statusRaw
+            : 'all';
+
         $schools = School::query()
+            ->when($search !== '', function ($q) use ($search): void {
+                $term = '%'.$search.'%';
+                $q->where(function ($inner) use ($term): void {
+                    $inner->where('name', 'like', $term)
+                        ->orWhere('slug', 'like', $term)
+                        ->orWhere('domain', 'like', $term);
+                });
+            })
+            ->when($status === 'active', fn ($q) => $q->where('is_active', true))
+            ->when($status === 'inactive', fn ($q) => $q->where('is_active', false))
             ->orderBy('name')
             ->paginate(25)
             ->withQueryString();
 
         return Inertia::render('admin/schools/index', [
             'schools' => $schools,
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+            ],
         ]);
     }
 
