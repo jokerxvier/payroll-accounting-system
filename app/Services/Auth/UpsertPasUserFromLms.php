@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use Spatie\Multitenancy\Models\Tenant;
 
 /**
  * Upserts a row in `pas_users` from the canonical LMS user record.
@@ -34,10 +35,19 @@ final class UpsertPasUserFromLms
 
         $existing = DB::table('pas_users')->where('id', $lmsUser->id)->first();
 
+        // Pin the pas_users row to the tenant whose LMS just verified the
+        // password. This is the source of truth for non-super-admin tenant
+        // resolution: ApplyTenantOverride uses pas_users.school_id to lock
+        // ordinary users to their school regardless of the request's
+        // subdomain / path / header. Falls back to the existing value if
+        // somehow no tenant is current (defensive — shouldn't happen because
+        // SchoolTenantFinder always resolves something).
+        $currentTenant = Tenant::current();
+        $tenantSchoolId = $currentTenant?->getKey();
+
         $payload = [
             'lms_user_id' => $lmsUser->id,
-            // school_id is populated in Phase B (per docs/improvement/plan-2.md).
-            'school_id' => $existing->school_id ?? null,
+            'school_id' => $tenantSchoolId ?? $existing->school_id ?? null,
             'name' => (string) ($lmsUser->getAttribute('full_name') ?? $lmsUser->getAttribute('name') ?? ''),
             'email' => (string) $lmsUser->email,
             'password' => (string) $lmsUser->password,

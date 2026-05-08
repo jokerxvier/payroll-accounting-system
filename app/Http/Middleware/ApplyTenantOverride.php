@@ -37,6 +37,36 @@ final class ApplyTenantOverride
 {
     public function handle(Request $request, Closure $next): Response
     {
+        $user = $request->user();
+        $isSuperAdmin = $user !== null
+            && method_exists($user, 'hasRole')
+            && $user->hasRole('super-admin');
+
+        // Strategy 1 — non-super-admin pinning (defense in depth).
+        // Ordinary users (HR, payroll-officer, auditor, employee) are locked
+        // to the school whose LMS authenticated them. The school id is
+        // stamped onto pas_users on every successful login by
+        // UpsertPasUserFromLms. Even if a malicious request crafts a path
+        // prefix or X-School-Slug header to pivot the boot-time finder to
+        // another school, this middleware overrides back to the user's
+        // pinned school.
+        if ($user !== null && ! $isSuperAdmin) {
+            $userSchoolId = $user->getAttribute('school_id');
+            if (is_int($userSchoolId) || (is_string($userSchoolId) && ctype_digit($userSchoolId))) {
+                $this->pivotTo((int) $userSchoolId);
+            }
+
+            return $next($request);
+        }
+
+        // Strategy 2 — super-admin session override (the in-app switcher).
+        // Only honored for super-admin; the role check happens here, not
+        // just at write-time, so a leaked session override on a downgraded
+        // user's session is ignored.
+        if (! $isSuperAdmin) {
+            return $next($request);
+        }
+
         if (! $request->hasSession()) {
             return $next($request);
         }
@@ -46,29 +76,36 @@ final class ApplyTenantOverride
             return $next($request);
         }
 
-        $user = $request->user();
-        if ($user === null || ! method_exists($user, 'hasRole') || ! $user->hasRole('super-admin')) {
-            return $next($request);
-        }
+        $this->pivotTo((int) $overrideId);
 
+        return $next($request);
+    }
+
+    /**
+     * Re-pivot the active tenant to the given school id when it differs from
+     * the currently-resolved tenant. Inactive schools and missing rows are
+     * silently skipped (the existing tenant stays current), which is the
+     * conservative choice for the non-super-admin path: we never accidentally
+     * downgrade a logged-in user to a "no tenant" state mid-request.
+     */
+    private function pivotTo(int $schoolId): void
+    {
         $school = School::query()
-            ->whereKey((int) $overrideId)
+            ->whereKey($schoolId)
             ->where('is_active', true)
             ->first();
         if ($school === null) {
-            return $next($request);
+            return;
         }
 
         $current = Tenant::current();
         if ($current && $current->getKey() === $school->getKey()) {
-            return $next($request);
+            return;
         }
 
         if ($current) {
             Tenant::forgetCurrent();
         }
         $school->makeCurrent();
-
-        return $next($request);
     }
 }
