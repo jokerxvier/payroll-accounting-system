@@ -14,16 +14,19 @@ use Spatie\Multitenancy\TenantFinder\TenantFinder;
  *
  * Resolution precedence:
  *   0. Super-admin session override (the in-app school switcher) — always
- *      wins when present, regardless of the multi-tenant flag, because the
- *      operator explicitly chose this tenant context.
+ *      wins when present, because the operator explicitly chose this tenant
+ *      context. (Currently a no-op stub; the post-session ApplyTenantOverride
+ *      middleware re-pivots the tenant after StartSession runs.)
  *   1. Subdomain / domain match against `pas_schools.domain`
  *   2. Path prefix `/schools/{slug}/...` (local dev / single-domain ops)
  *   3. Header `X-School-Slug: {slug}` (testing / future API)
  *
- * When `PAYROLL_MULTI_TENANT=false` and no override is set, every request
- * resolves to the seeded `slug=default` school so the rest of the
- * multitenancy pipeline (SwitchLmsConnection, future BelongsToTenant scope)
- * runs uniformly without changing observable behavior.
+ * Returns null when no strategy matches. Spatie's `NeedsTenant` middleware
+ * aborts the request 404 in that case — there is no implicit fallback.
+ *
+ * Single-tenant deployments are still supported because `SchoolSeeder` seeds
+ * the default school's `domain` to `parse_url(APP_URL, HOST)`, so a bare-host
+ * request (e.g. `payroll-system.test`) resolves via the subdomain strategy.
  *
  * Inactive schools (`is_active = false`) never resolve regardless of strategy.
  *
@@ -42,16 +45,6 @@ final class SchoolTenantFinder extends TenantFinder
         // Runs first so the operator's explicit choice always wins.
         if ($override = $this->resolveSessionOverride($request)) {
             return $override;
-        }
-
-        if (! config('multitenancy.payroll_multi_tenant_enabled', false)) {
-            // Single-tenant fallback — every request resolves to the default
-            // school so the rest of the pipeline exercises real code paths
-            // even before the multi-tenant flag is flipped.
-            return School::query()
-                ->where('slug', 'default')
-                ->where('is_active', true)
-                ->first();
         }
 
         // Strategy 1 — subdomain / domain match (production).

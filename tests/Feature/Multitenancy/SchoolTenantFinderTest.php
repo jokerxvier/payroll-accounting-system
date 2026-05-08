@@ -10,27 +10,29 @@ use Illuminate\Http\Request;
 uses(RefreshDatabase::class);
 
 /*
- * Phase C.1 — SchoolTenantFinder.
+ * Phase C.1 / D.4 — SchoolTenantFinder.
  *
  * The finder is the single decision point for "which School row drives this
- * request's lms connection". Two top-level branches:
- *  - PAYROLL_MULTI_TENANT=false (default): always returns the seeded
- *    `slug=default` school so the rest of the pipeline runs uniformly
- *    without any observable behavior change.
- *  - PAYROLL_MULTI_TENANT=true: tries subdomain → path → header in order.
- *    Returns null when nothing matches; NeedsTenant middleware aborts.
+ * request's lms connection". Resolution order:
+ *   1. Subdomain / domain match against pas_schools.domain
+ *   2. Path prefix /schools/{slug}/...
+ *   3. Header X-School-Slug: {slug}
+ *   4. null (NeedsTenant middleware aborts the request 404)
+ *
+ * Phase D.4 removed the single-tenant fallback branch (return the seeded
+ * default school when PAYROLL_MULTI_TENANT=false). Single-tenant deployments
+ * still work because the SchoolSeeder seeds the default school's `domain` to
+ * the APP_URL host, so a bare-host request resolves via strategy 1.
  *
  * Inactive schools never resolve via any strategy.
  */
 
 beforeEach(function (): void {
-    // Default flag state — single-tenant. Individual tests flip to true.
-    config(['multitenancy.payroll_multi_tenant_enabled' => false]);
-
     // The global Pest beforeEach seeds the default school for every test so
-    // HTTP-driven suites pass through Spatie's NeedsTenant middleware without
-    // a 503. The finder tests assert raw resolution semantics directly, so
-    // clear that row first to avoid masking precondition checks.
+    // HTTP-driven suites pass through Spatie's NeedsTenant middleware. The
+    // finder tests assert raw resolution semantics directly, so clear that
+    // row first to avoid masking precondition checks (and so each test
+    // controls exactly which schools are present).
     School::query()->where('slug', 'default')->delete();
 });
 
@@ -53,40 +55,7 @@ function finder(): SchoolTenantFinder
     return app(SchoolTenantFinder::class);
 }
 
-it('returns the default school regardless of host when flag is false', function (): void {
-    $default = School::factory()->create(['slug' => 'default', 'is_active' => true]);
-    School::factory()->create(['slug' => 'acme', 'domain' => 'acme.payroll.test']);
-
-    $request = makeRequest('/dashboard', ['HTTP_HOST' => 'random-host.example.com']);
-
-    $resolved = finder()->findForRequest($request);
-
-    expect($resolved)->toBeInstanceOf(School::class);
-    /** @var School $resolved */
-    expect($resolved->getKey())->toBe($default->getKey());
-});
-
-it('returns null in single-tenant mode when default school is missing', function (): void {
-    // No default school seeded.
-    $request = makeRequest('/dashboard');
-
-    $resolved = finder()->findForRequest($request);
-
-    expect($resolved)->toBeNull();
-});
-
-it('returns null in single-tenant mode when default school is inactive', function (): void {
-    School::factory()->create(['slug' => 'default', 'is_active' => false]);
-
-    $request = makeRequest('/dashboard');
-
-    $resolved = finder()->findForRequest($request);
-
-    expect($resolved)->toBeNull();
-});
-
-it('resolves by domain match when multi-tenant flag is true', function (): void {
-    config(['multitenancy.payroll_multi_tenant_enabled' => true]);
+it('resolves by domain match', function (): void {
     $school = School::factory()->create([
         'slug' => 'acme',
         'domain' => 'acme.payroll.test',
@@ -102,8 +71,7 @@ it('resolves by domain match when multi-tenant flag is true', function (): void 
     expect($resolved->getKey())->toBe($school->getKey());
 });
 
-it('resolves by path prefix /schools/{slug} when multi-tenant flag is true', function (): void {
-    config(['multitenancy.payroll_multi_tenant_enabled' => true]);
+it('resolves by path prefix /schools/{slug}', function (): void {
     $school = School::factory()->create([
         'slug' => 'acme',
         'domain' => null,
@@ -119,8 +87,7 @@ it('resolves by path prefix /schools/{slug} when multi-tenant flag is true', fun
     expect($resolved->getKey())->toBe($school->getKey());
 });
 
-it('resolves by X-School-Slug header when multi-tenant flag is true', function (): void {
-    config(['multitenancy.payroll_multi_tenant_enabled' => true]);
+it('resolves by X-School-Slug header', function (): void {
     $school = School::factory()->create([
         'slug' => 'acme',
         'domain' => null,
@@ -136,8 +103,7 @@ it('resolves by X-School-Slug header when multi-tenant flag is true', function (
     expect($resolved->getKey())->toBe($school->getKey());
 });
 
-it('returns null when multi-tenant flag is true and no strategy matches', function (): void {
-    config(['multitenancy.payroll_multi_tenant_enabled' => true]);
+it('returns null when no strategy matches (post-D.4 strict mode)', function (): void {
     School::factory()->create([
         'slug' => 'acme',
         'domain' => 'acme.payroll.test',
@@ -151,8 +117,21 @@ it('returns null when multi-tenant flag is true and no strategy matches', functi
     expect($resolved)->toBeNull();
 });
 
+it('returns null when host has no matching school even if a default school exists', function (): void {
+    // Post-D.4 the seeded `default` school is no longer treated as an
+    // implicit fallback — only its `domain` column matters.
+    School::factory()->create([
+        'slug' => 'default',
+        'domain' => 'payroll-system.test',
+        'is_active' => true,
+    ]);
+
+    $request = makeRequest('/dashboard', ['HTTP_HOST' => 'random-host.example.com']);
+
+    expect(finder()->findForRequest($request))->toBeNull();
+});
+
 it('does not resolve an inactive school by domain', function (): void {
-    config(['multitenancy.payroll_multi_tenant_enabled' => true]);
     School::factory()->create([
         'slug' => 'acme',
         'domain' => 'acme.payroll.test',
@@ -165,7 +144,6 @@ it('does not resolve an inactive school by domain', function (): void {
 });
 
 it('does not resolve an inactive school by path prefix', function (): void {
-    config(['multitenancy.payroll_multi_tenant_enabled' => true]);
     School::factory()->create([
         'slug' => 'acme',
         'domain' => null,
@@ -178,7 +156,6 @@ it('does not resolve an inactive school by path prefix', function (): void {
 });
 
 it('does not resolve an inactive school by header', function (): void {
-    config(['multitenancy.payroll_multi_tenant_enabled' => true]);
     School::factory()->create([
         'slug' => 'acme',
         'domain' => null,
@@ -191,7 +168,6 @@ it('does not resolve an inactive school by header', function (): void {
 });
 
 it('prefers domain match over path prefix when both could resolve', function (): void {
-    config(['multitenancy.payroll_multi_tenant_enabled' => true]);
     $byDomain = School::factory()->create([
         'slug' => 'by-domain',
         'domain' => 'acme.payroll.test',

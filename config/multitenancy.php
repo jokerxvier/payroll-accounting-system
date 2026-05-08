@@ -18,21 +18,21 @@ use Spatie\Multitenancy\Jobs\NotTenantAware;
 use Spatie\Multitenancy\Jobs\TenantAware;
 
 /*
- * Phase C.2 — queue tenant awareness.
+ * Phase D.4 — strict tenant resolution.
  *
  * The full tenant pipeline is now live:
- *   - SchoolTenantFinder resolves a school per request (or falls through
- *     to the seeded `slug=default` school when PAYROLL_MULTI_TENANT=false).
+ *   - SchoolTenantFinder resolves a school per request via
+ *     domain → path → header. There is no implicit fallback: when no
+ *     strategy matches, NeedsTenant middleware aborts the request.
+ *     Single-tenant deployments still work because SchoolSeeder seeds the
+ *     default school's `domain` to `parse_url(APP_URL, HOST)`.
  *   - SwitchLmsConnection rebinds `database.connections.lms` on
  *     makeCurrent / forgetCurrent.
- *   - `queues_are_tenant_aware_by_default` = true (Phase C.2): Spatie's
- *     MakeQueueTenantAwareAction now (a) reads the current tenant ID from
+ *   - `queues_are_tenant_aware_by_default` = true: Spatie's
+ *     MakeQueueTenantAwareAction reads the current tenant ID from
  *     Laravel Context at dispatch time and serializes it onto the job
- *     payload, then (b) rebinds CurrentTenant + runs SwitchLmsConnection
- *     before `handle()`. Production behaviour is unchanged because every
- *     request still resolves the seeded `default` school under
- *     PAYROLL_MULTI_TENANT=false; queued jobs simply route through the
- *     same school explicitly instead of relying on ambient state.
+ *     payload, then rebinds CurrentTenant + runs SwitchLmsConnection
+ *     before `handle()`.
  *
  * Per-job opt-out: implement `Spatie\Multitenancy\Jobs\NotTenantAware`.
  * Per-job opt-in (when the global default flips back to false): implement
@@ -50,19 +50,22 @@ return [
      * (production) or a custom PathTenantFinder (local dev).
      *
      * Phase C.1: SchoolTenantFinder resolves a `pas_schools` row from the
-     * request (subdomain → path → header). When PAYROLL_MULTI_TENANT=false
-     * it falls through to the seeded `slug=default` school so the pipeline
-     * runs uniformly without changing observable behavior.
+     * request (subdomain → path → header). Phase D.4 removed the
+     * single-tenant fallback branch — bare-host requests resolve via the
+     * subdomain strategy because SchoolSeeder seeds the default school's
+     * `domain` to `parse_url(APP_URL, HOST)`.
      */
     'tenant_finder' => SchoolTenantFinder::class,
 
     /*
-     * Project-specific feature flag — read by SchoolTenantFinder to decide
-     * whether to apply the subdomain/path/header resolution strategies
-     * (true) or fall through to the seeded `slug=default` school (false).
-     *
-     * Defined in `config()` rather than via raw `env()` at the call site so
-     * the value remains correct under `php artisan config:cache`.
+     * Deprecated as of Phase D.4 — the SchoolTenantFinder no longer reads
+     * this flag. The single-tenant fallback (return the seeded
+     * `slug=default` school regardless of host) was removed; resolution is
+     * now strictly domain → path → header → null. The key is kept here so
+     * existing `.env` files don't fail config validation, but flipping it
+     * has no effect on the resolver. Safe to remove from `.env` files in
+     * a future cleanup slice once all environments are confirmed to no
+     * longer set it.
      */
     'payroll_multi_tenant_enabled' => env('PAYROLL_MULTI_TENANT', false),
 
