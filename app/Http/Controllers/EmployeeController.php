@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Requests\EmployeeIndexRequest;
+use App\Http\Requests\EmployeeProfileStoreRequest;
 use App\Http\Requests\EmployeeProfileUpdateRequest;
 use App\Models\Lms\Department;
 use App\Models\Pas\Allowance;
@@ -209,9 +210,9 @@ class EmployeeController extends Controller
             ->get();
     }
 
-    public function store(int $staffId): RedirectResponse
+    public function store(EmployeeProfileStoreRequest $request, int $staffId): RedirectResponse
     {
-        Gate::authorize('create', EmployeeProfile::class);
+        // Authorization is enforced by EmployeeProfileStoreRequest::authorize().
 
         // Confirm the staff exists and is in the role allowlist before
         // attempting to create a profile. Without this, a malicious request
@@ -222,7 +223,12 @@ class EmployeeController extends Controller
             abort(404);
         }
 
-        $this->repo->firstOrCreateForStaff($staffId);
+        // `firstOrCreateForStaff` keys on `lms_staff_id`, so re-posting for a
+        // staff that already has a profile is a no-op (the supplied defaults
+        // are ignored — Eloquent's firstOrCreate semantics). The frontend
+        // gates the affordance on `has_profile === false`, so this is the
+        // expected path; the no-op behavior is defensive against double POSTs.
+        $this->repo->firstOrCreateForStaff($staffId, $request->validated());
 
         return back()->with('success', 'Payroll profile created.');
     }
