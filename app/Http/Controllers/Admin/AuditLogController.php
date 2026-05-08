@@ -32,7 +32,12 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 final class AuditLogController extends Controller
 {
     /** @var list<string> */
-    private const AUDIT_ROLES = ['super-admin', 'auditor'];
+    // platform-admin is included so the cross-tenant operator can audit
+    // every school. Within whichever tenant they've switched to, the
+    // BelongsToTenant scope on AuditLog filters the rows; cross-tenant
+    // audit aggregation is intentionally not built (per plan-2.md "out of
+    // scope: cross-tenant reporting").
+    private const AUDIT_ROLES = ['platform-admin', 'super-admin', 'auditor'];
 
     public function index(Request $request): Response
     {
