@@ -171,7 +171,12 @@ final class PayrollRunController extends Controller
     public function submit(PayrollRun $payrollRun, SubmitPayrollRunForApprovalAction $action): RedirectResponse
     {
         Gate::authorize('submit', $payrollRun);
-        $action->execute($payrollRun, (int) auth()->id());
+
+        try {
+            $action->execute($payrollRun, (int) auth()->id());
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('admin.payroll-runs.show', $payrollRun->id)
@@ -181,7 +186,12 @@ final class PayrollRunController extends Controller
     public function approve(PayrollRun $payrollRun, ApprovePayrollRunAction $action): RedirectResponse
     {
         Gate::authorize('approve', $payrollRun);
-        $action->execute($payrollRun, (int) auth()->id());
+
+        try {
+            $action->execute($payrollRun, (int) auth()->id());
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('admin.payroll-runs.show', $payrollRun->id)
@@ -191,7 +201,12 @@ final class PayrollRunController extends Controller
     public function post(PayrollRun $payrollRun, PostPayrollRunAction $action): RedirectResponse
     {
         Gate::authorize('post', $payrollRun);
-        $action->execute($payrollRun, (int) auth()->id());
+
+        try {
+            $action->execute($payrollRun, (int) auth()->id());
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('admin.payroll-runs.show', $payrollRun->id)
@@ -201,7 +216,12 @@ final class PayrollRunController extends Controller
     public function void(PayrollRun $payrollRun, VoidPayrollRunAction $action): RedirectResponse
     {
         Gate::authorize('void', $payrollRun);
-        $action->execute($payrollRun, (int) auth()->id());
+
+        try {
+            $action->execute($payrollRun, (int) auth()->id());
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('admin.payroll-runs.show', $payrollRun->id)
