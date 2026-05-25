@@ -92,6 +92,11 @@ class HandleInertiaRequests extends Middleware
                 && $request->hasSession()
                 && $request->session()->has('current_school_id_override'),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            // Presentational hide for sidebar nav groups (e.g. demos). Sourced
+            // from config so it's flippable via PAYROLL_SIDEBAR_HIDDEN_SECTIONS
+            // in .env without redeploying. Backend authorisation is unchanged;
+            // this only controls whether the React sidebar renders the group.
+            'sidebarHiddenSections' => config('payroll.sidebar_hidden_sections', []),
         ];
     }
 }

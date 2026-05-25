@@ -193,15 +193,31 @@ function hasAnyRole(
 }
 
 export function AppSidebar() {
-    const { auth, currentTenant, availableTenants, tenantOverrideActive } =
-        usePage().props;
+    const {
+        auth,
+        currentTenant,
+        availableTenants,
+        tenantOverrideActive,
+        sidebarHiddenSections,
+    } = usePage().props;
     const userRoles = auth.user?.roles ?? [];
 
-    const canViewEmployees = hasAnyRole(userRoles, EMPLOYEE_DIRECTORY_ROLES);
-    const canViewPayroll = hasAnyRole(userRoles, PAYROLL_MAKER_ROLES);
-    const canViewCatalog = hasAnyRole(userRoles, CATALOG_READ_ROLES);
-    const canViewAudit = hasAnyRole(userRoles, AUDIT_ROLES);
-    const canManageSchools = hasAnyRole(userRoles, SCHOOLS_ADMIN_ROLES);
+    // Config-driven presentational hide for sidebar nav groups (demos, etc).
+    // Sourced from PAYROLL_SIDEBAR_HIDDEN_SECTIONS via config/payroll.php.
+    // Backend authorisation is unchanged — direct URLs still resolve.
+    const isHidden = (section: string): boolean =>
+        sidebarHiddenSections.includes(section);
+
+    const canViewEmployees =
+        hasAnyRole(userRoles, EMPLOYEE_DIRECTORY_ROLES) && !isHidden('directory');
+    const canViewPayroll =
+        hasAnyRole(userRoles, PAYROLL_MAKER_ROLES) && !isHidden('payroll');
+    const canViewCatalog =
+        hasAnyRole(userRoles, CATALOG_READ_ROLES) && !isHidden('catalog');
+    const canViewAudit =
+        hasAnyRole(userRoles, AUDIT_ROLES) && !isHidden('audit');
+    const canManageSchools =
+        hasAnyRole(userRoles, SCHOOLS_ADMIN_ROLES) && !isHidden('tenants');
     const canSwitchTenant = availableTenants.length > 1;
 
     const handleSwitchTo = (schoolId: number): void => {

@@ -21,6 +21,7 @@ declare module '@inertiajs/core' {
             availableTenants: AvailableTenant[];
             tenantOverrideActive: boolean;
             sidebarOpen: boolean;
+            sidebarHiddenSections: string[];
             [key: string]: unknown;
         };
     }
