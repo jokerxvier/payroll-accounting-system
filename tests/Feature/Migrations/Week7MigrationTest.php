@@ -50,9 +50,12 @@ it('creates pas_allowances with the expected columns and indexes', function (): 
     expect(Schema::getColumnType('pas_allowances', 'is_active'))->toBe('tinyint');
     expect(Schema::getColumnType('pas_allowances', 'notes'))->toBe('text');
 
-    // Unique on `code`
+    // Unique on `code` was converted to a composite (school_id, code) unique
+    // by the Stage A multi-tenant catalog migration
+    // (2026_05_10_000001_add_school_id_to_pas_catalog_tables.php).
     $indexes = collect(Schema::getIndexes('pas_allowances'));
-    expect($indexes->contains(fn ($idx) => $idx['columns'] === ['code'] && $idx['unique']))->toBeTrue();
+    expect($indexes->contains(fn ($idx) => $idx['columns'] === ['code'] && $idx['unique']))->toBeFalse();
+    expect($indexes->contains(fn ($idx) => $idx['columns'] === ['school_id', 'code'] && $idx['unique']))->toBeTrue();
 
     // Single-column index on is_active
     expect($indexes->contains(fn ($idx) => $idx['name'] === 'pas_allowances_is_active_idx'))->toBeTrue();
@@ -74,9 +77,12 @@ it('creates pas_deduction_types with the expected columns and indexes', function
     expect(Schema::getColumnType('pas_deduction_types', 'source'))->toBe('varchar');
     expect(Schema::getColumnType('pas_deduction_types', 'is_active'))->toBe('tinyint');
 
-    // Unique on `code`
+    // Unique on `code` was converted to a composite (school_id, code) unique
+    // by the Stage A multi-tenant catalog migration
+    // (2026_05_10_000001_add_school_id_to_pas_catalog_tables.php).
     $indexes = collect(Schema::getIndexes('pas_deduction_types'));
-    expect($indexes->contains(fn ($idx) => $idx['columns'] === ['code'] && $idx['unique']))->toBeTrue();
+    expect($indexes->contains(fn ($idx) => $idx['columns'] === ['code'] && $idx['unique']))->toBeFalse();
+    expect($indexes->contains(fn ($idx) => $idx['columns'] === ['school_id', 'code'] && $idx['unique']))->toBeTrue();
     expect($indexes->contains(fn ($idx) => $idx['name'] === 'pas_deduction_types_is_active_idx'))->toBeTrue();
 });
 

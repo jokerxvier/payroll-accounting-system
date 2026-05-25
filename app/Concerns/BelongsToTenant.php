@@ -31,9 +31,13 @@ use Spatie\Multitenancy\Models\Tenant;
  * just doesn't auto-fill (defer to whatever the caller passes).
  *
  * Apply via `use BelongsToTenant;` on any Pas\* model whose table received
- * `school_id` in D.1. Catalog tables (Allowance, DeductionType,
- * StatutoryContribution) intentionally do NOT use this trait — they're
- * globally shared per plan-2.md.
+ * `school_id` in D.1 (or in the catalog conversion plan landed at
+ * /Users/jdev/.claude/plans/what-is-next-in-joyful-rabbit.md). The
+ * `StatutoryContribution` catalog intentionally does NOT use this trait —
+ * PH BIR/SSS/PhilHealth/Pag-IBIG rates are national law, so duplicating per
+ * tenant is waste. `Allowance` and `DeductionType` are now per-tenant
+ * (each school maintains its own catalog, seeded from the default school's
+ * catalog at school creation).
  */
 trait BelongsToTenant
 {

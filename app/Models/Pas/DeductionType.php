@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Concerns\Auditable;
+use App\Concerns\BelongsToTenant;
 use Database\Factories\Pas\DeductionTypeFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -36,6 +37,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 final class DeductionType extends Model
 {
     use Auditable;
+    use BelongsToTenant;
 
     /** @use HasFactory<DeductionTypeFactory> */
     use HasFactory;

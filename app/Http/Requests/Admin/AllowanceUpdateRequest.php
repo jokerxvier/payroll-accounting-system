@@ -7,6 +7,7 @@ namespace App\Http\Requests\Admin;
 use App\Models\Pas\Allowance;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Spatie\Multitenancy\Models\Tenant;
 
 /**
  * Validates an update to an existing `pas_allowances` row.
@@ -36,12 +37,23 @@ final class AllowanceUpdateRequest extends FormRequest
         /** @var Allowance $allowance */
         $allowance = $this->route('allowance');
 
+        // Tenant-scoped uniqueness mirrors the composite (school_id, code)
+        // index added in Stage A. Defensive fallback: when no tenant is
+        // current (console / bootstrap), drop the where clause so the rule
+        // still functions (existing single-tenant behaviour).
+        $tenantId = Tenant::current()?->getKey();
+
+        $codeUniqueRule = Rule::unique('pas_allowances', 'code')->ignore($allowance->id);
+        if ($tenantId !== null) {
+            $codeUniqueRule = $codeUniqueRule->where('school_id', $tenantId);
+        }
+
         return [
             'code' => [
                 'required',
                 'string',
                 'max:32',
-                Rule::unique('pas_allowances', 'code')->ignore($allowance->id),
+                $codeUniqueRule,
             ],
             'name' => ['required', 'string', 'max:120'],
             'is_taxable' => ['required', 'boolean'],

@@ -14,6 +14,7 @@ use App\Models\Pas\PayrollAdjustment;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\School;
 use App\Models\Pas\StatutoryContribution;
+use App\Observers\SchoolObserver;
 use App\Policies\Pas\AllowancePolicy;
 use App\Policies\Pas\DeductionTypePolicy;
 use App\Policies\Pas\EmployeeAllowancePolicy;
@@ -69,6 +70,18 @@ class AppServiceProvider extends ServiceProvider
         $this->registerEventListeners();
         $this->registerPolicies();
         $this->registerPlatformAdminGate();
+        $this->registerObservers();
+    }
+
+    /**
+     * Register model observers that act on lifecycle events without depending
+     * on any controller / action invocation. The auto-clone of catalog rows
+     * for newly-created schools lives here so it fires uniformly across
+     * controllers, factories, seeders, and tinker.
+     */
+    protected function registerObservers(): void
+    {
+        School::observe(SchoolObserver::class);
     }
 
     /**

@@ -10,6 +10,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -60,7 +61,7 @@ final class PayPeriodController extends Controller
     {
         Gate::authorize('create', PayPeriod::class);
 
-        $data = $request->validate([
+        $validator = Validator::make($request->all(), [
             'code' => ['required', 'string', 'max:32', 'unique:pas_pay_periods,code'],
             'frequency' => ['required', 'string', Rule::in(PayPeriod::FREQUENCIES)],
             'start_date' => ['required', 'date'],
@@ -68,6 +69,28 @@ final class PayPeriodController extends Controller
             'cutoff_date' => ['nullable', 'date'],
             'status' => ['required', 'string', Rule::in(PayPeriod::STATUSES)],
         ]);
+
+        // Cross-field invariant: the day-span must match the chosen frequency.
+        // Mirrors PayPeriodInput::custom() so a row that passes this validator
+        // can always bridge to the engine's value object.
+        $validator->after(function ($v) use ($request): void {
+            if ($v->errors()->hasAny(['frequency', 'start_date', 'end_date'])) {
+                return;
+            }
+            $start = CarbonImmutable::parse((string) $request->input('start_date'))->startOfDay();
+            $end = CarbonImmutable::parse((string) $request->input('end_date'))->startOfDay();
+            $days = (int) $start->diffInDays($end) + 1;
+            $frequency = (string) $request->input('frequency');
+
+            if ($frequency === PayPeriod::FREQUENCY_MONTHLY && ($days < 28 || $days > 31)) {
+                $v->errors()->add('end_date', "A monthly pay period must span 28–31 days; got {$days}.");
+            }
+            if ($frequency === PayPeriod::FREQUENCY_SEMI_MONTHLY && ($days < 13 || $days > 16)) {
+                $v->errors()->add('end_date', "A semi-monthly pay period must span 13–16 days; got {$days}.");
+            }
+        });
+
+        $data = $validator->validate();
 
         // Coerce dates to start-of-day immutables for consistency with the
         // engine's PayPeriodInput value object.

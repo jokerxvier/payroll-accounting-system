@@ -3,10 +3,19 @@
 use App\Http\Middleware\ApplyTenantOverride;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use Illuminate\Auth\Middleware\AuthenticateSession;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Routing\Middleware\ThrottleRequestsWithRedis;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Inertia\Inertia;
 use Spatie\Multitenancy\Http\Middleware\NeedsTenant;
 use Symfony\Component\HttpFoundation\Response;
@@ -29,6 +38,15 @@ return Application::configure(basePath: dirname(__DIR__))
             // prop is captured at THAT point. Spatie resolves the tenant
             // at service-provider boot (before session is available), so
             // this middleware re-resolves once session + auth are ready.
+            //
+            // Execution order vs SubstituteBindings is enforced explicitly
+            // in priority() below — without it, ApplyTenantOverride runs
+            // AFTER SubstituteBindings (by virtue of being appended), so
+            // route-model-binding queries fire while Tenant::current() is
+            // still the boot-time default tenant. Any model that uses
+            // BelongsToTenant (PayrollRun, PayPeriod, Payslip…) would 404
+            // when the platform admin's session override pivots them to a
+            // non-default school.
             ApplyTenantOverride::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
@@ -36,6 +54,25 @@ return Application::configure(basePath: dirname(__DIR__))
             // and runs the SwitchLmsConnection task. Appended so it runs
             // after session/cookie middleware in the framework's web group.
             NeedsTenant::class,
+        ]);
+
+        // Middleware execution priority: ApplyTenantOverride MUST run
+        // before SubstituteBindings so route-model-binding queries see the
+        // correct Tenant::current(). Mirrors Laravel's default priority
+        // list with ApplyTenantOverride inserted between AuthenticateSession
+        // and SubstituteBindings — every other entry is the framework
+        // default; reordering them would break unrelated middleware.
+        $middleware->priority([
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+            ShareErrorsFromSession::class,
+            HandlePrecognitiveRequests::class,
+            AuthenticateSession::class,
+            ApplyTenantOverride::class,
+            SubstituteBindings::class,
+            ThrottleRequests::class,
+            ThrottleRequestsWithRedis::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

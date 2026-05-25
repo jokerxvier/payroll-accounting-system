@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
@@ -103,7 +104,7 @@ final class PayrollRunController extends Controller
 
         try {
             $run = $action->execute($period);
-        } catch (DomainException $e) {
+        } catch (DomainException|InvalidArgumentException $e) {
             return back()->withErrors(['pay_period_id' => $e->getMessage()]);
         }
 

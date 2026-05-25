@@ -6,6 +6,7 @@ namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Spatie\Multitenancy\Models\Tenant;
 
 /**
  * Validates a new row for `pas_allowances`.
@@ -35,8 +36,21 @@ final class AllowanceStoreRequest extends FormRequest
      */
     public function rules(): array
     {
+        // Tenant-scoped uniqueness — the DB now has a composite
+        // (school_id, code) unique, so two schools may legitimately each
+        // hold a row with the same code (e.g. both schools' "rice_subsidy").
+        // Falling back to no school filter when no tenant is current keeps
+        // console / bootstrap paths working; in a real HTTP request the
+        // tenant is always resolved by NeedsTenant middleware.
+        $tenantId = Tenant::current()?->getKey();
+
+        $codeUniqueRule = Rule::unique('pas_allowances', 'code');
+        if ($tenantId !== null) {
+            $codeUniqueRule = $codeUniqueRule->where('school_id', $tenantId);
+        }
+
         return [
-            'code' => ['required', 'string', 'max:32', Rule::unique('pas_allowances', 'code')],
+            'code' => ['required', 'string', 'max:32', $codeUniqueRule],
             'name' => ['required', 'string', 'max:120'],
             'is_taxable' => ['required', 'boolean'],
             'is_de_minimis' => ['required', 'boolean'],
