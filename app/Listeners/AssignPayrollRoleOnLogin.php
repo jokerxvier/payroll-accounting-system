@@ -18,9 +18,12 @@ use Throwable;
  *   pas_users.lms_user_id → lms.users.id → lms.users.role_id
  *
  * Behaviour:
- *  - If pas_users.lms_user_id is null (the row was provisioned outside the
- *    LMS auth flow — e.g., a future invite-only path), the listener returns
- *    early and logs a warning.
+ *  - If pas_users.lms_user_id is null, the row is a payroll-native user
+ *    (e.g., platform-admin per the f4ee05d / e9fddb2 design, or a future
+ *    invite-only ops path). These users manage their roles independently
+ *    of the LMS mapping; the listener returns early and emits a debug log
+ *    for trace purposes only — not a warning, because this is an expected
+ *    and frequent path on every platform-admin login.
  *  - LMS read failures degrade gracefully (log + return early without
  *    touching roles). Same defensive pattern as the dashboard / employees
  *    index / payroll preview controllers.
@@ -50,7 +53,10 @@ final class AssignPayrollRoleOnLogin
         $lmsUserId = $user->getAttribute('lms_user_id');
 
         if ($lmsUserId === null) {
-            Log::warning('Login: pas_user has no lms_user_id; cannot resolve role.', [
+            // Payroll-native user (platform-admin or future invite-only
+            // ops). Expected on every such login — emit at debug so the
+            // trace is available without flooding the WARNING channel.
+            Log::debug('Login: pas_user has no lms_user_id; skipping LMS role mapping.', [
                 'user_id' => $user->getKey(),
             ]);
 
