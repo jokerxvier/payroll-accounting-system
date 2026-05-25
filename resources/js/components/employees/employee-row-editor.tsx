@@ -6,6 +6,7 @@ import {
     Loader2,
     MinusCircle,
     PlusCircle,
+    ShieldCheck,
     Sliders,
     ToggleRight,
     Wallet,
@@ -38,6 +39,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,6 +59,7 @@ import {
 } from '@/routes/employees/profile';
 import type {
     AllowanceRef,
+    AvailableContribution,
     DeductionTypeRef,
     EmployeeAllowanceRow,
     EmployeeDeductionRow,
@@ -73,6 +76,7 @@ type Section =
     | 'status'
     | 'gov_ids'
     | 'bank'
+    | 'exemptions'
     | 'deductions'
     | 'allowances'
     | 'loans'
@@ -99,6 +103,7 @@ interface ProfileJsonResponse {
     pendingAdjustments: PayrollAdjustmentRow[];
     deductionTypeOptions: DeductionTypeRef[];
     allowanceOptions: AllowanceRef[];
+    availableContributions: AvailableContribution[];
 }
 
 const SECTIONS: {
@@ -110,6 +115,7 @@ const SECTIONS: {
     { id: 'status', label: 'Status', icon: ToggleRight },
     { id: 'gov_ids', label: 'Government IDs', icon: IdCard },
     { id: 'bank', label: 'Bank account', icon: Wallet },
+    { id: 'exemptions', label: 'Statutory exemptions', icon: ShieldCheck },
     { id: 'deductions', label: 'Deductions', icon: MinusCircle },
     { id: 'allowances', label: 'Allowances', icon: PlusCircle },
     { id: 'loans', label: 'Loans', icon: Landmark },
@@ -599,6 +605,15 @@ function ProfileTabContent({
                     onSaved={onSaved}
                 />
             );
+        case 'exemptions':
+            return (
+                <ExemptionsForm
+                    profile={profile}
+                    staffId={staffId}
+                    availableContributions={data.availableContributions}
+                    onSaved={onSaved}
+                />
+            );
         case 'deductions':
             return (
                 <DeductionsCard
@@ -1074,6 +1089,127 @@ function BankForm({ profile, staffId, onSaved }: BankFormProps) {
             <div className="md:col-span-2">
                 <SaveBar processing={form.processing} isDirty={form.isDirty} />
             </div>
+        </form>
+    );
+}
+
+type ExemptionFields = {
+    exempted_contribution_codes: string[];
+};
+
+interface ExemptionsFormProps {
+    profile: EmployeeProfile;
+    staffId: number;
+    availableContributions: AvailableContribution[];
+    onSaved: () => void;
+}
+
+function ExemptionsForm({
+    profile,
+    staffId,
+    availableContributions,
+    onSaved,
+}: ExemptionsFormProps) {
+    // Defensive `?? []` — older payloads predating the column may still
+    // arrive with the field undefined (mirrors edit-sheet.tsx).
+    const form = useForm<ExemptionFields>({
+        exempted_contribution_codes: profile.exempted_contribution_codes ?? [],
+    });
+
+    const toggleExemption = (code: string, checked: boolean): void => {
+        const current = form.data.exempted_contribution_codes;
+        const next = checked
+            ? current.includes(code)
+                ? current
+                : [...current, code]
+            : current.filter((existing) => existing !== code);
+
+        form.setData('exempted_contribution_codes', next);
+    };
+
+    const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        form.patch(profileUpdate(staffId).url, {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success('Statutory exemptions updated');
+                onSaved();
+            },
+        });
+    };
+
+    if (availableContributions.length === 0) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                No active statutory contributions are configured. Add entries
+                under Catalog → Contribution tables to manage exemptions here.
+            </p>
+        );
+    }
+
+    const headingId = `re-exemptions-heading-${staffId}`;
+    const descriptionId = `re-exemptions-description-${staffId}`;
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <section className="space-y-3" aria-labelledby={headingId}>
+                <div className="space-y-1">
+                    <h3 id={headingId} className="text-sm font-medium">
+                        Statutory exemptions
+                    </h3>
+                    <p
+                        id={descriptionId}
+                        className="text-xs text-muted-foreground"
+                    >
+                        Selected contributions will not be deducted from this
+                        employee's payroll. Use sparingly — most employees
+                        should be subscribed to all active statutory
+                        contributions.
+                    </p>
+                </div>
+
+                <ul className="space-y-2" aria-describedby={descriptionId}>
+                    {availableContributions.map((contribution) => {
+                        const checkboxId = `re-exemption-${staffId}-${contribution.code}`;
+                        const isChecked =
+                            form.data.exempted_contribution_codes.includes(
+                                contribution.code,
+                            );
+
+                        return (
+                            <li key={contribution.code}>
+                                <Label
+                                    htmlFor={checkboxId}
+                                    className="flex items-start gap-3 rounded-md border p-3 hover:bg-muted/30"
+                                >
+                                    <Checkbox
+                                        id={checkboxId}
+                                        checked={isChecked}
+                                        onCheckedChange={(checked) =>
+                                            toggleExemption(
+                                                contribution.code,
+                                                checked === true,
+                                            )
+                                        }
+                                        className="mt-0.5"
+                                    />
+                                    <div className="flex-1 space-y-0.5">
+                                        <span className="font-mono text-sm">
+                                            {contribution.code}
+                                        </span>
+                                        <p className="text-xs text-muted-foreground">
+                                            {contribution.label}
+                                        </p>
+                                    </div>
+                                </Label>
+                            </li>
+                        );
+                    })}
+                </ul>
+                <InputError message={form.errors.exempted_contribution_codes} />
+            </section>
+
+            <SaveBar processing={form.processing} isDirty={form.isDirty} />
         </form>
     );
 }

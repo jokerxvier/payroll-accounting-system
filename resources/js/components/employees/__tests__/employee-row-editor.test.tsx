@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmployeeRowEditor } from '@/components/employees/employee-row-editor';
 import type {
     AllowanceRef,
+    AvailableContribution,
     DeductionTypeRef,
     EmployeeAllowanceRow,
     EmployeeDeductionRow,
@@ -185,6 +186,16 @@ const EMPLOYMENT_TYPES: EmploymentTypeOption[] = [
     { value: 'probationary', label: 'Probationary' },
 ];
 
+const SSS_CONTRIBUTION: AvailableContribution = {
+    code: 'SSS',
+    label: 'Social Security System',
+};
+
+const PHIC_CONTRIBUTION: AvailableContribution = {
+    code: 'PHIC',
+    label: 'PhilHealth',
+};
+
 interface FetchPayloadOverrides {
     profile?: EmployeeProfile | null;
     deductions?: EmployeeDeductionRow[];
@@ -193,6 +204,7 @@ interface FetchPayloadOverrides {
     pendingAdjustments?: PayrollAdjustmentRow[];
     deductionTypeOptions?: DeductionTypeRef[];
     allowanceOptions?: AllowanceRef[];
+    availableContributions?: AvailableContribution[];
 }
 
 function buildPayload(overrides: FetchPayloadOverrides = {}) {
@@ -204,6 +216,10 @@ function buildPayload(overrides: FetchPayloadOverrides = {}) {
         pendingAdjustments: overrides.pendingAdjustments ?? [SAMPLE_ADJUSTMENT],
         deductionTypeOptions: overrides.deductionTypeOptions ?? [HMO_TYPE],
         allowanceOptions: overrides.allowanceOptions ?? [RICE_ALLOWANCE],
+        availableContributions: overrides.availableContributions ?? [
+            SSS_CONTRIBUTION,
+            PHIC_CONTRIBUTION,
+        ],
     };
 }
 
@@ -235,7 +251,7 @@ describe('EmployeeRowEditor', () => {
         globalThis.fetch = originalFetch;
     });
 
-    it('renders the eight section tabs once the profile loads', async () => {
+    it('renders the nine section tabs once the profile loads', async () => {
         render(
             <EmployeeRowEditor
                 staffId={42}
@@ -255,6 +271,7 @@ describe('EmployeeRowEditor', () => {
             'Status',
             'Government IDs',
             'Bank account',
+            'Statutory exemptions',
             'Deductions',
             'Allowances',
             'Loans',
@@ -355,6 +372,74 @@ describe('EmployeeRowEditor', () => {
         );
 
         expect(screen.getByTestId('adjustment-edit-sheet')).toBeInTheDocument();
+    });
+
+    it('renders the Statutory exemptions tab with a checkbox per available contribution', async () => {
+        // Pre-tick PHIC so the test also covers the "already exempted" code path.
+        setPayload(
+            buildPayload({
+                profile: {
+                    ...SAMPLE_PROFILE,
+                    exempted_contribution_codes: ['PHIC'],
+                },
+            }),
+        );
+
+        render(
+            <EmployeeRowEditor
+                staffId={42}
+                fullName="Maria Cruz"
+                employmentTypeOptions={EMPLOYMENT_TYPES}
+                onClose={vi.fn()}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByLabelText(/Basic salary/i)).toBeInTheDocument();
+        });
+
+        fireEvent.click(
+            screen.getByRole('tab', { name: /Statutory exemptions/i }),
+        );
+
+        const sssCheckbox = screen.getByRole('checkbox', { name: /SSS/ });
+        const phicCheckbox = screen.getByRole('checkbox', { name: /PHIC/ });
+
+        // SSS is not in exempted_contribution_codes → unchecked.
+        // PHIC is pre-ticked from the seeded profile.
+        expect(sssCheckbox).not.toBeChecked();
+        expect(phicCheckbox).toBeChecked();
+
+        // Description and human label both surface.
+        expect(screen.getByText('Social Security System')).toBeInTheDocument();
+        expect(screen.getByText('PhilHealth')).toBeInTheDocument();
+    });
+
+    it('falls back to an empty-state message when no contributions are configured', async () => {
+        setPayload(buildPayload({ availableContributions: [] }));
+
+        render(
+            <EmployeeRowEditor
+                staffId={42}
+                fullName="Maria Cruz"
+                employmentTypeOptions={EMPLOYMENT_TYPES}
+                onClose={vi.fn()}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByLabelText(/Basic salary/i)).toBeInTheDocument();
+        });
+
+        fireEvent.click(
+            screen.getByRole('tab', { name: /Statutory exemptions/i }),
+        );
+
+        expect(
+            screen.getByText(
+                /No active statutory contributions are configured/i,
+            ),
+        ).toBeInTheDocument();
     });
 
     it('opens the AlertDialog with deduction identity when the Trash button is clicked on a deduction row', async () => {
