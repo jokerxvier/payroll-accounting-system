@@ -10,12 +10,30 @@ use Illuminate\Support\Facades\DB;
 /*
  * Phase D.4 schema gate.
  *
- * Pins the post-D.4 state of the 15 tenant-scoped pas_* tables — every
- * `school_id` column is NOT NULL, so any insert that omits it (or sets it to
- * NULL) fails at the database layer. The schema-shape assertion runs only on
- * MySQL (sqlite test env carries the column as nullable per the migration's
- * driver split, but BelongsToTenant + the migration's MySQL-side ALTER keep
- * the production invariant honest).
+ * Pins the post-D.4 state of the tenant-scoped pas_* tables that are
+ * exclusively written via Eloquent (and therefore exercise BelongsToTenant
+ * on every insert) — every `school_id` column listed here is NOT NULL, so
+ * any insert that omits it (or sets it to NULL) fails at the database
+ * layer. The schema-shape assertion runs only on MySQL (sqlite test env
+ * carries the column as nullable per the migration's driver split, but
+ * BelongsToTenant + the migration's MySQL-side ALTER keep the production
+ * invariant honest).
+ *
+ * Exemptions (school_id is intentionally NULLABLE for these tables, so
+ * they are NOT listed below):
+ *
+ *   - pas_jobs / pas_failed_jobs / pas_notifications / pas_password_resets
+ *     / pas_job_batches — Laravel's queue / notification / Fortify systems
+ *     insert via raw query builder, bypassing the trait. Relaxed by
+ *     2026_05_09_000001_relax_school_id_on_framework_tables.
+ *
+ *   - pas_audit_logs — AuditObserver fires for every auditable model,
+ *     including writes to GLOBAL catalogs that deliberately do NOT use
+ *     BelongsToTenant (e.g., StatutoryContribution — PH BIR/SSS/PhilHealth
+ *     /Pag-IBIG rates are national law, not per-school config). Seeders,
+ *     platform-admin edits, and console contexts legitimately produce
+ *     audit rows with a null school_id. Relaxed by
+ *     2026_05_11_000001_relax_school_id_on_pas_audit_logs.
  *
  * Pair with PasSchoolIdColumnTest, which pins the D.1 shape (column exists,
  * has FK + index, composite uniques in place).
@@ -31,7 +49,6 @@ $tenantScopedTables = [
     'pas_employee_deductions',
     'pas_employee_loans',
     'pas_payroll_adjustments',
-    'pas_audit_logs',
     'pas_accounting_periods',
     'pas_jobs',
     'pas_failed_jobs',

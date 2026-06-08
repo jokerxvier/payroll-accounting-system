@@ -24,6 +24,12 @@ use LogicException;
  * The table has no `updated_at`; entries are immutable. Both update() and
  * delete() are overridden to throw LogicException as a defense-in-depth
  * measure against accidental future mutations of the audit log.
+ *
+ * `school_id` is NULLABLE: audit rows for global-catalog mutations (e.g.,
+ * StatutoryContribution edits, which deliberately omit BelongsToTenant)
+ * and seeder/console-time writes have no natural tenant, so the trait's
+ * auto-fill is a no-op and the column stays null. Tenant-scoped audit
+ * entries always carry a non-null school_id via BelongsToTenant.
  */
 final class AuditLog extends Model
 {
