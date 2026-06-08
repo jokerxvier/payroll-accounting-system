@@ -8,11 +8,8 @@ use App\Http\Controllers\Employees\EmployeeLoanController;
 use App\Http\Controllers\Employees\PayrollAdjustmentController;
 use App\Http\Controllers\PayrollPreviewController;
 use Illuminate\Support\Facades\Route;
-use Laravel\Fortify\Features;
 
-Route::inertia('/', 'welcome', [
-    'canRegister' => Features::enabled(Features::registration()),
-])->name('home');
+Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');

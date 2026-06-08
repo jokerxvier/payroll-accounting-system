@@ -144,7 +144,14 @@ return [
     */
 
     'features' => [
-        Features::registration(),
+        // Guest self-registration is intentionally disabled. The LMS is the
+        // identity master (Fortify::authenticateUsing in FortifyServiceProvider
+        // upserts pas_users from the LMS on every login), and payroll-native
+        // operators (platform admins) are seeded via PlatformAdminSeeder. There
+        // is no legitimate path for a guest to sign up; removing the feature
+        // here prevents Fortify from registering /register and /register POST.
+        // To re-enable, restore `Features::registration(),` and the deleted UI
+        // (auth/register page + canRegister gates) from git history.
         // Phase A.2: password reset is intentionally disabled. The LMS is
         // the identity master (docs/improvement/plan-2.md "Open question —
         // password resets" → option (b)) — resets are out-of-band by the

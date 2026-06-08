@@ -2,52 +2,27 @@ import { Form, Head } from '@inertiajs/react';
 import { useRef } from 'react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
-import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { register } from '@/routes';
 import { store } from '@/routes/login';
 
 type Props = {
     status?: string;
-    canRegister: boolean;
     showDemoLogin?: boolean;
 };
 
-const DEMO_ACCOUNTS = [
-    // Payroll Admin = payroll-native (lms_user_id NULL, role `platform-admin`).
-    // Cross-tenant: sees the school switcher, manages /admin/schools.
-    // Listed first so the multi-tenant operator persona is the default click.
-    {
-        label: 'Payroll Admin',
-        email: 'admin@payroll.test',
-        password: 'password',
-    },
-    // The four below are LMS-derived demo accounts — pinned to school_id=1
-    // (default school). They keep their school-scoped roles but no longer
-    // see the switcher or /admin/schools after the platform-admin split.
-    {
-        label: 'Super Admin',
-        email: 'super-admin@demo.test',
-        password: 'password',
-    },
-    {
-        label: 'Payroll Officer',
-        email: 'payroll-officer@demo.test',
-        password: 'password',
-    },
-    { label: 'HR', email: 'hr@demo.test', password: 'password' },
-    { label: 'Auditor', email: 'auditor@demo.test', password: 'password' },
-] as const;
+// Payroll Admin = platform-native operator (lms_user_id NULL,
+// role `platform-admin`, cross-tenant).
+const PAYROLL_ADMIN_DEMO = {
+    label: 'Payroll Admin',
+    email: 'admin@payroll.test',
+    password: 'password',
+} as const;
 
-export default function Login({
-    status,
-    canRegister,
-    showDemoLogin = false,
-}: Props) {
+export default function Login({ status, showDemoLogin = false }: Props) {
     const emailRef = useRef<HTMLInputElement>(null);
     const passwordRef = useRef<HTMLInputElement>(null);
 
@@ -127,15 +102,6 @@ export default function Login({
                                 Log in
                             </Button>
                         </div>
-
-                        {canRegister && (
-                            <div className="text-center text-sm text-muted-foreground">
-                                Don't have an account?{' '}
-                                <TextLink href={register()} tabIndex={5}>
-                                    Sign up
-                                </TextLink>
-                            </div>
-                        )}
                     </>
                 )}
             </Form>
@@ -145,9 +111,6 @@ export default function Login({
                     <p className="text-xs font-medium text-muted-foreground">
                         Demo accounts — fill credentials with one click
                     </p>
-                    {/* Payroll Admin (platform-native) sits on its own row to
-                        signal the cross-tenant persona — sees the switcher
-                        and manages /admin/schools. */}
                     <Button
                         type="button"
                         variant="outline"
@@ -155,36 +118,16 @@ export default function Login({
                         className="w-full"
                         onClick={() =>
                             fillCredentials(
-                                DEMO_ACCOUNTS[0].email,
-                                DEMO_ACCOUNTS[0].password,
+                                PAYROLL_ADMIN_DEMO.email,
+                                PAYROLL_ADMIN_DEMO.password,
                             )
                         }
                     >
-                        {DEMO_ACCOUNTS[0].label}
+                        {PAYROLL_ADMIN_DEMO.label}
                         <span className="ml-2 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
                             PLATFORM
                         </span>
                     </Button>
-                    {/* LMS-derived accounts in a 2x2 grid below. Pinned to the
-                        default school; no switcher; no schools admin. */}
-                    <div className="grid grid-cols-2 gap-2">
-                        {DEMO_ACCOUNTS.slice(1).map((account) => (
-                            <Button
-                                key={account.email}
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                    fillCredentials(
-                                        account.email,
-                                        account.password,
-                                    )
-                                }
-                            >
-                                {account.label}
-                            </Button>
-                        ))}
-                    </div>
                     <p className="text-[11px] text-muted-foreground">
                         Hidden in production. Run{' '}
                         <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">

@@ -1,13 +1,9 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Button } from '@/components/ui/button';
-import { dashboard, login, register } from '@/routes';
+import { dashboard, login } from '@/routes';
 
-export default function Welcome({
-    canRegister = true,
-}: {
-    canRegister?: boolean;
-}) {
+export default function Welcome() {
     const { auth } = usePage().props;
 
     return (
@@ -29,16 +25,9 @@ export default function Welcome({
                                 <Link href={dashboard()}>Dashboard</Link>
                             </Button>
                         ) : (
-                            <>
-                                <Button asChild variant="ghost">
-                                    <Link href={login()}>Log in</Link>
-                                </Button>
-                                {canRegister && (
-                                    <Button asChild variant="outline">
-                                        <Link href={register()}>Register</Link>
-                                    </Button>
-                                )}
-                            </>
+                            <Button asChild variant="ghost">
+                                <Link href={login()}>Log in</Link>
+                            </Button>
                         )}
                     </nav>
                 </header>
@@ -58,13 +47,6 @@ export default function Welcome({
                                 <Button asChild size="lg">
                                     <Link href={login()}>Log in</Link>
                                 </Button>
-                                {canRegister && (
-                                    <Button asChild size="lg" variant="outline">
-                                        <Link href={register()}>
-                                            Create account
-                                        </Link>
-                                    </Button>
-                                )}
                             </div>
                         )}
                     </div>

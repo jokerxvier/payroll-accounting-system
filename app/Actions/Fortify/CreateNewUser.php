@@ -8,6 +8,10 @@ use App\Models\User;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 
+/**
+ * Orphan: Features::registration() is intentionally disabled in
+ * config/fortify.php (LMS is identity master). Retained for eventual cleanup.
+ */
 class CreateNewUser implements CreatesNewUsers
 {
     use PasswordValidationRules, ProfileValidationRules;

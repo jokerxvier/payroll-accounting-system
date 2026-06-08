@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Actions\Fortify\CreateNewUser;
 use App\Models\Lms\User as LmsUser;
 use App\Models\User;
 use App\Services\Auth\UpsertPasUserFromLms;
@@ -13,7 +12,6 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
-use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
 use Throwable;
 
@@ -40,16 +38,27 @@ class FortifyServiceProvider extends ServiceProvider
 
     /**
      * Configure Fortify actions.
+     *
+     * Both password reset AND guest registration are intentionally disabled:
+     *
+     *   - Password reset: Phase A.2 of the multi-tenant refactor
+     *     (docs/improvement/plan-2.md, "Open question — password resets" →
+     *     option (b)) makes the LMS the identity master; password resets are
+     *     handled out-of-band by the LMS admin.
+     *   - Registration: identity is mastered by the LMS (LMS-derived users are
+     *     upserted on login via `Fortify::authenticateUsing` below), and the
+     *     only payroll-native identity is the platform admin seeded by
+     *     `PlatformAdminSeeder`. There is no legitimate guest sign-up path.
+     *
+     * Both action classes (`app/Actions/Fortify/ResetUserPassword.php` and
+     * `app/Actions/Fortify/CreateNewUser.php`) are retained orphan but
+     * harmless for the eventual cleanup PR. With the feature flags removed
+     * from `config/fortify.php`, Fortify no longer registers the matching
+     * routes, so the action bindings are dead.
      */
     private function configureActions(): void
     {
-        // Password reset is intentionally NOT registered. Phase A.2 of the
-        // multi-tenant refactor (docs/improvement/plan-2.md, "Open question —
-        // password resets" → option (b)) makes the LMS the identity master;
-        // password resets are handled out-of-band by the LMS admin. The
-        // app/Actions/Fortify/ResetUserPassword.php file is retained
-        // (orphan but harmless) for the eventual cleanup PR.
-        Fortify::createUsersUsing(CreateNewUser::class);
+        //
     }
 
     /**
@@ -62,7 +71,6 @@ class FortifyServiceProvider extends ServiceProvider
         // identity master. The login view no longer surfaces a "Forgot
         // password?" link, so `canResetPassword` is no longer passed.
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/login', [
-            'canRegister' => Features::enabled(Features::registration()),
             'status' => $request->session()->get('status'),
             'showDemoLogin' => ! app()->isProduction(),
         ]));
@@ -74,7 +82,8 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(fn () => Inertia::render('auth/register'));
+        // Registration view is intentionally not registered — guest sign-up
+        // is disabled (LMS is identity master; platform admins are seeded).
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/two-factor-challenge'));
 
