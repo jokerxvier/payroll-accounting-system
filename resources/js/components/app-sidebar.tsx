@@ -209,7 +209,8 @@ export function AppSidebar() {
         sidebarHiddenSections.includes(section);
 
     const canViewEmployees =
-        hasAnyRole(userRoles, EMPLOYEE_DIRECTORY_ROLES) && !isHidden('directory');
+        hasAnyRole(userRoles, EMPLOYEE_DIRECTORY_ROLES) &&
+        !isHidden('directory');
     const canViewPayroll =
         hasAnyRole(userRoles, PAYROLL_MAKER_ROLES) && !isHidden('payroll');
     const canViewCatalog =

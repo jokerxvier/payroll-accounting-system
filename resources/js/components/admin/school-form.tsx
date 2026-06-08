@@ -250,6 +250,7 @@ export function SchoolForm({ mode }: SchoolFormProps) {
                                 onChange={(e) => {
                                     const next = e.target.value;
                                     form.setData('name', next);
+
                                     if (!slugDirty) {
                                         form.setData('slug', toSlug(next));
                                     }

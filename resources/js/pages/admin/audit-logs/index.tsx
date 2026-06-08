@@ -76,7 +76,10 @@ interface Props {
 const ALL = '__all__';
 
 function formatDateTime(iso: string | null): string {
-    if (iso === null) return '—';
+    if (iso === null) {
+        return '—';
+    }
+
     return new Date(iso).toLocaleString('en-PH', {
         year: 'numeric',
         month: 'short',
@@ -94,13 +97,17 @@ function summariseChange(
     if (before === null && after !== null) {
         return 'Created';
     }
+
     if (before !== null && after === null) {
         return 'Deleted';
     }
+
     if (before !== null && after !== null) {
         const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+
         return `${keys.size} field${keys.size === 1 ? '' : 's'} changed`;
     }
+
     return '—';
 }
 
@@ -121,10 +128,23 @@ export default function AuditLogIndex({
     const apply = (e: React.FormEvent) => {
         e.preventDefault();
         const query: Record<string, string> = {};
-        if (draft.from) query.from = draft.from;
-        if (draft.to) query.to = draft.to;
-        if (draft.action) query.action = draft.action;
-        if (draft.auditable_type) query.auditable_type = draft.auditable_type;
+
+        if (draft.from) {
+            query.from = draft.from;
+        }
+
+        if (draft.to) {
+            query.to = draft.to;
+        }
+
+        if (draft.action) {
+            query.action = draft.action;
+        }
+
+        if (draft.auditable_type) {
+            query.auditable_type = draft.auditable_type;
+        }
+
         router.get('/admin/audit-logs', query, {
             preserveScroll: true,
             preserveState: true,
@@ -138,12 +158,25 @@ export default function AuditLogIndex({
 
     const buildExportUrl = (): string => {
         const params = new URLSearchParams();
-        if (draft.from) params.set('from', draft.from);
-        if (draft.to) params.set('to', draft.to);
-        if (draft.action) params.set('action', draft.action);
-        if (draft.auditable_type)
+
+        if (draft.from) {
+            params.set('from', draft.from);
+        }
+
+        if (draft.to) {
+            params.set('to', draft.to);
+        }
+
+        if (draft.action) {
+            params.set('action', draft.action);
+        }
+
+        if (draft.auditable_type) {
             params.set('auditable_type', draft.auditable_type);
+        }
+
         const query = params.toString();
+
         return query
             ? `/admin/audit-logs/export?${query}`
             : '/admin/audit-logs/export';
@@ -151,11 +184,23 @@ export default function AuditLogIndex({
 
     const goPage = (page: number) => {
         const query: Record<string, string | number> = { page };
-        if (filters.from) query.from = filters.from;
-        if (filters.to) query.to = filters.to;
-        if (filters.action) query.action = filters.action;
-        if (filters.auditable_type)
+
+        if (filters.from) {
+            query.from = filters.from;
+        }
+
+        if (filters.to) {
+            query.to = filters.to;
+        }
+
+        if (filters.action) {
+            query.action = filters.action;
+        }
+
+        if (filters.auditable_type) {
             query.auditable_type = filters.auditable_type;
+        }
+
         router.get('/admin/audit-logs', query, { preserveScroll: true });
     };
 
