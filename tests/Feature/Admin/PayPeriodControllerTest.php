@@ -117,6 +117,58 @@ it('rejects when end_date is before start_date', function () {
         ->assertSessionHasErrors('end_date');
 });
 
+it('rejects monthly frequency with a span outside 28..31 days', function () {
+    $user = authPayPeriodsAs('super-admin');
+
+    $this->actingAs($user)
+        ->from('/admin/pay-periods/create')
+        ->post('/admin/pay-periods', [
+            'code' => '2026-05-BAD-MONTHLY',
+            'frequency' => 'monthly',
+            'start_date' => '2026-05-15',
+            'end_date' => '2026-05-30', // 16 days
+            'status' => 'open',
+        ])
+        ->assertSessionHasErrors('end_date');
+
+    expect(PayPeriod::query()->where('code', '2026-05-BAD-MONTHLY')->exists())->toBeFalse();
+});
+
+it('rejects semi_monthly frequency with a span outside 13..16 days', function () {
+    $user = authPayPeriodsAs('super-admin');
+
+    $this->actingAs($user)
+        ->from('/admin/pay-periods/create')
+        ->post('/admin/pay-periods', [
+            'code' => '2026-05-BAD-SEMI',
+            'frequency' => 'semi_monthly',
+            'start_date' => '2026-05-01',
+            'end_date' => '2026-05-31', // 31 days
+            'status' => 'open',
+        ])
+        ->assertSessionHasErrors('end_date');
+
+    expect(PayPeriod::query()->where('code', '2026-05-BAD-SEMI')->exists())->toBeFalse();
+});
+
+it('accepts a 15-day semi_monthly first half', function () {
+    $user = authPayPeriodsAs('super-admin');
+
+    $this->actingAs($user)
+        ->from('/admin/pay-periods/create')
+        ->post('/admin/pay-periods', [
+            'code' => '2026-05-1H',
+            'frequency' => 'semi_monthly',
+            'start_date' => '2026-05-01',
+            'end_date' => '2026-05-15', // 15 days
+            'status' => 'open',
+        ])
+        ->assertRedirect('/admin/pay-periods')
+        ->assertSessionHas('success');
+
+    expect(PayPeriod::query()->where('code', '2026-05-1H')->exists())->toBeTrue();
+});
+
 it('forbids store for non-super-admin roles', function (string $role) {
     $user = authPayPeriodsAs($role);
 

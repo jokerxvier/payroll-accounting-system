@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Exceptions\LmsWriteException;
 use App\Models\Lms\Staff;
 use App\Models\Pas\EmployeeProfile;
 use Database\Factories\UserFactory;
@@ -16,25 +15,35 @@ use Spatie\Permission\Traits\HasRoles;
 /**
  * Fortify authentication model.
  *
- * In production this maps onto the LMS-owned `users` table (shared physical
- * DB, default `mysql` connection). The LMS owns identity (name, email, role,
- * department) — this app must NEVER write to those columns. Only
- * `password` and `remember_token` are app-writable, exclusively for Fortify's
- * password reset flow. All other LMS-owned columns are blocked at the model
- * layer via the $lmsWritableColumns allowlist.
+ * Phase A.2 of the multi-tenant refactor moved this model from the LMS-owned
+ * `users` table onto `pas_users`, which lives on the payroll-DB-owned default
+ * `mysql` connection. Identity (name, email, role) is still mastered in each
+ * tenant's LMS — the `lms_user_id` column on `pas_users` cross-references the
+ * canonical LMS row, and `App\Models\Lms\User` (a ReadOnlyModel pinned to the
+ * `lms` connection) is the only legal read path back to LMS identity data.
  *
- * Defense-in-depth note: the read-only LMS query model lives at
- * `App\Models\Lms\User` and extends `ReadOnlyModel`. Any code path that
- * needs to read identity (e.g. EmployeeRepository) MUST use that model so
- * the LMS boundary is preserved even if this auth model is mis-used.
+ * Authentication entry point: `FortifyServiceProvider::configureAuthentication()`
+ * registers a `Fortify::authenticateUsing` callback that:
+ *   1. Looks up the LMS user by email.
+ *   2. Verifies the password against `lms.users.password` (LMS is identity master).
+ *   3. Upserts a row in `pas_users` (id-preserved from LMS) via
+ *      `App\Services\Auth\UpsertPasUserFromLms`, mirroring the LMS password
+ *      hash so subsequent Fortify operations (session continuity, password
+ *      confirmation, 2FA) work against `pas_users.password` without
+ *      re-querying LMS on every request.
  *
- * Connection note: this model intentionally does NOT pin to the `lms`
- * connection. The `lms` connection is reserved for strictly read-only
- * traffic against the LMS schema (enforced by ReadOnlyModel). Fortify's
- * password reset writes a single column on this table, so it must travel
- * over the writable default connection. Both connections currently point at
- * the same physical DB (payroll_db); a future physical split is a
- * connection-string change with no app-code impact.
+ * Fortify writes (password mirror at login, `email_verified_at` on
+ * verification, two_factor_* on enrollment) target `pas_users` directly.
+ * The LMS-write enforcement that lived here in Phase 1 (`$lmsWritableColumns`
+ * + `save()` allowlist + `LmsWriteException`) was removed in Phase A.2/A.4
+ * because `pas_users` is fully app-writable. The read-only contract on the
+ * LMS side is still enforced exhaustively by `App\Models\Lms\ReadOnlyModel`.
+ *
+ * id-preservation invariant: `pas_users.id == users.id` (LMS) for every
+ * user originating in the LMS. The five FKs from `pas_*` tables to
+ * `users(id)` (audit logs + payroll-run lifecycle columns + statutory
+ * void-by) will be redirected to `pas_users(id)` in Phase A.3 with zero
+ * data migration because of this invariant.
  */
 class User extends Authenticatable
 {
@@ -44,27 +53,12 @@ class User extends Authenticatable
     use HasRoles;
     use Notifiable;
 
-    protected $table = 'users';
+    protected $table = 'pas_users';
 
     protected $guard_name = 'web';
 
-    /**
-     * Columns this app may write to on the shared LMS users table.
-     *
-     * Anything outside this allowlist that ends up in the dirty set on save()
-     * raises an LmsWriteException. This is the runtime enforcement of the
-     * "LMS identity is read-only" contract for the auth model.
-     */
-    protected array $lmsWritableColumns = [
-        'password',
-        'remember_token',
-        // Email verification — Fortify writes this when the user verifies their
-        // address. The LMS does not own the verification timestamp.
-        'email_verified_at',
-    ];
-
     protected $fillable = [
-        'full_name',
+        'name',
         'email',
         'password',
     ];
@@ -73,20 +67,6 @@ class User extends Authenticatable
         'password',
         'remember_token',
     ];
-
-    /**
-     * @var list<string>
-     */
-    protected $appends = ['name'];
-
-    /**
-     * Surface the LMS-owned `full_name` column as `name` so Inertia auth payloads
-     * and shadcn user widgets work without fanning the rename through the UI.
-     */
-    public function getNameAttribute(): ?string
-    {
-        return $this->attributes['full_name'] ?? null;
-    }
 
     /**
      * Get the attributes that should be cast.
@@ -104,13 +84,17 @@ class User extends Authenticatable
     /**
      * The payroll profile that this user owns, if any.
      *
-     * Resolves the chain `users.id → sm_staffs.user_id → pas_employee_profiles.lms_staff_id`
-     * because there is no direct FK from `users` to `pas_employee_profiles`.
-     * Returns null when the user has no LMS staff record or no payroll profile
-     * has been provisioned for that staff record yet.
+     * Resolves the chain `pas_users.id → sm_staffs.user_id → pas_employee_profiles.lms_staff_id`.
+     * Works because the Phase A.1 backfill preserved ids — `pas_users.id`
+     * equals the original LMS `users.id`, which is the value referenced by
+     * `sm_staffs.user_id`. There is no direct FK from `pas_users` to
+     * `pas_employee_profiles`, so we look the staff record up first.
      *
-     * Used by the per-employee Pas\* policies to grant the "view your own"
-     * carve-out (`$model->employee_profile_id === $user->employeeProfile?->id`).
+     * Returns null when the user has no LMS staff record or no payroll
+     * profile has been provisioned for that staff record yet.
+     *
+     * Used by the per-employee `App\Policies\Pas\*` policies to grant the
+     * "view your own" carve-out (`$model->employee_profile_id === $user->employeeProfile?->id`).
      *
      * Implemented as a memoized accessor rather than an Eloquent relation
      * because the join hops across the `lms` connection (Staff is read-only
@@ -139,23 +123,4 @@ class User extends Authenticatable
     private ?EmployeeProfile $memoizedEmployeeProfile = null;
 
     private bool $memoizedEmployeeProfileResolved = false;
-
-    public function save(array $options = []): bool
-    {
-        // New rows are always allowed (creation populates many columns at once);
-        // it's only updates after the row exists that must be column-restricted,
-        // because that's when the app could trample LMS-owned identity.
-        if ($this->exists) {
-            $forbidden = array_diff(array_keys($this->getDirty()), $this->lmsWritableColumns);
-
-            if ($forbidden !== []) {
-                throw new LmsWriteException(
-                    static::class,
-                    sprintf('update LMS-owned columns [%s] on', implode(', ', $forbidden)),
-                );
-            }
-        }
-
-        return parent::save($options);
-    }
 }

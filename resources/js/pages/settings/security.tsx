@@ -26,7 +26,8 @@ export default function Security() {
                 />
 
                 <Form
-                    {...SecurityController.update.form()}
+                    action={SecurityController.update().url}
+                    method="put"
                     options={{
                         preserveScroll: true,
                     }}

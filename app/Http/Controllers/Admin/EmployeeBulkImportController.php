@@ -38,7 +38,7 @@ final class EmployeeBulkImportController extends Controller
 {
     public function index(): Response
     {
-        if (! auth()->user()?->hasRole('super-admin')) {
+        if (! auth()->user()?->hasAnyRole(['platform-admin', 'super-admin'])) {
             abort(403);
         }
 
@@ -51,7 +51,7 @@ final class EmployeeBulkImportController extends Controller
 
     public function template(): BinaryFileResponse
     {
-        if (! auth()->user()?->hasRole('super-admin')) {
+        if (! auth()->user()?->hasAnyRole(['platform-admin', 'super-admin'])) {
             abort(403);
         }
 
@@ -63,7 +63,7 @@ final class EmployeeBulkImportController extends Controller
 
     public function preview(Request $request): RedirectResponse
     {
-        if (! auth()->user()?->hasRole('super-admin')) {
+        if (! auth()->user()?->hasAnyRole(['platform-admin', 'super-admin'])) {
             abort(403);
         }
 
@@ -87,7 +87,7 @@ final class EmployeeBulkImportController extends Controller
 
     public function confirm(Request $request, string $token): RedirectResponse
     {
-        if (! auth()->user()?->hasRole('super-admin')) {
+        if (! auth()->user()?->hasAnyRole(['platform-admin', 'super-admin'])) {
             abort(403);
         }
 

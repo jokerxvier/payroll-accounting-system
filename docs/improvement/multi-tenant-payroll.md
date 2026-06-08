@@ -1,5 +1,8 @@
 # Multi-tenant payroll: 1 instance, N LMS schools
 
+> **Superseded by [`plan-2.md`](./plan-2.md) on 2026-05-07.** Kept for historical reference.
+> v2 re-orders the phases (auth pivot moves first because the payroll DB is now physically separate from every LMS DB) and adds explicit architecture promises + isolation guarantees up front.
+>
 > **Status:** Future improvement — captured 2026-05-07. Not scheduled.
 > **Estimated effort:** 9–12 engineer-weeks of focused work, phased.
 

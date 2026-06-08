@@ -24,10 +24,14 @@ class CreateNewUser implements CreatesNewUsers
             'password' => $this->passwordRules(),
         ])->validate();
 
-        // The LMS users table uses `full_name`, not `name`. Map the form
-        // field to the column name on the way in.
+        // Phase A.2: pas_users uses `name`, matching the form field. Created
+        // rows are not LMS-backed (lms_user_id stays null), so the
+        // AssignPayrollRoleOnLogin listener will log a warning and assign no
+        // role for the immediate post-registration Login event. Registration
+        // is dev-only in this build (config/fortify.php Features::registration);
+        // production onboarding goes through the LMS identity master.
         return User::create([
-            'full_name' => $input['name'],
+            'name' => $input['name'],
             'email' => $input['email'],
             'password' => $input['password'],
         ]);

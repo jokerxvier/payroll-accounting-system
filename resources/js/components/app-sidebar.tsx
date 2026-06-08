@@ -1,13 +1,17 @@
-import { Link, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import {
     BarChart3,
+    Building2,
     Calculator,
     CalendarDays,
+    Check,
+    ChevronsUpDown,
     FileSearch,
     LayoutGrid,
     MinusCircle,
     PlayCircle,
     PlusCircle,
+    RotateCcw,
     ShieldCheck,
     Users,
 } from 'lucide-react';
@@ -15,6 +19,14 @@ import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
     Sidebar,
     SidebarContent,
@@ -33,6 +45,11 @@ import { index as adminContributionTablesIndex } from '@/routes/admin/contributi
 import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
 import { index as adminPayPeriodsIndex } from '@/routes/admin/pay-periods';
 import { index as adminPayrollRunsIndex } from '@/routes/admin/payroll-runs';
+import {
+    index as adminSchoolsIndex,
+    switchMethod as adminSchoolsSwitch,
+} from '@/routes/admin/schools';
+import { clear as adminSchoolsSwitchClear } from '@/routes/admin/schools/switch';
 import { index as employeesIndex } from '@/routes/employees';
 import { show as payrollPreviewShow } from '@/routes/payroll/preview';
 import type { NavItem } from '@/types';
@@ -45,8 +62,12 @@ import type { NavItem } from '@/types';
  * page's policy/gate set.
  */
 
-// Mirrors EmployeeProfilePolicy::viewAny().
+// Mirrors EmployeeProfilePolicy::viewAny() + the global Gate::before
+// in AuthServiceProvider that short-circuits every policy for
+// `platform-admin` (the cross-tenant operator role). Platform admins see
+// every section within whichever tenant they've switched to.
 const EMPLOYEE_DIRECTORY_ROLES = [
+    'platform-admin',
     'super-admin',
     'payroll-officer',
     'hr',
@@ -55,16 +76,34 @@ const EMPLOYEE_DIRECTORY_ROLES = [
 
 // Mirrors PayrollPreviewPolicy::preview() (Gate) and PayrollRunPolicy::viewAny()
 // + ReportsController::REPORT_ROLES. The "maker" half of the maker-checker
-// payroll workflow.
-const PAYROLL_MAKER_ROLES = ['super-admin', 'payroll-officer', 'hr'] as const;
+// payroll workflow. Platform admins included via the Gate::before
+// short-circuit.
+const PAYROLL_MAKER_ROLES = [
+    'platform-admin',
+    'super-admin',
+    'payroll-officer',
+    'hr',
+] as const;
 
 // Mirrors viewAny() on AllowancePolicy, DeductionTypePolicy,
 // StatutoryContributionPolicy, and PayPeriodPolicy. Catalog read-only for
 // makers; catalog mutation is super-admin (gated server-side via `can`).
-const CATALOG_READ_ROLES = ['super-admin', 'payroll-officer', 'hr'] as const;
+const CATALOG_READ_ROLES = [
+    'platform-admin',
+    'super-admin',
+    'payroll-officer',
+    'hr',
+] as const;
 
 // Mirrors AuditLogController::ALLOWED_ROLES.
-const AUDIT_ROLES = ['super-admin', 'auditor'] as const;
+const AUDIT_ROLES = ['platform-admin', 'super-admin', 'auditor'] as const;
+
+// Mirrors app/Policies/Pas/SchoolPolicy.php — platform-admin only
+// (payroll-native users with no LMS counterpart). The role is gated by
+// lms_user_id IS NULL on the backend; the frontend trusts auth.user.roles
+// because the prop is computed server-side in HandleInertiaRequests, where
+// the same lms_user_id IS NULL check is applied before the role list ships.
+const SCHOOLS_ADMIN_ROLES = ['platform-admin'] as const;
 
 const mainNavItems: NavItem[] = [
     {
@@ -136,6 +175,14 @@ const auditNavItems: NavItem[] = [
     },
 ];
 
+const schoolsAdminNavItems: NavItem[] = [
+    {
+        title: 'Schools',
+        href: adminSchoolsIndex(),
+        icon: Building2,
+    },
+];
+
 const footerNavItems: NavItem[] = [];
 
 function hasAnyRole(
@@ -146,13 +193,49 @@ function hasAnyRole(
 }
 
 export function AppSidebar() {
-    const { auth } = usePage().props;
+    const {
+        auth,
+        currentTenant,
+        availableTenants,
+        tenantOverrideActive,
+        sidebarHiddenSections,
+    } = usePage().props;
     const userRoles = auth.user?.roles ?? [];
 
-    const canViewEmployees = hasAnyRole(userRoles, EMPLOYEE_DIRECTORY_ROLES);
-    const canViewPayroll = hasAnyRole(userRoles, PAYROLL_MAKER_ROLES);
-    const canViewCatalog = hasAnyRole(userRoles, CATALOG_READ_ROLES);
-    const canViewAudit = hasAnyRole(userRoles, AUDIT_ROLES);
+    // Config-driven presentational hide for sidebar nav groups (demos, etc).
+    // Sourced from PAYROLL_SIDEBAR_HIDDEN_SECTIONS via config/payroll.php.
+    // Backend authorisation is unchanged — direct URLs still resolve.
+    const isHidden = (section: string): boolean =>
+        sidebarHiddenSections.includes(section);
+
+    const canViewEmployees =
+        hasAnyRole(userRoles, EMPLOYEE_DIRECTORY_ROLES) &&
+        !isHidden('directory');
+    const canViewPayroll =
+        hasAnyRole(userRoles, PAYROLL_MAKER_ROLES) && !isHidden('payroll');
+    const canViewCatalog =
+        hasAnyRole(userRoles, CATALOG_READ_ROLES) && !isHidden('catalog');
+    const canViewAudit =
+        hasAnyRole(userRoles, AUDIT_ROLES) && !isHidden('audit');
+    const canManageSchools =
+        hasAnyRole(userRoles, SCHOOLS_ADMIN_ROLES) && !isHidden('tenants');
+    const canSwitchTenant = availableTenants.length > 1;
+
+    const handleSwitchTo = (schoolId: number): void => {
+        router.post(
+            adminSchoolsSwitch({ school: schoolId }).url,
+            {},
+            { preserveScroll: false, preserveState: false },
+        );
+    };
+
+    const handleClearOverride = (): void => {
+        router.post(
+            adminSchoolsSwitchClear().url,
+            {},
+            { preserveScroll: false, preserveState: false },
+        );
+    };
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -166,6 +249,93 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>
+                {currentTenant ? (
+                    canSwitchTenant ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                className="mx-2 mt-1 flex items-center justify-between gap-1.5 rounded-md border border-sidebar-border/60 bg-sidebar-accent/40 px-2 py-1 text-xs group-data-[collapsible=icon]:hidden hover:bg-sidebar-accent"
+                                title={`Active tenant: ${currentTenant.name} (${currentTenant.slug}). Click to switch.`}
+                            >
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                    <Building2
+                                        className="h-3 w-3 flex-shrink-0 text-muted-foreground"
+                                        aria-hidden="true"
+                                    />
+                                    <span className="truncate font-medium text-sidebar-foreground">
+                                        {currentTenant.name}
+                                    </span>
+                                    {tenantOverrideActive ? (
+                                        <span className="ml-1 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+                                            PINNED
+                                        </span>
+                                    ) : null}
+                                </span>
+                                <ChevronsUpDown
+                                    className="h-3 w-3 flex-shrink-0 text-muted-foreground"
+                                    aria-hidden="true"
+                                />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-64">
+                                <DropdownMenuLabel>
+                                    Switch tenant
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {availableTenants.map((tenant) => (
+                                    <DropdownMenuItem
+                                        key={tenant.id}
+                                        onClick={() =>
+                                            handleSwitchTo(tenant.id)
+                                        }
+                                        className="flex items-center justify-between gap-2"
+                                    >
+                                        <span className="flex flex-col gap-0.5">
+                                            <span className="text-sm font-medium">
+                                                {tenant.name}
+                                            </span>
+                                            <span className="font-mono text-[10px] text-muted-foreground">
+                                                {tenant.slug}
+                                            </span>
+                                        </span>
+                                        {tenant.id === currentTenant.id ? (
+                                            <Check
+                                                className="h-4 w-4 text-primary"
+                                                aria-hidden="true"
+                                            />
+                                        ) : null}
+                                    </DropdownMenuItem>
+                                ))}
+                                {tenantOverrideActive ? (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            onClick={handleClearOverride}
+                                            className="text-muted-foreground"
+                                        >
+                                            <RotateCcw
+                                                className="mr-2 h-3 w-3"
+                                                aria-hidden="true"
+                                            />
+                                            Clear override
+                                        </DropdownMenuItem>
+                                    </>
+                                ) : null}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : (
+                        <div
+                            className="mx-2 mt-1 flex items-center gap-1.5 rounded-md border border-sidebar-border/60 bg-sidebar-accent/40 px-2 py-1 text-xs group-data-[collapsible=icon]:hidden"
+                            title={`Active tenant: ${currentTenant.name} (${currentTenant.slug})`}
+                        >
+                            <Building2
+                                className="h-3 w-3 flex-shrink-0 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                            <span className="truncate font-medium text-sidebar-foreground">
+                                {currentTenant.name}
+                            </span>
+                        </div>
+                    )
+                ) : null}
             </SidebarHeader>
 
             <SidebarContent>
@@ -184,6 +354,12 @@ export function AppSidebar() {
                 )}
                 {canViewAudit && (
                     <SidebarSection label="Audit" items={auditNavItems} />
+                )}
+                {canManageSchools && (
+                    <SidebarSection
+                        label="Tenants"
+                        items={schoolsAdminNavItems}
+                    />
                 )}
             </SidebarContent>
 

@@ -4,10 +4,23 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Models\User;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
+/**
+ * Phase A.2: the LMS is the identity master. Password resets must therefore
+ * write to the LMS `users` table (the row Fortify::authenticateUsing
+ * verifies against), not pas_users. The pas_users mirror is refreshed on
+ * the next successful login by UpsertPasUserFromLms.
+ *
+ * The command queries the `lms` connection directly (via DB facade) rather
+ * than through `App\Models\Lms\User`, because that model extends
+ * ReadOnlyModel which throws on write — by design. This is the *one*
+ * sanctioned write path against LMS users for local dev.
+ *
+ * Refuses to run in production.
+ */
 class ResetUserPasswordCommand extends Command
 {
     protected $signature = 'dev:reset-password
@@ -16,7 +29,7 @@ class ResetUserPasswordCommand extends Command
         {--role= : Reset all users mapped to this payroll role}
         {--all : Reset every user in the LMS users table (dangerous)}';
 
-    protected $description = 'Reset user password(s) to a fixed value for local testing. Defaults to super-admin only.';
+    protected $description = 'Reset LMS user password(s) to a fixed value for local testing. Defaults to super-admin only.';
 
     public function handle(): int
     {
@@ -26,7 +39,7 @@ class ResetUserPasswordCommand extends Command
             return self::FAILURE;
         }
 
-        $query = User::query();
+        $query = DB::connection('lms')->table('users');
 
         if ($email = $this->option('email')) {
             $query->where('email', $email);
@@ -35,6 +48,7 @@ class ResetUserPasswordCommand extends Command
             $scope = 'ALL users (LMS-wide)';
         } else {
             $roleSlug = (string) ($this->option('role') ?: 'super-admin');
+            /** @var array<int, string> $map */
             $map = (array) config('payroll.lms_role_to_payroll_role', []);
             $lmsRoleIds = array_keys(array_filter($map, fn ($slug) => $slug === $roleSlug));
 
@@ -66,7 +80,7 @@ class ResetUserPasswordCommand extends Command
         $hash = Hash::make($password);
         $affected = $query->update(['password' => $hash]);
 
-        $this->info("Reset {$affected} user(s).");
+        $this->info("Reset {$affected} user(s) on the LMS connection. The pas_users mirror will refresh on next login.");
 
         return self::SUCCESS;
     }

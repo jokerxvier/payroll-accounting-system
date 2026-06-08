@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Actions\Employee\BulkSetupMissingProfiles;
 use App\Http\Requests\EmployeeIndexRequest;
+use App\Http\Requests\EmployeeProfileStoreRequest;
 use App\Http\Requests\EmployeeProfileUpdateRequest;
 use App\Models\Lms\Department;
 use App\Models\Pas\Allowance;
@@ -70,11 +72,18 @@ class EmployeeController extends Controller
             $departmentOptions = collect();
         }
 
+        // Cross-page total of allowlisted staff that don't yet have a payroll
+        // profile. Used by the "Set up N missing profiles" bulk affordance on
+        // the page header so the operator sees the true total instead of the
+        // current-page-only count.
+        $noProfileCount = $this->repo->countStaffWithoutProfile();
+
         return Inertia::render('employees/index', [
             'employees' => $employees,
             'filters' => $request->only(['search', 'status', 'department_id', 'employment_classification', 'sort_by', 'sort_dir', 'per_page']),
             'departmentOptions' => $departmentOptions,
             'employmentTypeOptions' => EmployeeProfile::employmentTypeOptions(),
+            'noProfileCount' => $noProfileCount,
             'can' => [
                 // Dev/demo affordance — gated to super-admin AND non-production
                 // by the `dev.seed-demo-salaries` Gate. The button on the
@@ -82,6 +91,28 @@ class EmployeeController extends Controller
                 'seedDemoSalaries' => Gate::allows('dev.seed-demo-salaries'),
             ],
         ]);
+    }
+
+    /**
+     * Bulk-create payroll profiles for every allowlisted LMS staff in the
+     * current tenant that doesn't yet have one. Defaults to ₱0 / regular /
+     * monthly / active — operators edit each via Quick edit afterwards.
+     *
+     * Idempotent — re-running after every staff has a profile reports
+     * zero created. Authorization mirrors the single-row create gate.
+     */
+    public function bulkSetupMissingProfiles(BulkSetupMissingProfiles $action): RedirectResponse
+    {
+        Gate::authorize('create', EmployeeProfile::class);
+
+        $created = $action();
+
+        return back()->with(
+            'success',
+            $created === 0
+                ? 'All staff already have payroll profiles.'
+                : 'Set up '.$created.' payroll profile'.($created === 1 ? '' : 's').'.',
+        );
     }
 
     public function show(int $staffId): Response
@@ -209,9 +240,9 @@ class EmployeeController extends Controller
             ->get();
     }
 
-    public function store(int $staffId): RedirectResponse
+    public function store(EmployeeProfileStoreRequest $request, int $staffId): RedirectResponse
     {
-        Gate::authorize('create', EmployeeProfile::class);
+        // Authorization is enforced by EmployeeProfileStoreRequest::authorize().
 
         // Confirm the staff exists and is in the role allowlist before
         // attempting to create a profile. Without this, a malicious request
@@ -222,7 +253,12 @@ class EmployeeController extends Controller
             abort(404);
         }
 
-        $this->repo->firstOrCreateForStaff($staffId);
+        // `firstOrCreateForStaff` keys on `lms_staff_id`, so re-posting for a
+        // staff that already has a profile is a no-op (the supplied defaults
+        // are ignored — Eloquent's firstOrCreate semantics). The frontend
+        // gates the affordance on `has_profile === false`, so this is the
+        // expected path; the no-op behavior is defensive against double POSTs.
+        $this->repo->firstOrCreateForStaff($staffId, $request->validated());
 
         return back()->with('success', 'Payroll profile created.');
     }

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Payroll system built on the Laravel React Starter Kit. Uses Laravel 13 + Inertia.js v3 + React 19 + TypeScript. Authentication is handled by Laravel Fortify (login, registration, 2FA, email verification, password reset). Authorization uses Spatie Permission, with payroll roles assigned on first login by mapping LMS roles via `config/payroll.php`. Served locally by Laravel Herd at `payroll-system.test`.
 
-Current phase: **Phase 1 complete; Phase 2 (Computation Engine) in progress.** Week 8 stages A (preview controller/endpoints) and B (preview UI + perf gate) shipped at `f200465` and `77329f4`. See `rules/PLAN.md` for the 16-week roadmap and the next milestone, and `MEMORY.md` for the latest project notes.
+Current phase on `main`: **Phase 4 Week 15 (Reports/Audit/Launch)** — W13 reports, W14 audit-log viewer, and W15 perf pins shipped; remaining W15 work is WCAG AA pass, UAT, cross-browser smoke, then W16 production cutover. Active feature branch `multi-tenant` is converting catalog tables (Allowances, DeductionTypes) to per-school scope and finishing the platform-admin operator role. See `rules/PLAN.md` for the 16-week roadmap and `rules/MILESTONES.md` for the client-facing gate view.
 
 ## Common Commands
 
@@ -53,10 +53,18 @@ php artisan make:controller ControllerName --no-interaction
 - **Policies** in `app/Policies/` — one per model (per coding standards)
 - **Concerns (Traits)** in `app/Concerns/` — shared validation rules (e.g., `ProfileValidationRules`, `PasswordValidationRules`)
 - **Actions** in `app/Actions/` — Fortify action classes for user creation, password reset
-- **Observers** in `app/Observers/` — model lifecycle hooks (`AuditObserver` writes to the audit log)
-- **Listeners** in `app/Listeners/` — `AssignPayrollRoleOnLogin` maps LMS roles → payroll roles on first login (config in `config/payroll.php`)
+- **Observers** in `app/Observers/` — model lifecycle hooks. `AuditObserver` writes to the audit log. `SchoolObserver` auto-clones default-school catalog rows onto each new School (see Multi-tenancy).
+- **Listeners** in `app/Listeners/` — `AssignPayrollRoleOnLogin` maps LMS roles → payroll roles on every login (idempotent via `syncRoles`; config in `config/payroll.php`). Payroll-native users (`lms_user_id IS NULL`, e.g. platform admins) are silently skipped — they manage their roles outside the LMS mapping.
 - **Providers** — `FortifyServiceProvider` configures auth views; repository bindings live in their own provider
 - **Middleware** — `HandleInertiaRequests` shares props globally (including `auth.user.roles` for React-side gating); `HandleAppearance` manages theme
+
+### Multi-tenancy
+- **Tenant resolution** — Spatie Multitenancy: every web request resolves a `School` via the `NeedsTenant` middleware (appended in `bootstrap/app.php`). Active tenant: `Tenant::current()`. Platform admins can pivot tenants from the sidebar dropdown; `ApplyTenantOverride` reads the session and re-resolves after auth.
+- **Middleware priority is pinned** — `ApplyTenantOverride` MUST run before `SubstituteBindings` (explicitly ordered in `bootstrap/app.php → priority([...])`). Without this, route-model-binding for any `BelongsToTenant` model fires with the boot-time default tenant and 404s after a tenant switch.
+- **`BelongsToTenant` trait** (`app/Concerns/BelongsToTenant.php`) — applied to every `pas_*` Eloquent model with a `school_id` column. Auto-fills `school_id` from `Tenant::current()` on `creating`, and adds a global scope filtering by it. Catalogs that should be globally shared (e.g., `StatutoryContribution` — national PH BIR/SSS/PhilHealth/Pag-IBIG rates) intentionally do NOT use the trait. `Allowance` and `DeductionType` are per-tenant (each school maintains its own catalog).
+- **Per-tenant catalog auto-clone** — `app/Observers/SchoolObserver.php` clones the default school's `pas_allowances` and `pas_deduction_types` onto every newly-created `School` in a single transaction. Idempotent (skips tables where the new school already has rows). Bypasses Eloquent via raw DB inserts so cloned rows land on the *new* school's id, not `Tenant::current()`.
+- **`platform-admin` role** — payroll-native operator role for users with `lms_user_id IS NULL`. A `Gate::before` short-circuit in `AppServiceProvider::registerPlatformAdminGate()` auto-grants every ability — but only when BOTH `lms_user_id IS NULL` AND `hasRole('platform-admin')` (defense in depth). Policies should rely on this short-circuit; do not add `platform-admin` to per-policy allowlists individually. Exception: controllers that gate via direct `hasRole()` / `hasAnyRole()` calls bypass `Gate::before` and DO need the role added — see `AuditLogController::AUDIT_ROLES`, `ReportsController::REPORT_ROLES`, `EmployeeBulkImportController`.
+- **Framework tables stay nullable** — 5 Laravel-managed tables (`pas_jobs`, `pas_failed_jobs`, `pas_notifications`, `pas_password_resets`, `pas_job_batches`) keep `school_id` nullable because the framework inserts via raw query builder, bypassing the trait. Domain tables are NOT NULL.
 
 ### Frontend
 - **Pages** in `resources/js/pages/` — Inertia page components, auto-resolved by Vite
@@ -79,6 +87,7 @@ php artisan make:controller ControllerName --no-interaction
 - Redis-backed sessions, cache, and queue (configured to avoid colliding with LMS framework tables)
 - Two guardrail tests enforce DB safety; do not weaken or skip them, and run them after any migration or LMS-touching change: `tests/Feature/LmsReadOnlyTest.php` (no writes to LMS tables) and `tests/Feature/MigrationSafetyTest.php` (every migration is `pas_`-prefixed and reversible)
 - Never run `migrate:fresh` against the dev DB — it drops the LMS tables. Use incremental `migrate`, or `--env=testing` for a clean slate
+- Tests default to in-memory sqlite (configured in `phpunit.xml`). **Never override with `DB_CONNECTION=mysql php artisan test`** — `RefreshDatabase` against the dev MySQL connection wipes `payroll_db`'s LMS tables (`sm_*`, `users`, `roles`). If you need a real-MySQL test run, point at a separate database explicitly (e.g. `DB_DATABASE=payroll_db_test`), never the dev DB
 
 ### Tests
 - `tests/` is split into `Architecture/`, `Feature/`, `Unit/`, and `Browser/` (Dusk). Feature tests are organized by domain (`Admin/`, `Auth/`, `Employees/`, `Migrations/`, `Models/`, `Services/`, `Settings/`).
@@ -143,7 +152,7 @@ For any non-trivial task, prefer the project-specific subagents in `.claude/agen
 Every new authenticated Inertia page must have a corresponding entry in the sidebar nav. Add it to `mainNavItems` in `resources/js/components/app-sidebar.tsx`, importing the route helper from `@/routes/<resource>` (Wayfinder) and a Lucide icon. Public/auth pages (login, register, forgot password) and settings pages (already grouped under their own layout) are exempt. If a page should only appear for certain roles, gate it at the nav-item level via `auth.user` role checks rather than omitting it. The diff of `app-sidebar.tsx` is the audit trail of what's reachable.
 
 ### Sidebar gating must mirror the page's authorization
-Every gated nav item lives in a constant at the top of `app-sidebar.tsx` (e.g., `PAYROLL_MAKER_ROLES`, `CATALOG_READ_ROLES`, `AUDIT_ROLES`) that names the roles allowed by the page's policy or controller gate. Adding or modifying a policy MUST update the matching sidebar constant in the same PR — the visible-to-role set must equal the page's policy/gate set, not merely a subset. This prevents two failure modes: dead links (visible nav → 403 on click) and hidden-but-allowed pages (the user can't find the page they're authorized for). When you add a sidebar constant, cite the source policy in a one-line comment above it so future readers know what to keep in sync.
+Every gated nav item lives in a constant at the top of `app-sidebar.tsx` (`EMPLOYEE_DIRECTORY_ROLES`, `PAYROLL_MAKER_ROLES`, `CATALOG_READ_ROLES`, `AUDIT_ROLES`, `SCHOOLS_ADMIN_ROLES`) that names the roles allowed by the page's policy or controller gate. Adding or modifying a policy MUST update the matching sidebar constant in the same PR — the visible-to-role set must equal the page's policy/gate set, not merely a subset. This prevents two failure modes: dead links (visible nav → 403 on click) and hidden-but-allowed pages (the user can't find the page they're authorized for). When you add a sidebar constant, cite the source policy in a one-line comment above it. `platform-admin` is included in every constant because `Gate::before` auto-grants it backend-side; the sidebar mirrors that visibility.
 
 ### Never wrap pages in AppLayout
 The global Inertia resolver in `resources/js/app.tsx` automatically wraps every authenticated page in `AppLayout`. Page components must NOT import or wrap with `<AppLayout>` themselves — doing so renders a second `SidebarProvider` inside the first, injecting a phantom 256 px gap that pushes all page content right by the sidebar width. The correct pattern is:

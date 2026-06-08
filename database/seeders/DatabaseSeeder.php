@@ -27,6 +27,12 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             RoleSeeder::class,
+            // PlatformAdminSeeder runs after RoleSeeder so the
+            // 'platform-admin' role exists before assignment, and it's
+            // production-safe because the row is keyed on a stable email
+            // (idempotent updateOrInsert).
+            PlatformAdminSeeder::class,
+            SchoolSeeder::class,
             StatutoryContributionSeeder::class,
             Week7CatalogSeeder::class,
         ]);

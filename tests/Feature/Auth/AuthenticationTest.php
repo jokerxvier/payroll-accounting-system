@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
 
@@ -20,6 +21,15 @@ test('users can authenticate using the login screen', function () {
 
     $this->assertAuthenticated();
     $response->assertRedirect(route('dashboard', absolute: false));
+
+    // Phase A.2: a successful login must materialize / refresh a pas_users
+    // row keyed on the LMS user id (id-preserved). The factory pre-creates
+    // it, so the post-login assertion is that the row still exists with the
+    // expected lms_user_id cross-reference.
+    $row = DB::table('pas_users')->where('id', $user->id)->first();
+
+    expect($row)->not->toBeNull();
+    expect((int) $row->lms_user_id)->toBe($user->id);
 });
 
 test('users with two factor enabled are redirected to two factor challenge', function () {

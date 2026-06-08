@@ -63,4 +63,26 @@ return [
         // All other allowlisted roles default to 'employee' at lookup time.
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Sidebar hidden sections
+    |--------------------------------------------------------------------------
+    |
+    | Comma-separated list of sidebar group labels (lowercased) to hide from
+    | the nav for the current environment. Presentational only — authorisation
+    | is unchanged; direct URLs still resolve for authorised users.
+    |
+    | Valid section names: directory, payroll, catalog, audit, tenants
+    |
+    | Use case: client demos / screenshots where a section isn't yet ready or
+    | shouldn't be shown. Flip without redeploying via .env + config:clear.
+    |
+    | Override via env: PAYROLL_SIDEBAR_HIDDEN_SECTIONS="payroll,audit"
+    */
+
+    'sidebar_hidden_sections' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('PAYROLL_SIDEBAR_HIDDEN_SECTIONS', '')),
+    ))),
+
 ];

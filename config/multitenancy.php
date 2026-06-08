@@ -1,0 +1,194 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Models\Pas\School;
+use App\Multitenancy\Finders\SchoolTenantFinder;
+use App\Multitenancy\Tasks\SwitchLmsConnection;
+use Illuminate\Broadcasting\BroadcastEvent;
+use Illuminate\Events\CallQueuedListener;
+use Illuminate\Mail\SendQueuedMailable;
+use Illuminate\Notifications\SendQueuedNotifications;
+use Illuminate\Queue\CallQueuedClosure;
+use Spatie\Multitenancy\Actions\ForgetCurrentTenantAction;
+use Spatie\Multitenancy\Actions\MakeQueueTenantAwareAction;
+use Spatie\Multitenancy\Actions\MakeTenantCurrentAction;
+use Spatie\Multitenancy\Actions\MigrateTenantAction;
+use Spatie\Multitenancy\Jobs\NotTenantAware;
+use Spatie\Multitenancy\Jobs\TenantAware;
+
+/*
+ * Phase D.4 — strict tenant resolution.
+ *
+ * The full tenant pipeline is now live:
+ *   - SchoolTenantFinder resolves a school per request via
+ *     domain → path → header. There is no implicit fallback: when no
+ *     strategy matches, NeedsTenant middleware aborts the request.
+ *     Single-tenant deployments still work because SchoolSeeder seeds the
+ *     default school's `domain` to `parse_url(APP_URL, HOST)`.
+ *   - SwitchLmsConnection rebinds `database.connections.lms` on
+ *     makeCurrent / forgetCurrent.
+ *   - `queues_are_tenant_aware_by_default` = true: Spatie's
+ *     MakeQueueTenantAwareAction reads the current tenant ID from
+ *     Laravel Context at dispatch time and serializes it onto the job
+ *     payload, then rebinds CurrentTenant + runs SwitchLmsConnection
+ *     before `handle()`.
+ *
+ * Per-job opt-out: implement `Spatie\Multitenancy\Jobs\NotTenantAware`.
+ * Per-job opt-in (when the global default flips back to false): implement
+ * `Spatie\Multitenancy\Jobs\TenantAware`.
+ */
+
+return [
+    /*
+     * This class is responsible for determining which tenant should be current
+     * for the given request.
+     *
+     * This class should extend `Spatie\Multitenancy\TenantFinder\TenantFinder`
+     *
+     * Phase B.1: null — no resolution. Phase C wires either DomainTenantFinder
+     * (production) or a custom PathTenantFinder (local dev).
+     *
+     * Phase C.1: SchoolTenantFinder resolves a `pas_schools` row from the
+     * request (subdomain → path → header). Phase D.4 removed the
+     * single-tenant fallback branch — bare-host requests resolve via the
+     * subdomain strategy because SchoolSeeder seeds the default school's
+     * `domain` to `parse_url(APP_URL, HOST)`.
+     */
+    'tenant_finder' => SchoolTenantFinder::class,
+
+    /*
+     * Deprecated as of Phase D.4 — the SchoolTenantFinder no longer reads
+     * this flag. The single-tenant fallback (return the seeded
+     * `slug=default` school regardless of host) was removed; resolution is
+     * now strictly domain → path → header → null. The key is kept here so
+     * existing `.env` files don't fail config validation, but flipping it
+     * has no effect on the resolver. Safe to remove from `.env` files in
+     * a future cleanup slice once all environments are confirmed to no
+     * longer set it.
+     */
+    'payroll_multi_tenant_enabled' => env('PAYROLL_MULTI_TENANT', false),
+
+    /*
+     * These fields are used by tenant:artisan command to match one or more tenant.
+     */
+    'tenant_artisan_search_fields' => [
+        'id',
+        'slug',
+    ],
+
+    /*
+     * These tasks will be performed when switching tenants.
+     *
+     * A valid task is any class that implements Spatie\Multitenancy\Tasks\SwitchTenantTask
+     *
+     * Phase B.1: empty. Phase C registers App\Multitenancy\Tasks\SwitchLmsConnection
+     * which rebinds `database.connections.lms` from the resolved school's
+     * encrypted credential columns. Spatie's default SwitchTenantDatabaseTask
+     * is intentionally NOT registered — payroll DB is the default connection
+     * and never switches; only the `lms` connection does.
+     */
+    'switch_tenant_tasks' => [
+        SwitchLmsConnection::class,
+    ],
+
+    /*
+     * This class is the model used for storing configuration on tenants.
+     *
+     * It must  extend `Spatie\Multitenancy\Models\Tenant::class` or
+     * implement `Spatie\Multitenancy\Contracts\IsTenant::class` interface
+     */
+    'tenant_model' => School::class,
+
+    /*
+     * If there is a current tenant when dispatching a job, the id of the current tenant
+     * will be automatically set on the job. When the job is executed, the set
+     * tenant on the job will be made current.
+     *
+     * Phase C.2: true. Spatie's MakeQueueTenantAwareAction listens on
+     * JobProcessing/JobRetryRequested and (a) for tenant-aware jobs reads
+     * the serialized tenant id from Laravel Context, calls makeCurrent()
+     * — which fires the SwitchLmsConnection task — and binds the tenant
+     * into the container; (b) for non-tenant-aware jobs calls
+     * forgetCurrent() so they run without an ambient tenant. To opt a
+     * specific job out, implement Spatie\Multitenancy\Jobs\NotTenantAware.
+     */
+    'queues_are_tenant_aware_by_default' => true,
+
+    /*
+     * The connection name to reach the tenant database.
+     *
+     * Set to `null` to use the default connection.
+     */
+    'tenant_database_connection_name' => null,
+
+    /*
+     * The connection name to reach the landlord database.
+     */
+    'landlord_database_connection_name' => null,
+
+    /*
+     * This key will be used to associate the current tenant in the context
+     */
+    'current_tenant_context_key' => 'tenantId',
+
+    /*
+     * This key will be used to bind the current tenant in the container.
+     */
+    'current_tenant_container_key' => 'currentTenant',
+
+    /*
+     * Set it to `true` if you like to cache the tenant(s) routes
+     * in a shared file using the `SwitchRouteCacheTask`.
+     */
+    'shared_routes_cache' => false,
+
+    /*
+     * You can customize some of the behavior of this package by using your own custom action.
+     * Your custom action should always extend the default one.
+     */
+    'actions' => [
+        'make_tenant_current_action' => MakeTenantCurrentAction::class,
+        'forget_current_tenant_action' => ForgetCurrentTenantAction::class,
+        'make_queue_tenant_aware_action' => MakeQueueTenantAwareAction::class,
+        'migrate_tenant' => MigrateTenantAction::class,
+    ],
+
+    /*
+     * You can customize the way in which the package resolves the queueable to a job.
+     *
+     * For example, using the package laravel-actions (by Loris Leiva), you can
+     * resolve JobDecorator to getAction() like so: JobDecorator::class => 'getAction'
+     */
+    'queueable_to_job' => [
+        SendQueuedMailable::class => 'mailable',
+        SendQueuedNotifications::class => 'notification',
+        CallQueuedClosure::class => 'closure',
+        CallQueuedListener::class => 'class',
+        BroadcastEvent::class => 'event',
+    ],
+
+    /*
+    * Interface that once implemented, will make the job tenant aware
+    */
+    'tenant_aware_interface' => TenantAware::class,
+
+    /*
+     * Interface that once implemented, will make the job not tenant aware
+     */
+    'not_tenant_aware_interface' => NotTenantAware::class,
+
+    /*
+     * Jobs tenant aware even if these don't implement the TenantAware interface.
+     */
+    'tenant_aware_jobs' => [
+        // ...
+    ],
+
+    /*
+     * Jobs not tenant aware even if these don't implement the NotTenantAware interface.
+     */
+    'not_tenant_aware_jobs' => [
+        // ...
+    ],
+];

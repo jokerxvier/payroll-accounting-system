@@ -59,11 +59,7 @@ export default function Welcome({
                                     <Link href={login()}>Log in</Link>
                                 </Button>
                                 {canRegister && (
-                                    <Button
-                                        asChild
-                                        size="lg"
-                                        variant="outline"
-                                    >
+                                    <Button asChild size="lg" variant="outline">
                                         <Link href={register()}>
                                             Create account
                                         </Link>

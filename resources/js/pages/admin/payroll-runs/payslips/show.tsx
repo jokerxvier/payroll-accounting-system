@@ -45,7 +45,10 @@ function formatCurrency(centavos: number): string {
 }
 
 function formatDate(iso: string | null): string {
-    if (iso === null) return '—';
+    if (iso === null) {
+        return '—';
+    }
+
     return new Date(iso).toLocaleDateString('en-PH', {
         year: 'numeric',
         month: 'long',

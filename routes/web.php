@@ -18,6 +18,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 
     Route::get('employees', [EmployeeController::class, 'index'])->name('employees.index');
+    Route::post('employees/bulk-setup-profiles', [EmployeeController::class, 'bulkSetupMissingProfiles'])
+        ->name('employees.bulk-setup-profiles');
     Route::get('employees/{staffId}', [EmployeeController::class, 'show'])
         ->whereNumber('staffId')->name('employees.show');
     Route::post('employees/{staffId}/profile', [EmployeeController::class, 'store'])

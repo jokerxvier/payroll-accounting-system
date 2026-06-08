@@ -33,8 +33,12 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 final class ReportsController extends Controller
 {
+    // platform-admin is included so the cross-tenant operator can run
+    // reports against the active tenant. Reports are scoped to the
+    // current tenant via the BelongsToTenant trait on Payslip /
+    // EmployeeProfile, so cross-tenant data isn't leaked.
     /** @var list<string> */
-    private const REPORT_ROLES = ['super-admin', 'payroll-officer', 'hr'];
+    private const REPORT_ROLES = ['platform-admin', 'super-admin', 'payroll-officer', 'hr'];
 
     public function payrollSummary(Request $request): Response
     {

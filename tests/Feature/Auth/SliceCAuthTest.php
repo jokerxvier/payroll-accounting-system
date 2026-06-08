@@ -2,26 +2,27 @@
 
 declare(strict_types=1);
 
-use App\Actions\Fortify\ResetUserPassword;
-use App\Exceptions\LmsWriteException;
 use App\Models\User;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 
 /*
- * Slice C — auth + RBAC.
+ * Slice C — auth + RBAC, Phase A.2 update.
  *
- * These tests cover:
- *  - LMS role_id → payroll Spatie role mapping on Login (allowlisted, mapped)
- *  - fallback to 'employee' when allowlisted but unmapped
- *  - non-assignment when role_id is outside the allowlist
- *  - Fortify password reset is allowed against the LMS users.password column
- *  - non-allowlisted LMS user columns (e.g. name) cannot be updated
- *  - Spatie role assignments persist to pas_model_has_roles
+ * After Phase A.2:
+ *   - App\Models\User lives on pas_users (payroll-DB-owned).
+ *   - The LMS is the identity master; AssignPayrollRoleOnLogin resolves the
+ *     LMS role_id via pas_users.lms_user_id → lms.users.role_id.
+ *   - The User model no longer throws LmsWriteException — pas_users is
+ *     fully app-writable. The read-only contract on the LMS side is still
+ *     enforced exhaustively by App\Models\Lms\ReadOnlyModel (see
+ *     LmsReadOnlyTest).
+ *   - Password reset is disabled (LMS handles resets out-of-band); the
+ *     "Fortify password reset write-through" assertion was removed.
  *
- * Roles are seeded for every Feature test by tests/Pest.php; no per-test
- * setup is required.
+ * The factory's withLmsRole($roleId) writes the role_id onto the LMS users
+ * mirror row (test sqlite, kept in sync by UserFactory::configure()).
  */
 
 it('assigns the mapped payroll role on login', function () {
@@ -74,35 +75,13 @@ it('does not assign any role when role_id is outside the allowlist', function ()
     expect($user->fresh()->roles->isEmpty())->toBeTrue();
 });
 
-it('allows password reset to write to the LMS users.password column', function () {
-    $user = User::factory()->create();
-    $originalHash = $user->password;
+it('does not assign any role when pas_users has no lms_user_id cross-reference', function () {
+    $user = User::factory()->withoutLmsMirror()->create();
 
-    $action = new ResetUserPassword;
+    Event::dispatch(new Login('web', $user, false));
 
-    // Re-fetch the user so save() takes the "exists, only `password` is dirty"
-    // path through the column allowlist guard.
-    $reloaded = User::query()->findOrFail($user->id);
-
-    $action->reset($reloaded, [
-        'password' => 'new-password-1234',
-        'password_confirmation' => 'new-password-1234',
-    ]);
-
-    $user->refresh();
-    expect($user->password)->not->toBe($originalHash);
-});
-
-it('blocks writes to non-allowlisted LMS user columns', function () {
-    $user = User::factory()->create();
-
-    // Re-fetch so the model is in "exists" state (the allowlist only kicks in
-    // for updates, never for the initial INSERT from the factory).
-    $reloaded = User::query()->findOrFail($user->id);
-    $reloaded->name = 'Hacked';
-
-    expect(fn () => $reloaded->save())
-        ->toThrow(LmsWriteException::class);
+    // No lms_user_id => listener returns early without assigning.
+    expect($user->fresh()->roles->isEmpty())->toBeTrue();
 });
 
 it('persists Spatie role assignments to pas_model_has_roles', function () {

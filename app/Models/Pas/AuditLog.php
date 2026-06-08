@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Pas;
 
+use App\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use LogicException;
@@ -26,6 +27,8 @@ use LogicException;
  */
 final class AuditLog extends Model
 {
+    use BelongsToTenant;
+
     // Lives on the default connection (mysql in dev/prod, sqlite in tests),
     // matching the rest of the App\Models\Pas\* models. The `lms` read-only
     // connection is explicitly NOT used for audit-log writes.
@@ -39,6 +42,7 @@ final class AuditLog extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'school_id',
         'auditable_type',
         'auditable_id',
         'actor_id',

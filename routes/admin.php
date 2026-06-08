@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\EmployeeBulkImportController;
 use App\Http\Controllers\Admin\PayPeriodController;
 use App\Http\Controllers\Admin\PayrollRunController;
 use App\Http\Controllers\Admin\ReportsController;
+use App\Http\Controllers\Admin\SchoolController;
 use App\Http\Controllers\Admin\StatutoryContributionController;
 use Illuminate\Support\Facades\Route;
 
@@ -133,6 +134,23 @@ Route::middleware(['auth', 'verified'])
             ->name('reports.employee-history');
         Route::get('reports/employee-history/export', [ReportsController::class, 'employeeHistoryExport'])
             ->name('reports.employee-history.export');
+
+        // Phase B.2 — multi-tenant schools registry. Super-admin only.
+        // Static `test-connection` POST is registered BEFORE the resource
+        // so the literal segment wins the match against `schools/{school}`.
+        // `show` is excluded — the index doubles as the listing surface,
+        // mirroring `allowances` / `deduction-types`.
+        Route::post('schools/test-connection', [SchoolController::class, 'testConnection'])
+            ->name('schools.test-connection');
+        // Phase E preview — super-admin tenant switcher. Stores an override id
+        // in the session that SchoolTenantFinder reads BEFORE its existing
+        // domain/path/header strategies. Static segment registered before the
+        // resource so `schools/switch/{school}` doesn't bind to {school}.
+        Route::post('schools/switch/{school}', [SchoolController::class, 'switchTenant'])
+            ->name('schools.switch');
+        Route::post('schools/switch', [SchoolController::class, 'clearSwitch'])
+            ->name('schools.switch.clear');
+        Route::resource('schools', SchoolController::class)->except(['show']);
 
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-

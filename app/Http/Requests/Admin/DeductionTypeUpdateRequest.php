@@ -7,6 +7,7 @@ namespace App\Http\Requests\Admin;
 use App\Models\Pas\DeductionType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Spatie\Multitenancy\Models\Tenant;
 
 /**
  * Validates an update to an existing `pas_deduction_types` row.
@@ -35,12 +36,21 @@ final class DeductionTypeUpdateRequest extends FormRequest
         /** @var DeductionType $deductionType */
         $deductionType = $this->route('deductionType');
 
+        // Tenant-scoped uniqueness mirrors the composite (school_id, code)
+        // index. Defensive fallback when no tenant is current.
+        $tenantId = Tenant::current()?->getKey();
+
+        $codeUniqueRule = Rule::unique('pas_deduction_types', 'code')->ignore($deductionType->id);
+        if ($tenantId !== null) {
+            $codeUniqueRule = $codeUniqueRule->where('school_id', $tenantId);
+        }
+
         return [
             'code' => [
                 'required',
                 'string',
                 'max:32',
-                Rule::unique('pas_deduction_types', 'code')->ignore($deductionType->id),
+                $codeUniqueRule,
             ],
             'name' => ['required', 'string', 'max:120'],
             'is_taxable' => ['required', 'boolean'],

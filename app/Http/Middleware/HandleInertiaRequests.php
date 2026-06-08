@@ -2,8 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Pas\School;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Spatie\Multitenancy\Models\Tenant;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -36,6 +38,20 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $tenant = Tenant::current();
+
+        // Cross-tenant powers (the school switcher dropdown + the override
+        // banner) are gated by BOTH a NULL lms_user_id (the user is payroll-
+        // native, not LMS-derived) AND the 'platform-admin' Spatie role.
+        // Mirrors the gate in ApplyTenantOverride and SchoolPolicy::before().
+        // LMS-derived users — including school-scoped super-admin — fall
+        // through to availableTenants: [] and tenantOverrideActive: false,
+        // and the React sidebar hides the switcher when availableTenants is
+        // empty.
+        $isPlatformAdmin = $user !== null
+            && $user->getAttribute('lms_user_id') === null
+            && method_exists($user, 'hasRole')
+            && $user->hasRole('platform-admin');
 
         return [
             ...parent::share($request),
@@ -50,7 +66,37 @@ class HandleInertiaRequests extends Middleware
                     ['roles' => $user->getRoleNames()->all()],
                 ),
             ],
+            // Surface the active tenant so the React sidebar can render a
+            // context badge — operators always know which school's data they're
+            // looking at. Sourced from Spatie's current-tenant facade so the
+            // badge reflects whichever resolution strategy fired (subdomain /
+            // path / header / single-tenant fallback / platform-admin override).
+            'currentTenant' => $tenant instanceof School ? [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'slug' => $tenant->slug,
+            ] : null,
+            // Only platform-admins (payroll-native + role) get the switcher
+            // dropdown — feeds the in-app tenant switcher with the list of
+            // active schools they can pin their session to. Empty array for
+            // everyone else (including LMS-derived super-admin); the React
+            // side hides the affordance when this is empty.
+            'availableTenants' => $isPlatformAdmin
+                ? School::query()
+                    ->where('is_active', true)
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'slug'])
+                    ->toArray()
+                : [],
+            'tenantOverrideActive' => $isPlatformAdmin
+                && $request->hasSession()
+                && $request->session()->has('current_school_id_override'),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            // Presentational hide for sidebar nav groups (e.g. demos). Sourced
+            // from config so it's flippable via PAYROLL_SIDEBAR_HIDDEN_SECTIONS
+            // in .env without redeploying. Backend authorisation is unchanged;
+            // this only controls whether the React sidebar renders the group.
+            'sidebarHiddenSections' => config('payroll.sidebar_hidden_sections', []),
         ];
     }
 }

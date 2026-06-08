@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
@@ -47,10 +48,10 @@ final class PayrollRunController extends Controller
         $runs = PayrollRun::query()
             ->with([
                 'payPeriod',
-                'submittedBy:id,full_name',
-                'approvedBy:id,full_name',
-                'postedBy:id,full_name',
-                'voidedBy:id,full_name',
+                'submittedBy:id,name',
+                'approvedBy:id,name',
+                'postedBy:id,name',
+                'voidedBy:id,name',
             ])
             ->orderByDesc('created_at')
             ->limit(50)
@@ -103,7 +104,7 @@ final class PayrollRunController extends Controller
 
         try {
             $run = $action->execute($period);
-        } catch (DomainException $e) {
+        } catch (DomainException|InvalidArgumentException $e) {
             return back()->withErrors(['pay_period_id' => $e->getMessage()]);
         }
 
@@ -118,10 +119,10 @@ final class PayrollRunController extends Controller
 
         $payrollRun->load([
             'payPeriod',
-            'submittedBy:id,full_name',
-            'approvedBy:id,full_name',
-            'postedBy:id,full_name',
-            'voidedBy:id,full_name',
+            'submittedBy:id,name',
+            'approvedBy:id,name',
+            'postedBy:id,name',
+            'voidedBy:id,name',
         ]);
         $rawPayslips = $payrollRun
             ->payslips()
@@ -171,7 +172,12 @@ final class PayrollRunController extends Controller
     public function submit(PayrollRun $payrollRun, SubmitPayrollRunForApprovalAction $action): RedirectResponse
     {
         Gate::authorize('submit', $payrollRun);
-        $action->execute($payrollRun, (int) auth()->id());
+
+        try {
+            $action->execute($payrollRun, (int) auth()->id());
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('admin.payroll-runs.show', $payrollRun->id)
@@ -181,7 +187,12 @@ final class PayrollRunController extends Controller
     public function approve(PayrollRun $payrollRun, ApprovePayrollRunAction $action): RedirectResponse
     {
         Gate::authorize('approve', $payrollRun);
-        $action->execute($payrollRun, (int) auth()->id());
+
+        try {
+            $action->execute($payrollRun, (int) auth()->id());
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('admin.payroll-runs.show', $payrollRun->id)
@@ -191,7 +202,12 @@ final class PayrollRunController extends Controller
     public function post(PayrollRun $payrollRun, PostPayrollRunAction $action): RedirectResponse
     {
         Gate::authorize('post', $payrollRun);
-        $action->execute($payrollRun, (int) auth()->id());
+
+        try {
+            $action->execute($payrollRun, (int) auth()->id());
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('admin.payroll-runs.show', $payrollRun->id)
@@ -201,7 +217,12 @@ final class PayrollRunController extends Controller
     public function void(PayrollRun $payrollRun, VoidPayrollRunAction $action): RedirectResponse
     {
         Gate::authorize('void', $payrollRun);
-        $action->execute($payrollRun, (int) auth()->id());
+
+        try {
+            $action->execute($payrollRun, (int) auth()->id());
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('admin.payroll-runs.show', $payrollRun->id)
@@ -397,21 +418,22 @@ final class PayrollRunController extends Controller
                 'start_date' => $run->payPeriod->start_date->toDateString(),
                 'end_date' => $run->payPeriod->end_date->toDateString(),
             ] : null,
+            // Phase A.2: User relation now points at pas_users (column `name`).
             'submitted_by' => $run->submittedBy ? [
                 'id' => $run->submittedBy->id,
-                'name' => $run->submittedBy->full_name,
+                'name' => $run->submittedBy->name,
             ] : null,
             'approved_by' => $run->approvedBy ? [
                 'id' => $run->approvedBy->id,
-                'name' => $run->approvedBy->full_name,
+                'name' => $run->approvedBy->name,
             ] : null,
             'posted_by' => $run->postedBy ? [
                 'id' => $run->postedBy->id,
-                'name' => $run->postedBy->full_name,
+                'name' => $run->postedBy->name,
             ] : null,
             'voided_by' => $run->voidedBy ? [
                 'id' => $run->voidedBy->id,
-                'name' => $run->voidedBy->full_name,
+                'name' => $run->voidedBy->name,
             ] : null,
         ];
     }

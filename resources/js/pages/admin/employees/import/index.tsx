@@ -40,8 +40,14 @@ interface Props {
 }
 
 function describe(value: unknown): string {
-    if (value === null || value === undefined) return '—';
-    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (value === null || value === undefined) {
+        return '—';
+    }
+
+    if (typeof value === 'boolean') {
+        return value ? 'true' : 'false';
+    }
+
     return String(value);
 }
 
@@ -61,7 +67,10 @@ export default function EmployeesImportIndex({
     };
 
     const submitConfirm = () => {
-        if (!token) return;
+        if (!token) {
+            return;
+        }
+
         confirm.post(`/admin/employees/import/confirm/${token}`);
     };
 

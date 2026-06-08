@@ -86,4 +86,18 @@ interface EmployeeRepositoryInterface
      * Read-only against the `lms` connection.
      */
     public function countStaffJoinedThisMonth(): int;
+
+    /**
+     * Count of LMS staff (filtered by the payroll role allowlist) that
+     * do NOT yet have a `pas_employee_profiles` row for the current
+     * tenant. Drives the "Set up N missing profiles" affordance on
+     * /employees so the operator sees a true cross-page total instead
+     * of the current-page-only count.
+     *
+     * Implemented as `staffCount - profileCount` filtered to the
+     * intersection of staff ids in the allowlist. Two queries: one
+     * against `sm_staffs` (LMS connection, read-only), one against
+     * `pas_employee_profiles` (default connection, tenant-scoped).
+     */
+    public function countStaffWithoutProfile(): int;
 }

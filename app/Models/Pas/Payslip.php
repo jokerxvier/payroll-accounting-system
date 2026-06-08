@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Concerns\Auditable;
+use App\Concerns\BelongsToTenant;
 use App\Services\Payroll\PayrollLineItem;
 use App\ValueObjects\Money;
 use Carbon\CarbonImmutable;
@@ -41,11 +42,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 final class Payslip extends Model
 {
     use Auditable;
+    use BelongsToTenant;
     use HasFactory;
 
     protected $table = 'pas_payslips';
 
     protected $fillable = [
+        'school_id',
         'payroll_run_id',
         'employee_profile_id',
         'lms_staff_id',

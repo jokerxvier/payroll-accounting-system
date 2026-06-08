@@ -145,13 +145,17 @@ return [
 
     'features' => [
         Features::registration(),
-        Features::resetPasswords(),
+        // Phase A.2: password reset is intentionally disabled. The LMS is
+        // the identity master (docs/improvement/plan-2.md "Open question —
+        // password resets" → option (b)) — resets are out-of-band by the
+        // LMS admin. Removing the feature here prevents Fortify from
+        // registering /forgot-password and /reset-password routes.
         Features::emailVerification(),
         // Two-factor authentication intentionally disabled in v1.
         // The default Fortify implementation stores 2FA columns on the user
-        // model — but our user model is the LMS users table, which is
-        // read-only. Re-enable in a later phase with a custom provider that
-        // stores 2FA state in pas_user_two_factor_settings.
+        // model. Phase A.2 moved auth onto pas_users which already has the
+        // expected 2FA columns; re-enable in a later phase once UX + the
+        // LMS-mirror flow are confirmed.
     ],
 
 ];

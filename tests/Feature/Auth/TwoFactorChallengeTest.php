@@ -22,6 +22,8 @@ test('two factor challenge can be rendered', function () {
 
     $user = User::factory()->create();
 
+    // Phase A.2: 2FA columns now live on pas_users. The forceFill+save
+    // path writes through the User model directly to pas_users.
     $user->forceFill([
         'two_factor_secret' => encrypt('test-secret'),
         'two_factor_recovery_codes' => encrypt(json_encode(['code1', 'code2'])),

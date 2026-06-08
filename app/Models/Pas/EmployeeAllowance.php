@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Concerns\Auditable;
+use App\Concerns\BelongsToTenant;
 use App\ValueObjects\PayPeriodInput;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -44,6 +45,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 final class EmployeeAllowance extends Model
 {
     use Auditable;
+    use BelongsToTenant;
 
     /** @use HasFactory<EmployeeAllowanceFactory> */
     use HasFactory;
@@ -58,6 +60,7 @@ final class EmployeeAllowance extends Model
 
     /** @var list<string> */
     protected $fillable = [
+        'school_id',
         'employee_profile_id',
         'allowance_id',
         'amount_centavos',

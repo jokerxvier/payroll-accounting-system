@@ -7,12 +7,15 @@ import {
     FileSpreadsheet,
     Search,
     Sparkles,
+    UserPlus,
     Users,
     X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { BulkSetupMissingDialog } from '@/components/employees/bulk-setup-missing-dialog';
 import { EmployeeRowEditor } from '@/components/employees/employee-row-editor';
+import { ProfileSetupSheet } from '@/components/employees/profile-setup-sheet';
 import { InlineMoneyEdit } from '@/components/inline-money-edit';
 import { PageHeader } from '@/components/page-header';
 import { StatCard } from '@/components/stat-card';
@@ -61,13 +64,22 @@ interface Props {
     filters: EmployeeListFilters;
     departmentOptions: DepartmentOption[];
     employmentTypeOptions: EmploymentTypeOption[];
+    /**
+     * Cross-page total of allowlisted LMS staff that don't yet have a
+     * payroll profile in the current tenant. Drives the "Set up N
+     * missing profiles" bulk affordance in the page header — hidden
+     * when zero.
+     */
+    noProfileCount: number;
     can?: { seedDemoSalaries?: boolean };
 }
 
 const PATH = '/employees';
 const ALL = '__all__';
 
-function buildColumns(): ColumnDef<EmployeeRow>[] {
+function buildColumns(
+    onSetupProfile: (row: EmployeeRow) => void,
+): ColumnDef<EmployeeRow>[] {
     return [
         {
             accessorKey: 'staff_no',
@@ -180,7 +192,7 @@ function buildColumns(): ColumnDef<EmployeeRow>[] {
 
                 return (
                     <div className="flex justify-end gap-2">
-                        {row.original.has_profile && (
+                        {row.original.has_profile ? (
                             <Button
                                 size="sm"
                                 variant="outline"
@@ -193,6 +205,14 @@ function buildColumns(): ColumnDef<EmployeeRow>[] {
                                     <ChevronRight className="mr-1 h-3.5 w-3.5" />
                                 )}
                                 Quick edit
+                            </Button>
+                        ) : (
+                            <Button
+                                size="sm"
+                                onClick={() => onSetupProfile(row.original)}
+                            >
+                                <UserPlus className="mr-1 h-3.5 w-3.5" />
+                                Set up profile
                             </Button>
                         )}
                         <Button asChild size="sm" variant="outline">
@@ -217,6 +237,7 @@ export default function EmployeesIndex({
     filters: initialFilters,
     departmentOptions,
     employmentTypeOptions,
+    noProfileCount,
     can,
 }: Props) {
     const { filters, apply, applyDebounced, reset } =
@@ -224,8 +245,10 @@ export default function EmployeesIndex({
     const [searchValue, setSearchValue] = useState(initialFilters.search ?? '');
     const [seedDialogOpen, setSeedDialogOpen] = useState(false);
     const [seeding, setSeeding] = useState(false);
+    const [setupRow, setSetupRow] = useState<EmployeeRow | null>(null);
+    const [bulkSetupOpen, setBulkSetupOpen] = useState(false);
 
-    const columns = useMemo(() => buildColumns(), []);
+    const columns = useMemo(() => buildColumns((row) => setSetupRow(row)), []);
 
     const sort: SortState | null = filters.sort_by
         ? {
@@ -370,6 +393,17 @@ export default function EmployeesIndex({
                                     Bulk edit (Excel)
                                 </Link>
                             </Button>
+                            {noProfileCount > 0 && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setBulkSetupOpen(true)}
+                                >
+                                    <UserPlus className="mr-1 h-3.5 w-3.5" />
+                                    Set up {noProfileCount} missing profile
+                                    {noProfileCount === 1 ? '' : 's'}
+                                </Button>
+                            )}
                             {can?.seedDemoSalaries ? (
                                 <AlertDialog
                                     open={seedDialogOpen}
@@ -458,6 +492,24 @@ export default function EmployeesIndex({
                         hint="Profile flagged active"
                     />
                 </div>
+
+                <ProfileSetupSheet
+                    open={setupRow !== null}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setSetupRow(null);
+                        }
+                    }}
+                    staffId={setupRow?.lms_staff_id ?? 0}
+                    staffName={setupRow?.full_name ?? ''}
+                    employmentTypeOptions={employmentTypeOptions}
+                />
+
+                <BulkSetupMissingDialog
+                    open={bulkSetupOpen}
+                    onOpenChange={setBulkSetupOpen}
+                    count={noProfileCount}
+                />
 
                 <Card>
                     <CardContent className="space-y-4 pt-6">

@@ -52,7 +52,7 @@ final class AuditLogExport implements FromCollection, WithHeadings
             $log->id,
             $log->created_at?->toIso8601String(),
             $log->actor_id,
-            $log->actor_id ? $this->actorNames->get($log->actor_id)?->full_name : '',
+            $log->actor_id ? $this->actorNames->get($log->actor_id)?->name : '',
             $log->action,
             self::shortType($log->auditable_type),
             $log->auditable_id,
