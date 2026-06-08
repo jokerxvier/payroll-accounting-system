@@ -11,17 +11,42 @@ class DatabaseSeeder extends Seeder
     /**
      * Seed the application's database.
      *
-     * Production-safe seeders always run (role taxonomy + statutory rate
-     * tables + W7 catalog). Demo seeders (users, expanded catalog, sample
-     * payroll runs) only run in `local` — never in staging or production.
+     * ## Production-safe (always runs)
      *
-     * On staging, invoke demo seeders explicitly when needed:
+     *   RoleSeeder
+     *   PlatformAdminSeeder        → admin@payroll.test / password (rotate before non-dev traffic)
+     *   SchoolSeeder               → default tenant (slug=default)
+     *   StatutoryContributionSeeder
+     *   Week7CatalogSeeder
      *
-     *     php artisan db:seed --class=DemoUsersSeeder
-     *     php artisan db:seed --class=DemoCatalogSeeder
-     *     php artisan db:seed --class=DemoPayrollSeeder
+     * ## Local-only (APP_ENV=local)
      *
-     * Each demo seeder is idempotent so re-running is safe.
+     *   DemoUsersSeeder     ✓ safe  — writes pas_users; school_id is nullable on
+     *                                 pas_users by design (platform admins).
+     *   DemoCatalogSeeder   ✗ BROKEN as of 2026-06-09. Writes to Allowance +
+     *                                 DeductionType (both BelongsToTenant, both
+     *                                 per-tenant catalogs). Tenant::current() is
+     *                                 null in seeder context, so school_id stays
+     *                                 null and the NOT NULL constraint rejects.
+     *                                 Fix: wrap inserts in Tenant::setCurrent()
+     *                                 or pass school_id explicitly.
+     *   DemoPayrollSeeder   ✗ BROKEN — same root cause. Writes to EmployeeProfile,
+     *                                 PayPeriod, PayrollRun, Payslip,
+     *                                 EmployeeAllowance, EmployeeDeduction.
+     *
+     * ## Recommended dev run (skip the broken pair until fixed)
+     *
+     *   php artisan db:seed --class=RoleSeeder
+     *   php artisan db:seed --class=PlatformAdminSeeder
+     *   php artisan db:seed --class=SchoolSeeder
+     *   php artisan db:seed --class=StatutoryContributionSeeder
+     *   php artisan db:seed --class=Week7CatalogSeeder
+     *   php artisan db:seed --class=DemoUsersSeeder
+     *
+     * Bare `php artisan db:seed` is currently NOT recommended on APP_ENV=local
+     * because it will fail at DemoCatalogSeeder.
+     *
+     * All seeders above are idempotent — re-running is safe.
      */
     public function run(): void
     {
