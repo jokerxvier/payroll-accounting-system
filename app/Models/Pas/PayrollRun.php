@@ -190,4 +190,41 @@ final class PayrollRun extends Model
             true,
         );
     }
+
+    /**
+     * Whether the run may be submitted for approval — legal only from
+     * `computed`. Single source of truth for the submit transition rule,
+     * shared by the policy and the controller's `can` flags.
+     */
+    public function isSubmittable(): bool
+    {
+        return $this->status === self::STATUS_COMPUTED;
+    }
+
+    /**
+     * Whether the run may be approved — legal only from `pending_approval`.
+     */
+    public function isApprovable(): bool
+    {
+        return $this->status === self::STATUS_PENDING_APPROVAL;
+    }
+
+    /**
+     * Whether the run may be posted — legal only from `approved`.
+     */
+    public function isPostable(): bool
+    {
+        return $this->status === self::STATUS_APPROVED;
+    }
+
+    /**
+     * Whether the run may be voided — legal for any non-posted, non-voided
+     * run. `posted` is the absolute final state; a `voided` run is already
+     * unwound.
+     */
+    public function isVoidable(): bool
+    {
+        return $this->status !== self::STATUS_POSTED
+            && $this->status !== self::STATUS_VOIDED;
+    }
 }

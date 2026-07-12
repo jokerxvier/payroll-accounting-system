@@ -56,6 +56,30 @@ it('treats approved and posted runs as immutable', function () {
         ->and($posted->isMutable())->toBeFalse();
 });
 
+it('exposes transition predicates that gate on status', function (
+    string $status,
+    bool $submittable,
+    bool $approvable,
+    bool $postable,
+    bool $voidable,
+) {
+    $run = PayrollRun::factory()->create(['status' => $status]);
+
+    expect($run->isSubmittable())->toBe($submittable)
+        ->and($run->isApprovable())->toBe($approvable)
+        ->and($run->isPostable())->toBe($postable)
+        ->and($run->isVoidable())->toBe($voidable);
+})->with([
+    //         status                                   submit  approve post   void
+    'draft' => [PayrollRun::STATUS_DRAFT, false, false, false, true],
+    'computing' => [PayrollRun::STATUS_COMPUTING, false, false, false, true],
+    'computed' => [PayrollRun::STATUS_COMPUTED, true, false, false, true],
+    'pending_approval' => [PayrollRun::STATUS_PENDING_APPROVAL, false, true, false, true],
+    'approved' => [PayrollRun::STATUS_APPROVED, false, false, true, true],
+    'posted' => [PayrollRun::STATUS_POSTED, false, false, false, false],
+    'voided' => [PayrollRun::STATUS_VOIDED, false, false, false, false],
+]);
+
 it('exposes approved-by and voided-by user relationships', function () {
     $approver = User::factory()->create();
     $voider = User::factory()->create();

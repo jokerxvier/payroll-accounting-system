@@ -47,8 +47,7 @@ final class PayrollRunPolicy
      */
     public function submit(User $user, PayrollRun $run): bool
     {
-        return $user->hasAnyRole(self::MAKER_ROLES)
-            && $run->status === PayrollRun::STATUS_COMPUTED;
+        return $user->hasAnyRole(self::MAKER_ROLES) && $run->isSubmittable();
     }
 
     /**
@@ -56,8 +55,7 @@ final class PayrollRunPolicy
      */
     public function approve(User $user, PayrollRun $run): bool
     {
-        return $user->hasAnyRole(self::APPROVAL_ROLES)
-            && $run->status === PayrollRun::STATUS_PENDING_APPROVAL;
+        return $user->hasAnyRole(self::APPROVAL_ROLES) && $run->isApprovable();
     }
 
     /**
@@ -65,8 +63,7 @@ final class PayrollRunPolicy
      */
     public function post(User $user, PayrollRun $run): bool
     {
-        return $user->hasAnyRole(self::APPROVAL_ROLES)
-            && $run->status === PayrollRun::STATUS_APPROVED;
+        return $user->hasAnyRole(self::APPROVAL_ROLES) && $run->isPostable();
     }
 
     /**
@@ -74,11 +71,6 @@ final class PayrollRunPolicy
      */
     public function void(User $user, PayrollRun $run): bool
     {
-        if (! $user->hasAnyRole(self::APPROVAL_ROLES)) {
-            return false;
-        }
-
-        return $run->status !== PayrollRun::STATUS_POSTED
-            && $run->status !== PayrollRun::STATUS_VOIDED;
+        return $user->hasAnyRole(self::APPROVAL_ROLES) && $run->isVoidable();
     }
 }

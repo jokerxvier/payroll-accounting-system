@@ -160,11 +160,17 @@ final class PayrollRunController extends Controller
                 'persisted_payslips' => $payslips->count(),
                 'total_employees' => $payrollRun->total_employees,
             ],
+            // AND each gate check with the run's status predicate. The
+            // platform-admin Gate::before short-circuit returns true for
+            // every ability regardless of status, so without the predicate a
+            // platform-admin would see all four buttons even on a posted or
+            // voided run. The predicates are the single source of truth for
+            // which transition is legal at the current status.
             'can' => [
-                'submit' => Gate::allows('submit', $payrollRun),
-                'approve' => Gate::allows('approve', $payrollRun),
-                'post' => Gate::allows('post', $payrollRun),
-                'void' => Gate::allows('void', $payrollRun),
+                'submit' => Gate::allows('submit', $payrollRun) && $payrollRun->isSubmittable(),
+                'approve' => Gate::allows('approve', $payrollRun) && $payrollRun->isApprovable(),
+                'post' => Gate::allows('post', $payrollRun) && $payrollRun->isPostable(),
+                'void' => Gate::allows('void', $payrollRun) && $payrollRun->isVoidable(),
             ],
         ]);
     }

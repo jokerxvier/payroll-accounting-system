@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\ApplyTenantOverride;
 use App\Http\Middleware\HandleAppearance;
+use App\Http\Middleware\HandleFlashToasts;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Auth\Middleware\AuthenticateSession;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -49,6 +50,14 @@ return Application::configure(basePath: dirname(__DIR__))
             // non-default school.
             ApplyTenantOverride::class,
             HandleInertiaRequests::class,
+            // Bridges Laravel session flash (`->with('success'|'error'|…)`)
+            // into Inertia's `flash.toast`. Placed immediately after
+            // HandleInertiaRequests so it runs *inner* to Inertia: it calls
+            // Inertia::flash() before Inertia serializes the response on the
+            // way out, so the toast is included. Session is already started
+            // (framework StartSession has priority), exactly as
+            // HandleInertiaRequests relies on today.
+            HandleFlashToasts::class,
             AddLinkHeadersForPreloadedAssets::class,
             // Phase C.1 — resolves the active tenant via SchoolTenantFinder
             // and runs the SwitchLmsConnection task. Appended so it runs

@@ -35,6 +35,25 @@ function authPayrollRunsAs(string $payrollRole): User
     return $user;
 }
 
+/**
+ * Payroll-native platform admin: NULL lms_user_id + platform-admin role.
+ * Gate::before auto-grants every ability, so this user is the regression
+ * surface for the status-aware `can` flags — the buttons must still hide on
+ * terminal-state runs even though the gate short-circuits to true.
+ */
+function platformAdminForPayrollRuns(): User
+{
+    config([
+        'payroll.employee_role_allowlist' => [1, 4, 5],
+        'payroll.lms_role_to_payroll_role' => [],
+    ]);
+
+    $user = User::factory()->withoutLmsMirror()->create();
+    $user->syncRoles(['platform-admin']);
+
+    return $user->fresh() ?? $user;
+}
+
 function seedFourPhContributionsForController(): void
 {
     StatutoryContribution::factory()->bir()->create([
@@ -183,3 +202,85 @@ it('forbids show for auditor and employee', function (string $role) {
         ->get('/admin/payroll-runs/'.$run->id)
         ->assertForbidden();
 })->with(['auditor', 'employee']);
+
+it('hides all action buttons on a posted run for a platform-admin', function () {
+    $user = platformAdminForPayrollRuns();
+    $run = PayrollRun::factory()->create(['status' => PayrollRun::STATUS_POSTED]);
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id)
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->component('admin/payroll-runs/show')
+                ->has('can')
+                ->where('can.submit', false)
+                ->where('can.approve', false)
+                ->where('can.post', false)
+                ->where('can.void', false),
+        );
+});
+
+it('hides all action buttons on a voided run for a platform-admin', function () {
+    $user = platformAdminForPayrollRuns();
+    $run = PayrollRun::factory()->voided()->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id)
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->where('can.submit', false)
+                ->where('can.approve', false)
+                ->where('can.post', false)
+                ->where('can.void', false),
+        );
+});
+
+it('shows only submit (and void) on a computed run for a platform-admin', function () {
+    $user = platformAdminForPayrollRuns();
+    $run = PayrollRun::factory()->computed()->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id)
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->where('can.submit', true)
+                ->where('can.approve', false)
+                ->where('can.post', false)
+                ->where('can.void', true),
+        );
+});
+
+it('shows only approve (and void) on a pending_approval run for a platform-admin', function () {
+    $user = platformAdminForPayrollRuns();
+    $run = PayrollRun::factory()->create(['status' => PayrollRun::STATUS_PENDING_APPROVAL]);
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id)
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->where('can.submit', false)
+                ->where('can.approve', true)
+                ->where('can.post', false)
+                ->where('can.void', true),
+        );
+});
+
+it('shows only post (and void) on an approved run for a platform-admin', function () {
+    $user = platformAdminForPayrollRuns();
+    $run = PayrollRun::factory()->approved()->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id)
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->where('can.submit', false)
+                ->where('can.approve', false)
+                ->where('can.post', true)
+                ->where('can.void', true),
+        );
+});
