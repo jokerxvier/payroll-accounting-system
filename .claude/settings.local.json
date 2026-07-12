@@ -36,5 +36,9 @@
       "mcp__plugin_playwright_playwright__browser_type",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\(f'{k}: {v}' for k,v in d.get\\('scripts',{}\\).items\\(\\)\\)\\)\")"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "laravel-boost",
+    "shadcn"
+  ]
 }
