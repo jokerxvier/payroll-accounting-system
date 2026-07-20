@@ -70,10 +70,11 @@ it('exposes transition predicates that gate on status', function (
         ->and($run->isPostable())->toBe($postable)
         ->and($run->isVoidable())->toBe($voidable);
 })->with([
+    // DEMO: approval bypassed — `computed` is directly postable (post=true).
     //         status                                   submit  approve post   void
     'draft' => [PayrollRun::STATUS_DRAFT, false, false, false, true],
     'computing' => [PayrollRun::STATUS_COMPUTING, false, false, false, true],
-    'computed' => [PayrollRun::STATUS_COMPUTED, true, false, false, true],
+    'computed' => [PayrollRun::STATUS_COMPUTED, true, false, true, true],
     'pending_approval' => [PayrollRun::STATUS_PENDING_APPROVAL, false, true, false, true],
     'approved' => [PayrollRun::STATUS_APPROVED, false, false, true, true],
     'posted' => [PayrollRun::STATUS_POSTED, false, false, false, false],

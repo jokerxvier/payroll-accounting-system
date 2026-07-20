@@ -11,7 +11,11 @@
     <style>
         * { box-sizing: border-box; }
         body {
-            font-family: 'Helvetica', sans-serif;
+            /* DejaVu ships with dompdf and — unlike the core Helvetica/Times/
+               Courier fonts — carries the ₱ (U+20B1) and → (U+2192) glyphs.
+               The core fonts use single-byte (WinAnsi) encoding and render
+               those as "?". */
+            font-family: 'DejaVu Sans', sans-serif;
             font-size: 11pt;
             color: #000;
             margin: 0;
@@ -19,7 +23,7 @@
         }
         .doc { padding: 28px; }
         .eyebrow {
-            font-family: 'Courier', monospace;
+            font-family: 'DejaVu Sans Mono', monospace;
             font-size: 9pt;
             text-transform: uppercase;
             letter-spacing: 2px;
@@ -27,7 +31,7 @@
             margin: 0 0 8px 0;
         }
         h1 {
-            font-family: 'Times New Roman', serif;
+            font-family: 'DejaVu Serif', serif;
             font-size: 22pt;
             font-weight: normal;
             margin: 0 0 8px 0;
@@ -66,14 +70,17 @@
             padding-left: 16px;
         }
         td .code, .gov-id {
-            font-family: 'Courier', monospace;
+            font-family: 'DejaVu Sans Mono', monospace;
             font-size: 8pt;
             color: #777;
         }
         tfoot th {
             border-top: 1px solid #d1d1cc;
             padding: 6px 0;
-            font-weight: 600;
+            /* Must be 700 (not 600): DejaVu ships only normal + bold faces, and
+               dompdf can't map an intermediate 600 onto the embedded bold TTF —
+               it falls back to a face without the ₱ glyph, printing "?". */
+            font-weight: bold;
         }
         .net {
             border-top: 2px solid #000;
@@ -94,7 +101,7 @@
             letter-spacing: 1px;
         }
         .net-amount {
-            font-family: 'Times New Roman', serif;
+            font-family: 'DejaVu Serif', serif;
             font-size: 18pt;
             text-align: right;
             font-variant-numeric: tabular-nums;
@@ -145,7 +152,7 @@
 
     <div class="meta">
         @if(!empty($employee['staff_no']))
-            <div><strong>Staff no.</strong> <span style="font-family:'Courier',monospace">{{ $employee['staff_no'] }}</span></div>
+            <div><strong>Staff no.</strong> <span style="font-family:'DejaVu Sans Mono',monospace">{{ $employee['staff_no'] }}</span></div>
         @endif
         @if(!empty($employee['email']))
             <div><strong>Email</strong> {{ $employee['email'] }}</div>
@@ -222,7 +229,7 @@
         <p class="footnote">
             <strong>Statutory exemptions applied:</strong>
             @foreach($payslip['applied_exemptions'] as $code)
-                <span style="font-family:'Courier',monospace; margin-right:6px">{{ $code }}</span>
+                <span style="font-family:'DejaVu Sans Mono',monospace; margin-right:6px">{{ $code }}</span>
             @endforeach
         </p>
     @endif

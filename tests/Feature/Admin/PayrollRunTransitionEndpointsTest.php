@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\Pas\PayrollRun;
+use App\Models\Pas\Payslip;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -56,6 +57,17 @@ it('super-admin can approve a pending_approval run', function () {
 it('super-admin can post an approved run', function () {
     $user = authTransitionsAs('super-admin');
     $run = PayrollRun::factory()->approved()->create();
+
+    $this->actingAs($user)
+        ->post('/admin/payroll-runs/'.$run->id.'/post')
+        ->assertRedirect('/admin/payroll-runs/'.$run->id);
+
+    expect($run->fresh()->status)->toBe(PayrollRun::STATUS_POSTED);
+});
+
+it('super-admin can post a computed run directly when approval is bypassed (DEMO)', function () {
+    $user = authTransitionsAs('super-admin');
+    $run = PayrollRun::factory()->computed()->create();
 
     $this->actingAs($user)
         ->post('/admin/payroll-runs/'.$run->id.'/post')
@@ -129,7 +141,34 @@ it('show payload exposes can flags reflecting current status', function () {
                 ->component('admin/payroll-runs/show')
                 ->where('can.submit', true)
                 ->where('can.approve', false)
-                ->where('can.post', false)
-                ->where('can.void', true),
+                // DEMO: computed is directly postable now.
+                ->where('can.post', true)
+                ->where('can.void', true)
+                ->where('can.delete', true),
         );
 });
+
+it('super-admin can delete a run and its payslips cascade', function () {
+    $user = authTransitionsAs('super-admin');
+    $run = PayrollRun::factory()->computed()->create();
+    Payslip::factory()->count(2)->for($run, 'payrollRun')->create();
+
+    $this->actingAs($user)
+        ->delete('/admin/payroll-runs/'.$run->id)
+        ->assertRedirect('/admin/payroll-runs')
+        ->assertSessionHas('success');
+
+    expect(PayrollRun::query()->whereKey($run->id)->exists())->toBeFalse()
+        ->and(Payslip::query()->where('payroll_run_id', $run->id)->exists())->toBeFalse();
+});
+
+it('delete is forbidden for auditor and employee', function (string $role) {
+    $user = authTransitionsAs($role);
+    $run = PayrollRun::factory()->computed()->create();
+
+    $this->actingAs($user)
+        ->delete('/admin/payroll-runs/'.$run->id)
+        ->assertForbidden();
+
+    expect(PayrollRun::query()->whereKey($run->id)->exists())->toBeTrue();
+})->with(['auditor', 'employee']);

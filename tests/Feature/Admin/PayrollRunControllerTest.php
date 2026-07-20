@@ -85,7 +85,37 @@ it('renders the index for a super-admin', function () {
             fn ($page) => $page
                 ->component('admin/payroll-runs/index')
                 ->where('can.create', true)
-                ->has('runs', 2),
+                ->has('runs.data', 2)
+                ->where('runs.per_page', 25)
+                ->where('runs.total', 2),
+        );
+});
+
+it('paginates the index and lists the latest run first', function () {
+    $user = authPayrollRunsAs('super-admin');
+    PayrollRun::factory()->count(26)->create();
+    $latest = PayrollRun::query()->max('id');
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs')
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->has('runs.data', 25)               // first page is full
+                ->where('runs.current_page', 1)
+                ->where('runs.last_page', 2)
+                ->where('runs.total', 26)
+                ->where('runs.data.0.id', $latest),  // descending: newest first
+        );
+
+    // Second page holds the remaining run.
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs?page=2')
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->has('runs.data', 1)
+                ->where('runs.current_page', 2),
         );
 });
 
@@ -116,7 +146,63 @@ it('renders the create form with open periods', function () {
         ->assertInertia(
             fn ($page) => $page
                 ->component('admin/payroll-runs/create')
-                ->has('periods', 1),
+                ->has('periods', 1)
+                ->has('active_employee_count'),
+        );
+});
+
+it('reports the active employee count on the create form', function () {
+    $user = authPayrollRunsAs('super-admin');
+    PayPeriod::factory()->monthly(2026, 5)->open()->create();
+    EmployeeProfile::factory()->count(3)->create(['is_active' => true]);
+    EmployeeProfile::factory()->create(['is_active' => false]); // excluded
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/create')
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page->where('active_employee_count', 3),
+        );
+});
+
+it('excludes finished (approved or posted) periods from the create form', function () {
+    $user = authPayrollRunsAs('super-admin');
+
+    // Ordered start_date desc → May (index 0) before April (index 1).
+    $may = PayPeriod::factory()->monthly(2026, 5)->open()->create();
+    $april = PayPeriod::factory()->monthly(2026, 4)->open()->create();
+
+    // May is finished (approved run); April is still open with no run.
+    PayrollRun::factory()->approved()->create(['pay_period_id' => $may->id]);
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/create')
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->component('admin/payroll-runs/create')
+                ->has('periods', 1)
+                ->where('periods.0.id', $april->id)
+                ->where('periods.0.locked_by_run', null),
+        );
+});
+
+it('does not flag create-form periods whose only run is voided or computed', function () {
+    $user = authPayrollRunsAs('super-admin');
+
+    $voidedPeriod = PayPeriod::factory()->monthly(2026, 5)->open()->create();
+    $computedPeriod = PayPeriod::factory()->monthly(2026, 4)->open()->create();
+
+    PayrollRun::factory()->voided()->create(['pay_period_id' => $voidedPeriod->id]);
+    PayrollRun::factory()->computed()->create(['pay_period_id' => $computedPeriod->id]);
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/create')
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->where('periods.0.locked_by_run', null)
+                ->where('periods.1.locked_by_run', null),
         );
 });
 
@@ -181,7 +267,40 @@ it('shows a run with payslips and progress props', function () {
                 ->where('run.id', $run->id)
                 ->where('progress.persisted_payslips', 2)
                 ->where('progress.total_employees', 2)
-                ->has('payslips', 2),
+                ->has('payslips.data', 2)
+                ->where('payslips.per_page', 25)
+                ->where('payslips.total', 2),
+        );
+});
+
+it('paginates payslips on the run detail while keeping full progress', function () {
+    $user = authPayrollRunsAs('super-admin');
+    $run = PayrollRun::factory()->computed()->create([
+        'total_employees' => 26,
+    ]);
+    Payslip::factory()->count(26)->for($run, 'payrollRun')->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id)
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->has('payslips.data', 25)               // first page is full
+                ->where('payslips.current_page', 1)
+                ->where('payslips.last_page', 2)
+                ->where('payslips.total', 26)
+                // Progress spans every page, not just the 25 on this one.
+                ->where('progress.persisted_payslips', 26),
+        );
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id.'?page=2')
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->has('payslips.data', 1)
+                ->where('payslips.current_page', 2)
+                ->where('progress.persisted_payslips', 26),
         );
 });
 
@@ -237,7 +356,7 @@ it('hides all action buttons on a voided run for a platform-admin', function () 
         );
 });
 
-it('shows only submit (and void) on a computed run for a platform-admin', function () {
+it('shows post, submit, void, and delete on a computed run for a platform-admin', function () {
     $user = platformAdminForPayrollRuns();
     $run = PayrollRun::factory()->computed()->create();
 
@@ -248,8 +367,10 @@ it('shows only submit (and void) on a computed run for a platform-admin', functi
             fn ($page) => $page
                 ->where('can.submit', true)
                 ->where('can.approve', false)
-                ->where('can.post', false)
-                ->where('can.void', true),
+                // DEMO: computed is directly postable now.
+                ->where('can.post', true)
+                ->where('can.void', true)
+                ->where('can.delete', true),
         );
 });
 

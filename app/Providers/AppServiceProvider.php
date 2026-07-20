@@ -14,6 +14,7 @@ use App\Models\Pas\PayrollAdjustment;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\School;
 use App\Models\Pas\StatutoryContribution;
+use App\Observers\PayrollRunObserver;
 use App\Observers\SchoolObserver;
 use App\Policies\Pas\AllowancePolicy;
 use App\Policies\Pas\DeductionTypePolicy;
@@ -82,6 +83,8 @@ class AppServiceProvider extends ServiceProvider
     protected function registerObservers(): void
     {
         School::observe(SchoolObserver::class);
+        // Auto-close a pay period when its payroll posts; reopen on delete.
+        PayrollRun::observe(PayrollRunObserver::class);
     }
 
     /**

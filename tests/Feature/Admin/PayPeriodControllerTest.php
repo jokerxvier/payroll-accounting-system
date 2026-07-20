@@ -182,3 +182,46 @@ it('forbids store for non-super-admin roles', function (string $role) {
         ])
         ->assertForbidden();
 })->with(['payroll-officer', 'hr', 'auditor', 'employee']);
+
+it('exposes the update ability to super-admin on the index', function () {
+    $user = authPayPeriodsAs('super-admin');
+    PayPeriod::factory()->monthly(2026, 5)->open()->create();
+
+    $this->actingAs($user)
+        ->get('/admin/pay-periods')
+        ->assertInertia(fn ($page) => $page->where('can.update', true));
+});
+
+it('super-admin can manually override a period status', function () {
+    $user = authPayPeriodsAs('super-admin');
+    $period = PayPeriod::factory()->monthly(2026, 5)->open()->create();
+
+    $this->actingAs($user)
+        ->patch('/admin/pay-periods/'.$period->id, ['status' => 'closed'])
+        ->assertRedirect('/admin/pay-periods')
+        ->assertSessionHas('success');
+
+    expect($period->fresh()->status)->toBe('closed');
+});
+
+it('rejects an invalid status on update', function () {
+    $user = authPayPeriodsAs('super-admin');
+    $period = PayPeriod::factory()->monthly(2026, 5)->open()->create();
+
+    $this->actingAs($user)
+        ->patch('/admin/pay-periods/'.$period->id, ['status' => 'archived'])
+        ->assertSessionHasErrors('status');
+
+    expect($period->fresh()->status)->toBe('open');
+});
+
+it('forbids status override for non-super-admin roles', function (string $role) {
+    $user = authPayPeriodsAs($role);
+    $period = PayPeriod::factory()->monthly(2026, 5)->open()->create();
+
+    $this->actingAs($user)
+        ->patch('/admin/pay-periods/'.$period->id, ['status' => 'closed'])
+        ->assertForbidden();
+
+    expect($period->fresh()->status)->toBe('open');
+})->with(['payroll-officer', 'hr', 'auditor', 'employee']);

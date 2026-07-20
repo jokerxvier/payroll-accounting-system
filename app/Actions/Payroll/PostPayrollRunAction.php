@@ -20,9 +20,12 @@ final class PostPayrollRunAction
 {
     public function execute(PayrollRun $run, int $actorUserId): PayrollRun
     {
-        if ($run->status !== PayrollRun::STATUS_APPROVED) {
+        // DEMO: approval is bypassed, so `computed` runs post directly
+        // alongside the usual `approved`. Drop STATUS_COMPUTED to restore
+        // the maker-checker flow (mirror the change in PayrollRun::isPostable).
+        if (! in_array($run->status, [PayrollRun::STATUS_COMPUTED, PayrollRun::STATUS_APPROVED], true)) {
             throw new DomainException(sprintf(
-                'Cannot post a payroll run from status [%s]. Expected [approved].',
+                'Cannot post a payroll run from status [%s]. Expected [computed] or [approved].',
                 $run->status,
             ));
         }

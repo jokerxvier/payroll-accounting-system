@@ -1,10 +1,27 @@
-import { Head, Link } from '@inertiajs/react';
-import { CalendarDays, Plus } from 'lucide-react';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { CalendarDays, Loader2, Pencil, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -13,7 +30,10 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { create as payPeriodsCreate } from '@/routes/admin/pay-periods';
+import {
+    create as payPeriodsCreate,
+    update as payPeriodsUpdate,
+} from '@/routes/admin/pay-periods';
 
 interface PayPeriodRow {
     id: number;
@@ -27,7 +47,7 @@ interface PayPeriodRow {
 
 interface Props {
     periods: PayPeriodRow[];
-    can: { create: boolean };
+    can: { create: boolean; update: boolean };
 }
 
 const STATUS_VARIANT: Record<
@@ -39,7 +59,42 @@ const STATUS_VARIANT: Record<
     closed: 'secondary',
 };
 
+const STATUS_OPTIONS: { value: PayPeriodRow['status']; label: string }[] = [
+    { value: 'draft', label: 'Draft' },
+    { value: 'open', label: 'Open' },
+    { value: 'closed', label: 'Closed' },
+];
+
 export default function PayPeriodsIndex({ periods, can }: Props) {
+    const [editing, setEditing] = useState<PayPeriodRow | null>(null);
+    const { data, setData, patch, processing, errors, clearErrors, reset } =
+        useForm<{ status: PayPeriodRow['status'] }>({ status: 'open' });
+
+    const openEdit = (period: PayPeriodRow) => {
+        clearErrors();
+        setData('status', period.status);
+        setEditing(period);
+    };
+
+    const closeEdit = () => {
+        setEditing(null);
+        reset();
+        clearErrors();
+    };
+
+    const submitEdit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!editing) {
+            return;
+        }
+
+        patch(payPeriodsUpdate({ payPeriod: editing.id }).url, {
+            preserveScroll: true,
+            onSuccess: () => setEditing(null),
+        });
+    };
+
     return (
         <>
             <Head title="Pay periods" />
@@ -108,6 +163,7 @@ export default function PayPeriodsIndex({ periods, can }: Props) {
                                             <TableHead className="text-xs tracking-wide text-muted-foreground uppercase">
                                                 Status
                                             </TableHead>
+                                            {can.update ? <TableHead /> : null}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -138,10 +194,26 @@ export default function PayPeriodsIndex({ periods, can }: Props) {
                                                                 p.status
                                                             ]
                                                         }
+                                                        className="capitalize"
                                                     >
                                                         {p.status}
                                                     </Badge>
                                                 </TableCell>
+                                                {can.update ? (
+                                                    <TableCell className="text-right">
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className="h-7 w-7"
+                                                            aria-label={`Edit ${p.code} status`}
+                                                            onClick={() =>
+                                                                openEdit(p)
+                                                            }
+                                                        >
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                    </TableCell>
+                                                ) : null}
                                             </TableRow>
                                         ))}
                                     </TableBody>
@@ -151,6 +223,84 @@ export default function PayPeriodsIndex({ periods, can }: Props) {
                     </Card>
                 )}
             </div>
+
+            <Dialog
+                open={editing !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        closeEdit();
+                    }
+                }}
+            >
+                <DialogContent>
+                    <form onSubmit={submitEdit}>
+                        <DialogHeader>
+                            <DialogTitle>Edit period status</DialogTitle>
+                            <DialogDescription>
+                                Manually set the status for{' '}
+                                <span className="font-mono">
+                                    {editing?.code}
+                                </span>
+                                . This overrides the automatic open/closed
+                                handling until the next payroll action.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="grid gap-2 py-4">
+                            <Label htmlFor="status">Status</Label>
+                            <Select
+                                value={data.status}
+                                onValueChange={(v) =>
+                                    setData(
+                                        'status',
+                                        v as PayPeriodRow['status'],
+                                    )
+                                }
+                            >
+                                <SelectTrigger
+                                    id="status"
+                                    aria-invalid={
+                                        errors.status ? 'true' : undefined
+                                    }
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {STATUS_OPTIONS.map((o) => (
+                                        <SelectItem
+                                            key={o.value}
+                                            value={o.value}
+                                        >
+                                            {o.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {errors.status ? (
+                                <p className="text-xs text-destructive">
+                                    {errors.status}
+                                </p>
+                            ) : null}
+                        </div>
+
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={closeEdit}
+                            >
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={processing}>
+                                {processing ? (
+                                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                ) : null}
+                                Save status
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

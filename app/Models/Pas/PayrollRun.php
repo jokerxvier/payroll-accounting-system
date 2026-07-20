@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Pas;
 
+use App\Actions\Payroll\PostPayrollRunAction;
 use App\Concerns\Auditable;
 use App\Concerns\BelongsToTenant;
 use App\Models\User;
@@ -210,11 +211,15 @@ final class PayrollRun extends Model
     }
 
     /**
-     * Whether the run may be posted — legal only from `approved`.
+     * Whether the run may be posted. Normally legal only from `approved`.
+     *
+     * DEMO: the approval step is bypassed, so a `computed` run can be posted
+     * directly. To restore the maker-checker flow, drop STATUS_COMPUTED here
+     * and from {@see PostPayrollRunAction}.
      */
     public function isPostable(): bool
     {
-        return $this->status === self::STATUS_APPROVED;
+        return in_array($this->status, [self::STATUS_COMPUTED, self::STATUS_APPROVED], true);
     }
 
     /**

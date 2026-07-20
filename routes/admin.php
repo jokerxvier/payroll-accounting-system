@@ -67,6 +67,8 @@ Route::middleware(['auth', 'verified'])
             ->name('pay-periods.create');
         Route::post('pay-periods', [PayPeriodController::class, 'store'])
             ->name('pay-periods.store');
+        Route::patch('pay-periods/{payPeriod}', [PayPeriodController::class, 'update'])
+            ->name('pay-periods.update');
 
         // Phase 3 Week 9 — Payroll runs (batch generate / show / list).
         // Approval + voiding land in Week 10; not exposed yet.
@@ -78,6 +80,11 @@ Route::middleware(['auth', 'verified'])
             ->name('payroll-runs.store');
         Route::get('payroll-runs/{payrollRun}', [PayrollRunController::class, 'show'])
             ->name('payroll-runs.show');
+        // Hard-delete a run (type-to-confirm on the client). Registered as a
+        // distinct DELETE verb; the {payrollRun} wildcard above only binds GET,
+        // so there's no static-segment collision to guard against here.
+        Route::delete('payroll-runs/{payrollRun}', [PayrollRunController::class, 'destroy'])
+            ->name('payroll-runs.destroy');
 
         // Phase 3 Week 10 — approval lifecycle transitions. Each one is a
         // POST that hits a Gate-checked controller action and an Action

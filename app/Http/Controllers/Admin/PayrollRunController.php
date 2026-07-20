@@ -53,13 +53,15 @@ final class PayrollRunController extends Controller
                 'postedBy:id,name',
                 'voidedBy:id,name',
             ])
-            ->orderByDesc('created_at')
-            ->limit(50)
-            ->get()
-            ->map(fn (PayrollRun $run): array => self::serialiseRun($run));
+            // Latest first. Order by id (monotonic) so runs created in the
+            // same second don't tie ambiguously the way created_at can.
+            ->orderByDesc('id')
+            ->paginate(25)
+            ->withQueryString()
+            ->through(fn (PayrollRun $run): array => self::serialiseRun($run));
 
         return Inertia::render('admin/payroll-runs/index', [
-            'runs' => $runs->all(),
+            'runs' => $runs,
             'can' => [
                 'create' => Gate::allows('create', PayrollRun::class),
             ],
@@ -72,6 +74,12 @@ final class PayrollRunController extends Controller
 
         $periods = PayPeriod::query()
             ->where('status', PayPeriod::STATUS_OPEN)
+            // Hide "finished" periods entirely — a period whose payroll has been
+            // approved or posted is done and must not be re-generated. Mirrors
+            // the guard in GeneratePayrollRunAction; runs are tenant-scoped via
+            // the model.
+            ->whereDoesntHave('payrollRuns', fn ($q) => $q
+                ->whereIn('status', [PayrollRun::STATUS_APPROVED, PayrollRun::STATUS_POSTED]))
             ->orderBy('start_date', 'desc')
             ->limit(50)
             ->get()
@@ -81,10 +89,18 @@ final class PayrollRunController extends Controller
                 'frequency' => $p->frequency,
                 'start_date' => $p->start_date->toDateString(),
                 'end_date' => $p->end_date->toDateString(),
+                // Finished (approved/posted) periods are excluded above, so a
+                // returned period is always selectable.
+                'locked_by_run' => null,
             ]);
 
         return Inertia::render('admin/payroll-runs/create', [
             'periods' => $periods->all(),
+            // How many employees a run will process — lets the UI set scale
+            // expectations up front. Mirrors GeneratePayrollRunAction's filter.
+            'active_employee_count' => EmployeeProfile::query()
+                ->where('is_active', true)
+                ->count(),
         ]);
     }
 
@@ -124,23 +140,23 @@ final class PayrollRunController extends Controller
             'postedBy:id,name',
             'voidedBy:id,name',
         ]);
-        $rawPayslips = $payrollRun
+        $payslips = $payrollRun
             ->payslips()
             ->orderBy('lms_staff_id')
-            ->limit(500)
-            ->get();
+            ->paginate(25)
+            ->withQueryString();
 
-        // One LMS query for the whole batch — no N+1. Read-only LMS connection
+        // One LMS query for the whole page — no N+1. Read-only LMS connection
         // is enforced by the ReadOnlyModel base class. `full_name` is a real
         // column on sm_staffs (verified via Schema::getColumnListing), so we
         // select it directly rather than rely on an accessor — there's no
         // getFullNameAttribute that derives from first+last.
         $staffNames = Staff::query()
-            ->whereIn('id', $rawPayslips->pluck('lms_staff_id')->unique())
+            ->whereIn('id', collect($payslips->items())->pluck('lms_staff_id')->unique())
             ->get(['id', 'full_name'])
             ->keyBy('id');
 
-        $payslips = $rawPayslips->map(fn ($p): array => [
+        $payslips->through(fn ($p): array => [
             'id' => $p->id,
             'lms_staff_id' => $p->lms_staff_id,
             'staff_name' => $staffNames->get((int) $p->lms_staff_id)?->full_name,
@@ -155,9 +171,11 @@ final class PayrollRunController extends Controller
 
         return Inertia::render('admin/payroll-runs/show', [
             'run' => self::serialiseRun($payrollRun),
-            'payslips' => $payslips->all(),
+            'payslips' => $payslips,
             'progress' => [
-                'persisted_payslips' => $payslips->count(),
+                // total() spans every page, so the computing progress bar
+                // stays correct regardless of which page is being viewed.
+                'persisted_payslips' => $payslips->total(),
                 'total_employees' => $payrollRun->total_employees,
             ],
             // AND each gate check with the run's status predicate. The
@@ -171,6 +189,8 @@ final class PayrollRunController extends Controller
                 'approve' => Gate::allows('approve', $payrollRun) && $payrollRun->isApprovable(),
                 'post' => Gate::allows('post', $payrollRun) && $payrollRun->isPostable(),
                 'void' => Gate::allows('void', $payrollRun) && $payrollRun->isVoidable(),
+                // DEMO: hard-delete is allowed regardless of status.
+                'delete' => Gate::allows('delete', $payrollRun),
             ],
         ]);
     }
@@ -233,6 +253,32 @@ final class PayrollRunController extends Controller
         return redirect()
             ->route('admin.payroll-runs.show', $payrollRun->id)
             ->with('success', 'Payroll run voided. Payslips remain visible for audit.');
+    }
+
+    /**
+     * Hard-delete a payroll run. The client requires the operator to type
+     * "delete" to confirm. Payslip rows are removed by the DB cascade on
+     * `pas_payslips.payroll_run_id`; the only extra cleanup is the on-disk
+     * bulk-PDF ZIP artefact plus its temp scratch directory.
+     *
+     * Note: this deliberately breaks the project's "void, don't delete"
+     * convention — it exists for the demo. Voiding remains the audit-safe
+     * path for real use.
+     */
+    public function destroy(PayrollRun $payrollRun): RedirectResponse
+    {
+        Gate::authorize('delete', $payrollRun);
+
+        if ($payrollRun->bulk_pdf_zip_path !== null) {
+            Storage::delete($payrollRun->bulk_pdf_zip_path);
+        }
+        Storage::deleteDirectory(BuildBulkPayslipsZipAction::tempDir($payrollRun));
+
+        $payrollRun->delete();
+
+        return redirect()
+            ->route('admin.payroll-runs.index')
+            ->with('success', 'Payroll run deleted.');
     }
 
     /**

@@ -76,9 +76,20 @@ it('post advances approved → posted and stamps the actor', function () {
         ->and($result->isLocked())->toBeTrue();
 });
 
-it('post refuses from any non-approved status', function () {
+it('post advances computed → posted directly when approval is bypassed (DEMO)', function () {
     $user = User::factory()->create();
     $run = PayrollRun::factory()->computed()->create();
+
+    $result = app(PostPayrollRunAction::class)->execute($run, $user->id);
+
+    expect($result->status)->toBe(PayrollRun::STATUS_POSTED)
+        ->and($result->posted_at)->not->toBeNull()
+        ->and($result->posted_by_user_id)->toBe($user->id);
+});
+
+it('post refuses from a status that is neither computed nor approved', function () {
+    $user = User::factory()->create();
+    $run = PayrollRun::factory()->create(['status' => PayrollRun::STATUS_DRAFT]);
 
     expect(fn () => app(PostPayrollRunAction::class)->execute($run, $user->id))
         ->toThrow(DomainException::class);

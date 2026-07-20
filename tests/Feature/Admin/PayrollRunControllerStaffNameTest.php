@@ -46,6 +46,6 @@ it('show payload returns null staff_name when the LMS staff does not exist', fun
         ->assertInertia(
             fn ($page) => $page
                 ->component('admin/payroll-runs/show')
-                ->where('payslips.0.staff_name', null),
+                ->where('payslips.data.0.staff_name', null),
         );
 });

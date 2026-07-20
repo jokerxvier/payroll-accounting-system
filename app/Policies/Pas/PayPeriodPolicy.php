@@ -36,4 +36,13 @@ final class PayPeriodPolicy
     {
         return $user->hasAnyRole(self::SUPER_ADMIN_ROLES);
     }
+
+    /**
+     * Manually override a period's status. Same super-admin gate as create —
+     * changing whether a period is open/closed is a configuration action.
+     */
+    public function update(User $user, PayPeriod $period): bool
+    {
+        return $user->hasAnyRole(self::SUPER_ADMIN_ROLES);
+    }
 }

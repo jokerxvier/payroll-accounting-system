@@ -54,12 +54,13 @@ php artisan make:controller ControllerName --no-interaction
 - **Concerns (Traits)** in `app/Concerns/` — shared validation rules (e.g., `ProfileValidationRules`, `PasswordValidationRules`)
 - **Actions** in `app/Actions/` — Fortify action classes for user creation, password reset
 - **Observers** in `app/Observers/` — model lifecycle hooks. `AuditObserver` writes to the audit log. `SchoolObserver` auto-clones default-school catalog rows onto each new School (see Multi-tenancy).
+- **Exports / Imports** in `app/Exports/` and `app/Imports/` — Maatwebsite Excel classes backing the reports and bulk-edit round-trip (`PayrollSummaryReportExport`, `EmployeeHistoryReportExport`, `AuditLogExport`, `StatutoryContributionExport`, `EmployeeBulkEditExport` → `EmployeeBulkEditImport`).
 - **Listeners** in `app/Listeners/` — `AssignPayrollRoleOnLogin` maps LMS roles → payroll roles on every login (idempotent via `syncRoles`; config in `config/payroll.php`). Payroll-native users (`lms_user_id IS NULL`, e.g. platform admins) are silently skipped — they manage their roles outside the LMS mapping.
 - **Providers** — `FortifyServiceProvider` configures auth views; repository bindings live in their own provider
 - **Middleware** — `HandleInertiaRequests` shares props globally (including `auth.user.roles` for React-side gating); `HandleAppearance` manages theme
 
 ### Multi-tenancy
-- **Tenant resolution** — Spatie Multitenancy: every web request resolves a `School` via the `NeedsTenant` middleware (appended in `bootstrap/app.php`). Active tenant: `Tenant::current()`. Platform admins can pivot tenants from the sidebar dropdown; `ApplyTenantOverride` reads the session and re-resolves after auth.
+- **Tenant resolution** — Spatie Multitenancy: every web request resolves a `School` via the `NeedsTenant` middleware (appended in `bootstrap/app.php`). Active tenant: `Tenant::current()`. Platform admins can pivot tenants from the sidebar dropdown; `ApplyTenantOverride` reads the session and re-resolves after auth. Custom Spatie plumbing lives in `app/Multitenancy/` (`Finders/` for tenant resolution, `Tasks/` for switch-time side effects).
 - **Middleware priority is pinned** — `ApplyTenantOverride` MUST run before `SubstituteBindings` (explicitly ordered in `bootstrap/app.php → priority([...])`). Without this, route-model-binding for any `BelongsToTenant` model fires with the boot-time default tenant and 404s after a tenant switch.
 - **`BelongsToTenant` trait** (`app/Concerns/BelongsToTenant.php`) — applied to every `pas_*` Eloquent model with a `school_id` column. Auto-fills `school_id` from `Tenant::current()` on `creating`, and adds a global scope filtering by it. Catalogs that should be globally shared (e.g., `StatutoryContribution` — national PH BIR/SSS/PhilHealth/Pag-IBIG rates) intentionally do NOT use the trait. `Allowance` and `DeductionType` are per-tenant (each school maintains its own catalog).
 - **Per-tenant catalog auto-clone** — `app/Observers/SchoolObserver.php` clones the default school's `pas_allowances` and `pas_deduction_types` onto every newly-created `School` in a single transaction. Idempotent (skips tables where the new school already has rows). Bypasses Eloquent via raw DB inserts so cloned rows land on the *new* school's id, not `Tenant::current()`.
@@ -77,14 +78,16 @@ php artisan make:controller ControllerName --no-interaction
 - **Wayfinder** — auto-generated typed route functions in `resources/js/wayfinder/`; import from `@/actions/` (controllers) or `@/routes/` (named routes). The Vite plugin regenerates these on `vite dev` / `vite build`. If you add a backend route and TypeScript can't resolve it from `@/routes/...`, restart `npm run dev` (or run `npm run build`) to regenerate the bindings.
 
 ### Routes
-- `routes/web.php` — main routes (welcome, dashboard)
+- `routes/web.php` — welcome, dashboard, employee directory
+- `routes/admin.php` — **most domain routes live here**, all under the `/admin` prefix and `admin.` name (payroll runs, pay periods, allowances, deduction types, schools, audit log, reports, contribution tables, employee bulk import). Static segments are registered before `{wildcard}` route-model-binding params (see the `contribution-tables/template` comment) — keep that ordering when adding routes.
 - `routes/settings.php` — settings pages (profile, security, appearance)
-- Auth routes registered by Fortify automatically
+- `routes/console.php` — scheduled commands (e.g. `horizon:snapshot` every 5 min)
+- Auth routes registered by Fortify automatically; the Horizon dashboard is served at `/horizon`
 
 ### Database
 - MySQL (`payroll_db`) — shared with the existing LMS (read-only via the `lms` connection)
 - App-owned tables carry the `pas_` prefix; LMS tables (`sm_*`, `users`, `roles`, etc.) are read-only
-- Redis-backed sessions, cache, and queue (configured to avoid colliding with LMS framework tables)
+- Redis-backed sessions, cache, and queue (configured to avoid colliding with LMS framework tables). Queues are processed by **Laravel Horizon** (`config/horizon.php`, dashboard at `/horizon`, authorized via a `viewHorizon` gate). `composer run dev` uses `queue:listen` for local work; run `php artisan horizon` to exercise the real supervisor. Activate the `configuring-horizon` skill for any Horizon change.
 - Two guardrail tests enforce DB safety; do not weaken or skip them, and run them after any migration or LMS-touching change: `tests/Feature/LmsReadOnlyTest.php` (no writes to LMS tables) and `tests/Feature/MigrationSafetyTest.php` (every migration is `pas_`-prefixed and reversible)
 - Never run `migrate:fresh` against the dev DB — it drops the LMS tables. Use incremental `migrate`, or `--env=testing` for a clean slate
 - Tests default to in-memory sqlite (configured in `phpunit.xml`). **Never override with `DB_CONNECTION=mysql php artisan test`** — `RefreshDatabase` against the dev MySQL connection wipes `payroll_db`'s LMS tables (`sm_*`, `users`, `roles`). If you need a real-MySQL test run, point at a separate database explicitly (e.g. `DB_DATABASE=payroll_db_test`), never the dev DB

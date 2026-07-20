@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { ChevronRight, FileText, Plus } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -15,12 +15,14 @@ import {
 } from '@/components/ui/table';
 import {
     create as payrollRunsCreate,
+    index as payrollRunsIndex,
     show as payrollRunsShow,
 } from '@/routes/admin/payroll-runs';
+import type { Paginator } from '@/types/pagination';
 import type { PayrollRunSummary } from '@/types/payroll-run';
 
 interface Props {
-    runs: PayrollRunSummary[];
+    runs: Paginator<PayrollRunSummary>;
     can: { create: boolean };
 }
 
@@ -44,6 +46,14 @@ function formatDate(iso: string | null): string {
 }
 
 export default function PayrollRunsIndex({ runs, can }: Props) {
+    const goPage = (page: number) => {
+        router.get(
+            payrollRunsIndex().url,
+            { page },
+            { preserveScroll: true, preserveState: true },
+        );
+    };
+
     return (
         <>
             <Head title="Payroll runs" />
@@ -63,7 +73,7 @@ export default function PayrollRunsIndex({ runs, can }: Props) {
                     }
                 />
 
-                {runs.length === 0 ? (
+                {runs.data.length === 0 ? (
                     <Card>
                         <CardContent className="py-10">
                             <EmptyState
@@ -115,7 +125,7 @@ export default function PayrollRunsIndex({ runs, can }: Props) {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {runs.map((run) => (
+                                        {runs.data.map((run) => (
                                             <TableRow
                                                 key={run.id}
                                                 className="transition-colors hover:bg-muted/30"
@@ -164,6 +174,42 @@ export default function PayrollRunsIndex({ runs, can }: Props) {
                                     </TableBody>
                                 </Table>
                             </div>
+
+                            {runs.last_page > 1 ? (
+                                <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={runs.current_page === 1}
+                                        onClick={() =>
+                                            goPage(runs.current_page - 1)
+                                        }
+                                    >
+                                        Previous
+                                    </Button>
+                                    <span className="tabular-nums">
+                                        Page {runs.current_page} of{' '}
+                                        {runs.last_page}
+                                        {runs.total > 0 ? (
+                                            <span className="ml-1">
+                                                · {runs.total} runs
+                                            </span>
+                                        ) : null}
+                                    </span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={
+                                            runs.current_page === runs.last_page
+                                        }
+                                        onClick={() =>
+                                            goPage(runs.current_page + 1)
+                                        }
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            ) : null}
                         </CardContent>
                     </Card>
                 )}

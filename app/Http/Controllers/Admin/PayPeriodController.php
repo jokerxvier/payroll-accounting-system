@@ -46,6 +46,9 @@ final class PayPeriodController extends Controller
             'periods' => $periods->all(),
             'can' => [
                 'create' => Gate::allows('create', PayPeriod::class),
+                // Instance-level ability; the policy check is role-only, so a
+                // blank model is enough to resolve button visibility.
+                'update' => Gate::allows('update', PayPeriod::make()),
             ],
         ]);
     }
@@ -105,5 +108,29 @@ final class PayPeriodController extends Controller
         return redirect()
             ->route('admin.pay-periods.index')
             ->with('success', sprintf('Pay period %s created.', $data['code']));
+    }
+
+    /**
+     * Manually override a period's status (draft / open / closed). This is a
+     * deliberate admin escape hatch — the PayrollRunObserver keeps status in
+     * sync automatically, but an operator can still correct it by hand.
+     */
+    public function update(Request $request, PayPeriod $payPeriod): RedirectResponse
+    {
+        Gate::authorize('update', $payPeriod);
+
+        $data = $request->validate([
+            'status' => ['required', 'string', Rule::in(PayPeriod::STATUSES)],
+        ]);
+
+        $payPeriod->update($data);
+
+        return redirect()
+            ->route('admin.pay-periods.index')
+            ->with('success', sprintf(
+                'Pay period %s set to %s.',
+                $payPeriod->code,
+                $data['status'],
+            ));
     }
 }

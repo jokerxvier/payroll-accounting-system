@@ -108,10 +108,25 @@ it('respects status guard on approve', function () {
 it('respects status guard on post', function () {
     $user = userWithRole('super-admin');
 
-    expect($user->can('post', runAt(PayrollRun::STATUS_PENDING_APPROVAL)))->toBeFalse()
+    // DEMO: approval bypassed — a computed run is directly postable.
+    expect($user->can('post', runAt(PayrollRun::STATUS_COMPUTED)))->toBeTrue()
+        ->and($user->can('post', runAt(PayrollRun::STATUS_PENDING_APPROVAL)))->toBeFalse()
         ->and($user->can('post', runAt(PayrollRun::STATUS_APPROVED)))->toBeTrue()
         ->and($user->can('post', runAt(PayrollRun::STATUS_POSTED)))->toBeFalse();
 });
+
+it('allows makers to delete a run at any status (DEMO)', function (string $role) {
+    $user = userWithRole($role);
+
+    expect($user->can('delete', runAt(PayrollRun::STATUS_COMPUTED)))->toBeTrue()
+        ->and($user->can('delete', runAt(PayrollRun::STATUS_POSTED)))->toBeTrue();
+})->with(['super-admin', 'payroll-officer', 'hr']);
+
+it('denies delete for non-maker roles', function (?string $role) {
+    $user = userWithRole($role);
+
+    expect($user->can('delete', runAt(PayrollRun::STATUS_COMPUTED)))->toBeFalse();
+})->with(['auditor', 'employee', null]);
 
 it('blocks void on posted and voided runs', function () {
     $user = userWithRole('super-admin');

@@ -17,6 +17,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * Renders one payslip's PDF and writes it to a per-run temp directory.
@@ -51,13 +52,34 @@ final class RenderPayslipPdfJob implements ShouldQueue
         $vm = self::buildViewModel($run, $payslip);
 
         $relativePath = sprintf(
-            'bulk-pdf-tmp/%d/staff-%d.pdf',
+            'bulk-pdf-tmp/%d/%s',
             $run->id,
-            $payslip->lms_staff_id,
+            self::pdfFilename(
+                $vm['employee']['full_name'] ?? null,
+                $vm['employee']['staff_no'] ?? null,
+                $payslip->lms_staff_id,
+            ),
         );
 
         $bytes = Pdf::loadView('payslips.pdf', $vm)->setPaper('a4')->output();
         Storage::put($relativePath, $bytes);
+    }
+
+    /**
+     * Build the per-payslip PDF filename: {slug-of-name}-{staff_number}.pdf.
+     *
+     * Zip entries take this basename verbatim (see
+     * BuildBulkPayslipsZipAction::assembleZip). Falls back to stable, unique
+     * tokens when the staff name or number is missing so two payslips can
+     * never collide within a run's temp dir — the numeric lms_staff_id is
+     * unique per payslip and backstops a missing staff number.
+     */
+    public static function pdfFilename(?string $fullName, int|string|null $staffNo, int $lmsStaffId): string
+    {
+        $nameSlug = Str::slug((string) $fullName) ?: 'employee';
+        $staffNumber = Str::slug((string) $staffNo) ?: (string) $lmsStaffId;
+
+        return sprintf('%s-%s.pdf', $nameSlug, $staffNumber);
     }
 
     /**

@@ -15,6 +15,14 @@ export interface PayPeriodSummary {
     end_date: string;
 }
 
+/**
+ * A pay period as offered on the "Generate payroll" create page. Carries the
+ * approved/posted run that locks it (if any) so the select can disable it.
+ */
+export interface PayPeriodOption extends PayPeriodSummary {
+    locked_by_run: { id: number; status: PayrollRunStatus } | null;
+}
+
 export interface PayrollRunActor {
     id: number;
     name: string;
@@ -49,6 +57,7 @@ export interface PayrollRunCanFlags {
     approve: boolean;
     post: boolean;
     void: boolean;
+    delete: boolean;
 }
 
 export interface PayslipAuditLine {

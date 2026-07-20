@@ -1,18 +1,17 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
-    ArrowLeft,
     Archive,
-    CheckCircle2,
+    Ban,
     ChevronDown,
     ChevronRight,
     Download,
     FileText,
     Loader2,
     Lock,
-    Send,
+    ReceiptText,
     Trash2,
 } from 'lucide-react';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import {
@@ -28,6 +27,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     Table,
     TableBody,
@@ -36,12 +37,17 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { index as payrollRunsIndex } from '@/routes/admin/payroll-runs';
+import {
+    destroy as payrollRunsDestroy,
+    index as payrollRunsIndex,
+    show as payrollRunsShow,
+} from '@/routes/admin/payroll-runs';
 import {
     build as bulkPdfsBuild,
     download as bulkPdfsDownload,
 } from '@/routes/admin/payroll-runs/bulk-pdfs';
 import { show as payslipShow } from '@/routes/admin/payroll-runs/payslips';
+import type { Paginator } from '@/types/pagination';
 import { PAYROLL_RUN_STATUS_LABELS } from '@/types/payroll-run';
 import type {
     PayrollRunCanFlags,
@@ -54,7 +60,7 @@ import type {
 
 interface Props {
     run: PayrollRunSummary;
-    payslips: PayslipSummary[];
+    payslips: Paginator<PayslipSummary>;
     progress: PayrollRunProgress;
     can: PayrollRunCanFlags;
 }
@@ -147,6 +153,16 @@ export default function PayrollRunShow({
     const [dialog, setDialog] = useState<DialogKind>(null);
     const [submitting, setSubmitting] = useState(false);
     const [expandedId, setExpandedId] = useState<number | null>(null);
+    const [buildingZip, setBuildingZip] = useState(false);
+    // The ZIP build is a queued Bus::batch — the POST returns immediately,
+    // so we snapshot the pre-build timestamp and watch for it to advance.
+    const zipBaselineRef = useRef<string | null>(null);
+    // Type-to-confirm delete. The destructive action only fires once the
+    // operator types the exact confirmation word.
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState('');
+    const [deleting, setDeleting] = useState(false);
+    const deleteReady = deleteConfirm.trim().toLowerCase() === 'delete';
 
     // Poll the run state while computing — the per-employee batch jobs
     // persist payslips one at a time. Reload only `run`, `payslips`, and
@@ -162,6 +178,70 @@ export default function PayrollRunShow({
 
         return () => window.clearInterval(handle);
     }, [run.status]);
+
+    // Poll the run while a bulk-ZIP build is in flight. The queued batch
+    // stamps `bulk_pdf_built_at` on success, so completion is detected when
+    // the timestamp advances past the value captured at kick-off. A 2-minute
+    // cap keeps a failed batch (which never stamps) from spinning forever.
+    useEffect(() => {
+        if (!buildingZip) {
+            return;
+        }
+
+        if (
+            run.bulk_pdf_built_at &&
+            run.bulk_pdf_built_at !== zipBaselineRef.current
+        ) {
+            setBuildingZip(false);
+
+            return;
+        }
+
+        let elapsed = 0;
+        const handle = window.setInterval(() => {
+            elapsed += 2000;
+
+            if (elapsed >= 120000) {
+                setBuildingZip(false);
+                window.clearInterval(handle);
+
+                return;
+            }
+
+            router.reload({ only: ['run'] });
+        }, 2000);
+
+        return () => window.clearInterval(handle);
+    }, [buildingZip, run.bulk_pdf_built_at]);
+
+    const buildBulkZip = () => {
+        zipBaselineRef.current = run.bulk_pdf_built_at;
+        setBuildingZip(true);
+        router.post(bulkPdfsBuild(run.id).url, {}, { preserveScroll: true });
+    };
+
+    const goPage = (page: number) => {
+        router.get(
+            payrollRunsShow(run.id).url,
+            { page },
+            { preserveScroll: true },
+        );
+    };
+
+    const runDelete = () => {
+        if (!deleteReady) {
+            return;
+        }
+
+        setDeleting(true);
+        router.delete(payrollRunsDestroy(run.id).url, {
+            preserveScroll: true,
+            onFinish: () => {
+                setDeleting(false);
+                setDeleteOpen(false);
+            },
+        });
+    };
 
     const confirmDialog = () => {
         if (dialog === null) {
@@ -198,6 +278,8 @@ export default function PayrollRunShow({
             <Head title={`Payroll run #${run.id}`} />
             <div className="space-y-6 p-4">
                 <PageHeader
+                    backHref={payrollRunsIndex().url}
+                    icon={ReceiptText}
                     title={`Payroll run #${run.id}`}
                     description={
                         run.pay_period
@@ -205,28 +287,18 @@ export default function PayrollRunShow({
                             : ''
                     }
                     actions={
-                        <div className="flex items-center gap-2">
+                        <>
                             <Badge variant={STATUS_VARIANT[run.status]}>
                                 {run.is_locked ? (
                                     <Lock className="mr-1 h-3 w-3" />
                                 ) : null}
                                 {PAYROLL_RUN_STATUS_LABELS[run.status]}
                             </Badge>
-                            {can.submit ? (
-                                <Button
-                                    variant="outline"
-                                    onClick={() => setDialog('submit')}
-                                >
-                                    <Send className="mr-1 h-4 w-4" />
-                                    Submit for approval
-                                </Button>
-                            ) : null}
-                            {can.approve ? (
-                                <Button onClick={() => setDialog('approve')}>
-                                    <CheckCircle2 className="mr-1 h-4 w-4" />
-                                    Approve
-                                </Button>
-                            ) : null}
+                            {/* DEMO: the submit → approve steps are bypassed —
+                                a computed run posts in one click. The Submit and
+                                Approve buttons (can.submit / can.approve) are
+                                intentionally hidden; restore them to bring back
+                                the maker-checker flow. */}
                             {can.post ? (
                                 <Button onClick={() => setDialog('post')}>
                                     <Lock className="mr-1 h-4 w-4" />
@@ -239,17 +311,23 @@ export default function PayrollRunShow({
                                     className="text-destructive"
                                     onClick={() => setDialog('void')}
                                 >
-                                    <Trash2 className="mr-1 h-4 w-4" />
+                                    <Ban className="mr-1 h-4 w-4" />
                                     Void
                                 </Button>
                             ) : null}
-                            <Button asChild variant="outline">
-                                <Link href={payrollRunsIndex().url}>
-                                    <ArrowLeft className="mr-1 h-4 w-4" />
-                                    Back
-                                </Link>
-                            </Button>
-                        </div>
+                            {can.delete ? (
+                                <Button
+                                    variant="destructive"
+                                    onClick={() => {
+                                        setDeleteConfirm('');
+                                        setDeleteOpen(true);
+                                    }}
+                                >
+                                    <Trash2 className="mr-1 h-4 w-4" />
+                                    Delete
+                                </Button>
+                            ) : null}
+                        </>
                     }
                 />
 
@@ -291,6 +369,64 @@ export default function PayrollRunShow({
                                     : dialog
                                       ? DIALOGS[dialog].confirmLabel
                                       : ''}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                <AlertDialog
+                    open={deleteOpen}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setDeleteOpen(false);
+                            setDeleteConfirm('');
+                        }
+                    }}
+                >
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>
+                                Delete payroll run #{run.id}?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This permanently deletes the run and all of its
+                                payslips. This cannot be undone. Type{' '}
+                                <span className="font-semibold">delete</span> to
+                                confirm.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <div className="grid gap-2">
+                            <Label htmlFor="delete-confirm" className="sr-only">
+                                Type delete to confirm
+                            </Label>
+                            <Input
+                                id="delete-confirm"
+                                value={deleteConfirm}
+                                onChange={(e) =>
+                                    setDeleteConfirm(e.target.value)
+                                }
+                                placeholder="delete"
+                                autoComplete="off"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && deleteReady) {
+                                        e.preventDefault();
+                                        runDelete();
+                                    }
+                                }}
+                            />
+                        </div>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                disabled={!deleteReady || deleting}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    runDelete();
+                                }}
+                            >
+                                {deleting ? 'Deleting…' : 'Delete run'}
                             </AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
@@ -360,7 +496,7 @@ export default function PayrollRunShow({
                         <CardTitle className="text-sm font-medium">
                             Payslips
                         </CardTitle>
-                        {payslips.length > 0 ? (
+                        {payslips.data.length > 0 ? (
                             <div className="flex items-center gap-2">
                                 {run.has_bulk_pdf ? (
                                     <Button asChild size="sm" variant="outline">
@@ -375,24 +511,25 @@ export default function PayrollRunShow({
                                     variant={
                                         run.has_bulk_pdf ? 'ghost' : 'outline'
                                     }
-                                    onClick={() => {
-                                        router.post(
-                                            bulkPdfsBuild(run.id).url,
-                                            {},
-                                            { preserveScroll: true },
-                                        );
-                                    }}
+                                    disabled={buildingZip}
+                                    onClick={buildBulkZip}
                                 >
-                                    <Archive className="mr-1 h-4 w-4" />
-                                    {run.has_bulk_pdf
-                                        ? 'Rebuild ZIP'
-                                        : 'Build ZIP'}
+                                    {buildingZip ? (
+                                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Archive className="mr-1 h-4 w-4" />
+                                    )}
+                                    {buildingZip
+                                        ? 'Building ZIP…'
+                                        : run.has_bulk_pdf
+                                          ? 'Rebuild ZIP'
+                                          : 'Build ZIP'}
                                 </Button>
                             </div>
                         ) : null}
                     </CardHeader>
                     <CardContent>
-                        {payslips.length === 0 ? (
+                        {payslips.data.length === 0 ? (
                             <EmptyState
                                 icon={FileText}
                                 title="No payslips yet"
@@ -429,7 +566,7 @@ export default function PayrollRunShow({
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {payslips.map((p) => {
+                                        {payslips.data.map((p) => {
                                             const isExpanded =
                                                 expandedId === p.id;
 
@@ -527,6 +664,39 @@ export default function PayrollRunShow({
                                 </Table>
                             </div>
                         )}
+
+                        {payslips.last_page > 1 ? (
+                            <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={payslips.current_page === 1}
+                                    onClick={() =>
+                                        goPage(payslips.current_page - 1)
+                                    }
+                                >
+                                    Previous
+                                </Button>
+                                <span className="tabular-nums">
+                                    Page {payslips.current_page} of{' '}
+                                    {payslips.last_page} · {payslips.total}{' '}
+                                    payslips
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={
+                                        payslips.current_page ===
+                                        payslips.last_page
+                                    }
+                                    onClick={() =>
+                                        goPage(payslips.current_page + 1)
+                                    }
+                                >
+                                    Next
+                                </Button>
+                            </div>
+                        ) : null}
                     </CardContent>
                 </Card>
 

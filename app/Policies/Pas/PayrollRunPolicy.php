@@ -73,4 +73,14 @@ final class PayrollRunPolicy
     {
         return $user->hasAnyRole(self::APPROVAL_ROLES) && $run->isVoidable();
     }
+
+    /**
+     * Hard-delete a run. DEMO affordance — breaks the "void, don't delete"
+     * convention on purpose. Gated to makers; allowed at any status so the
+     * demo can wipe a run in one action.
+     */
+    public function delete(User $user, PayrollRun $run): bool
+    {
+        return $user->hasAnyRole(self::MAKER_ROLES);
+    }
 }
