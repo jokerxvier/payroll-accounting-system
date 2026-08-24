@@ -463,6 +463,16 @@ final class PayrollRunController extends Controller
             'created_at' => $run->created_at?->toIso8601String(),
             'bulk_pdf_built_at' => $run->bulk_pdf_built_at?->toIso8601String(),
             'has_bulk_pdf' => $run->bulk_pdf_zip_path !== null,
+            // Phase 5 Slice 3 — whether the run reached the general ledger.
+            // A posted run WITHOUT an entry is a real state, not an error:
+            // the ledger posting is refused when the accounting period is
+            // closed, and payroll is deliberately not blocked on that. The
+            // UI needs to say so rather than imply the books are up to date.
+            'ledger_posted_at' => $run->ledger_posted_at?->toIso8601String(),
+            'journal_entry' => $run->journalEntry ? [
+                'id' => $run->journalEntry->id,
+                'entry_number' => $run->journalEntry->entry_number,
+            ] : null,
             'pay_period' => $run->payPeriod ? [
                 'id' => $run->payPeriod->id,
                 'code' => $run->payPeriod->code,

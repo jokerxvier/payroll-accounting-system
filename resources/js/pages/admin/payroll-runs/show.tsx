@@ -37,6 +37,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { show as journalShow } from '@/routes/admin/journal-entries';
 import {
     destroy as payrollRunsDestroy,
     index as payrollRunsIndex,
@@ -745,6 +746,38 @@ export default function PayrollRunShow({
                                 {run.voided_by
                                     ? ` by ${run.voided_by.name}`
                                     : ''}
+                            </div>
+                        ) : null}
+                        {run.status === 'posted' ? (
+                            <div className="sm:col-span-2">
+                                <span className="font-medium">Ledger:</span>{' '}
+                                {run.journal_entry ? (
+                                    <Link
+                                        href={
+                                            journalShow({
+                                                journalEntry:
+                                                    run.journal_entry.id,
+                                            }).url
+                                        }
+                                        className="font-mono underline underline-offset-4"
+                                    >
+                                        {run.journal_entry.entry_number}
+                                    </Link>
+                                ) : (
+                                    // A posted run with no entry is a real
+                                    // state, not a failure of the run: the
+                                    // ledger posting is refused while the
+                                    // accounting period is closed, and
+                                    // payroll is deliberately not blocked on
+                                    // that. Say so rather than leaving a
+                                    // blank that reads as "up to date".
+                                    <span className="text-muted-foreground">
+                                        Not posted to the ledger — the
+                                        accounting period was closed or an
+                                        account mapping is missing. Reopen the
+                                        period and post the run again to retry.
+                                    </span>
+                                )}
                             </div>
                         ) : null}
                     </CardContent>

@@ -96,6 +96,9 @@ final class PayrollRun extends Model
         'voided_by_user_id',
         'bulk_pdf_zip_path',
         'bulk_pdf_built_at',
+        'posting_payload',
+        'journal_entry_id',
+        'ledger_posted_at',
     ];
 
     protected static function newFactory(): Factory
@@ -118,6 +121,9 @@ final class PayrollRun extends Model
             'posted_at' => 'immutable_datetime',
             'voided_at' => 'immutable_datetime',
             'bulk_pdf_built_at' => 'immutable_datetime',
+            'posting_payload' => 'array',
+            'journal_entry_id' => 'integer',
+            'ledger_posted_at' => 'immutable_datetime',
             'submitted_by_user_id' => 'integer',
             'approved_by_user_id' => 'integer',
             'posted_by_user_id' => 'integer',
@@ -135,6 +141,27 @@ final class PayrollRun extends Model
     public function payslips(): HasMany
     {
         return $this->hasMany(Payslip::class);
+    }
+
+    /**
+     * The journal entry this run posted to the ledger, if it reached it.
+     *
+     * Null when the run predates Phase 5, or when the ledger posting was
+     * refused (a closed period, a missing mapped account) — payroll is not
+     * blocked on the books being open, so the run can post without an entry
+     * and be retried later.
+     *
+     * @return BelongsTo<JournalEntry, PayrollRun>
+     */
+    public function journalEntry(): BelongsTo
+    {
+        return $this->belongsTo(JournalEntry::class);
+    }
+
+    /** Whether this run has reached the general ledger. */
+    public function hasReachedLedger(): bool
+    {
+        return $this->journal_entry_id !== null;
     }
 
     /** @return BelongsTo<User, PayrollRun> */

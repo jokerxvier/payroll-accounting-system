@@ -50,6 +50,14 @@ export interface PayrollRunSummary {
     voided_by: PayrollRunActor | null;
     bulk_pdf_built_at: string | null;
     has_bulk_pdf: boolean;
+    /**
+     * When the run reached the general ledger. Null on a posted run means
+     * the ledger posting was refused (a closed accounting period, a missing
+     * mapped account) — payroll is not blocked on the books being open, so
+     * this is a real state that can be retried, not an error.
+     */
+    ledger_posted_at: string | null;
+    journal_entry: { id: number; entry_number: string | null } | null;
 }
 
 export interface PayrollRunCanFlags {

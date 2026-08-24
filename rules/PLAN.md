@@ -346,10 +346,15 @@ Ordering is load-bearing: the journal must be trustworthy before any document po
       with a live running balance so an imbalance is visible before submit.
 
 #### Slice 3 — Payroll → GL posting seam
-- [ ] `config/accounting.php` mapping payroll components to account codes.
-- [ ] `posting_payload` JSON column on `pas_payroll_runs`.
-- [ ] `LedgerPostingService::post(PayrollRun $run)`, wired into `PostPayrollRunAction`.
+- [x] `config/accounting.php` mapping payroll components to account codes.
+- [x] `posting_payload` JSON column on `pas_payroll_runs`, plus `journal_entry_id`
+      and `ledger_posted_at`.
+- [x] `LedgerPostingService::post(PayrollRun $run)`, wired into `PostPayrollRunAction`.
       Pays off the Section 11 debt — none of this was built in v1.
+- [x] The ledger posting deliberately cannot fail the payroll post. A closed
+      period or a missing account mapping logs and leaves `journal_entry_id`
+      null; the run is retried once the books are ready, and the post is
+      idempotent so retrying is safe. Payroll is not blocked on accounting.
 
 #### Slices 4–7 — Documents
 - [ ] Contacts (customer / supplier, TIN, per-contact AR/AP control accounts).
