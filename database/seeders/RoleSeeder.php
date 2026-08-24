@@ -26,6 +26,17 @@ use Spatie\Permission\PermissionRegistrar;
  *                        payroll runs, manages catalog within their school. NO
  *                        cross-tenant powers.
  *  - payroll-officer / hr / auditor / employee — LMS-derived, school-scoped.
+ *  - accountant        — Phase 5 ledger operator. Seeded but NOT yet reachable:
+ *                        no LMS role maps to it in config/payroll.php, and
+ *                        AssignPayrollRoleOnLogin re-applies that mapping with
+ *                        syncRoles on every login, so a hand-assigned role is
+ *                        stripped at next sign-in. Remapping LMS roles 6
+ *                        (Accountant) / 13 (Accounts/Finance Officer) here
+ *                        would revoke their payroll access, since syncRoles
+ *                        replaces rather than adds — that trade-off is the
+ *                        client's call (Open Question 3 in the Phase 5 plan).
+ *                        Until then App\Policies\Pas\AccountingRoles also
+ *                        allowlists payroll-officer so the module is usable.
  */
 final class RoleSeeder extends Seeder
 {
@@ -35,6 +46,7 @@ final class RoleSeeder extends Seeder
             'platform-admin',
             'super-admin',
             'payroll-officer',
+            'accountant',
             'hr',
             'auditor',
             'employee',

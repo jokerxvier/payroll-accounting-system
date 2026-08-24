@@ -236,8 +236,20 @@ it('leaves no pre-existing row with a null school_id', function () use ($tenantS
     // that explicitly tested the nullable behaviour. We assert the simpler
     // sweep: every row in every scoped table currently has a school_id
     // assigned (no leakage from the backfill step).
+    // `pas_audit_logs` is exempt. Migration 2026_05_11_000001 deliberately
+    // relaxed its school_id back to NULLABLE, because an audit row for a
+    // non-tenant-scoped record has no natural tenant to file under. School
+    // itself is such a record — it IS the tenant — so auditing one writes a
+    // legitimately null school_id. Sweeping it here would re-assert the
+    // invariant that migration removed on purpose.
+    $exempt = ['pas_audit_logs'];
+
     foreach ($tenantScopedTables as $config) {
         $table = $config['table'];
+
+        if (in_array($table, $exempt, true)) {
+            continue;
+        }
 
         $nullCount = DB::table($table)->whereNull('school_id')->count();
 

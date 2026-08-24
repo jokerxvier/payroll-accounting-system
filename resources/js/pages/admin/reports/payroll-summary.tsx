@@ -1,5 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
-import { Download, FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet } from 'lucide-react';
+import { ReportExportMenu } from '@/components/admin/report-export-menu';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,14 +74,7 @@ export default function PayrollSummaryReport({ filters, rows, totals }: Props) {
                     eyebrow="REPORTS"
                     title="Payroll summary"
                     description="Per-period aggregates of gross pay, employee deductions, employer contributions, and net pay across every non-voided payroll run inside the date range."
-                    actions={
-                        <Button asChild variant="outline" size="sm">
-                            <a href={exportUrl}>
-                                <Download className="mr-1 h-4 w-4" />
-                                Export Excel
-                            </a>
-                        </Button>
-                    }
+                    actions={<ReportExportMenu baseUrl={exportUrl} />}
                 />
 
                 <Card>

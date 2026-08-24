@@ -72,7 +72,8 @@ return [
     | the nav for the current environment. Presentational only — authorisation
     | is unchanged; direct URLs still resolve for authorised users.
     |
-    | Valid section names: directory, payroll, catalog, audit, tenants
+    | Valid section names: directory, payroll, catalog, accounting, audit,
+    | tenants
     |
     | Use case: client demos / screenshots where a section isn't yet ready or
     | shouldn't be shown. Flip without redeploying via .env + config:clear.

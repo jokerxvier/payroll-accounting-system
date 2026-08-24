@@ -1,14 +1,17 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import {
     BarChart3,
+    BookOpen,
     Building2,
     Calculator,
     CalendarDays,
+    CalendarRange,
     Check,
     ChevronsUpDown,
     FileSearch,
     LayoutGrid,
     MinusCircle,
+    Percent,
     PlayCircle,
     PlusCircle,
     RotateCcw,
@@ -40,7 +43,9 @@ import {
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { dashboard } from '@/routes';
+import { index as adminAccountingPeriodsIndex } from '@/routes/admin/accounting-periods';
 import { index as adminAllowancesIndex } from '@/routes/admin/allowances';
+import { index as adminChartOfAccountsIndex } from '@/routes/admin/chart-of-accounts';
 import { index as adminContributionTablesIndex } from '@/routes/admin/contribution-tables';
 import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
 import { index as adminPayPeriodsIndex } from '@/routes/admin/pay-periods';
@@ -50,6 +55,7 @@ import {
     switchMethod as adminSchoolsSwitch,
 } from '@/routes/admin/schools';
 import { clear as adminSchoolsSwitchClear } from '@/routes/admin/schools/switch';
+import { index as adminTaxRatesIndex } from '@/routes/admin/tax-rates';
 import { index as employeesIndex } from '@/routes/employees';
 import { show as payrollPreviewShow } from '@/routes/payroll/preview';
 import type { NavItem } from '@/types';
@@ -93,6 +99,21 @@ const CATALOG_READ_ROLES = [
     'super-admin',
     'payroll-officer',
     'hr',
+] as const;
+
+// Mirrors App\Policies\Pas\AccountingRoles::VIEW — the role list shared by
+// ChartOfAccountPolicy, TaxRatePolicy, and AccountingPeriodPolicy. Read
+// access is the union; mutation and the narrower period close/reopen are
+// gated server-side and surfaced per row via `can` flags. `payroll-officer`
+// is present because config/payroll.php maps the LMS "Accountant" role to it
+// (see the AccountingRoles docblock). Platform admins included via the
+// Gate::before short-circuit.
+const ACCOUNTING_ROLES = [
+    'platform-admin',
+    'super-admin',
+    'accountant',
+    'payroll-officer',
+    'auditor',
 ] as const;
 
 // Mirrors AuditLogController::ALLOWED_ROLES.
@@ -167,6 +188,24 @@ const catalogNavItems: NavItem[] = [
     },
 ];
 
+const accountingNavItems: NavItem[] = [
+    {
+        title: 'Chart of accounts',
+        href: adminChartOfAccountsIndex(),
+        icon: BookOpen,
+    },
+    {
+        title: 'Tax rates',
+        href: adminTaxRatesIndex(),
+        icon: Percent,
+    },
+    {
+        title: 'Periods',
+        href: adminAccountingPeriodsIndex(),
+        icon: CalendarRange,
+    },
+];
+
 const auditNavItems: NavItem[] = [
     {
         title: 'Audit log',
@@ -215,6 +254,8 @@ export function AppSidebar() {
         hasAnyRole(userRoles, PAYROLL_MAKER_ROLES) && !isHidden('payroll');
     const canViewCatalog =
         hasAnyRole(userRoles, CATALOG_READ_ROLES) && !isHidden('catalog');
+    const canViewAccounting =
+        hasAnyRole(userRoles, ACCOUNTING_ROLES) && !isHidden('accounting');
     const canViewAudit =
         hasAnyRole(userRoles, AUDIT_ROLES) && !isHidden('audit');
     const canManageSchools =
@@ -351,6 +392,12 @@ export function AppSidebar() {
                 )}
                 {canViewCatalog && (
                     <SidebarSection label="Catalog" items={catalogNavItems} />
+                )}
+                {canViewAccounting && (
+                    <SidebarSection
+                        label="Accounting"
+                        items={accountingNavItems}
+                    />
                 )}
                 {canViewAudit && (
                     <SidebarSection label="Audit" items={auditNavItems} />

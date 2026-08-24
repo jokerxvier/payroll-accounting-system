@@ -275,7 +275,7 @@ Bonus shipped beyond original scope:
 - Payroll summary report: per-period totals across gross, statutory contributions (employee + employer), custom deductions, net.
 - Employee history report: per-employee timeline of payslips with running totals.
 - Year-to-date views per employee (groundwork for future year-end annualization).
-- Each report exportable to Excel, CSV, and PDF.
+- [x] Each report exportable to Excel, CSV, and PDF. (xlsx shipped in W13; csv + pdf added 2026-08-24 — dompdf views under `resources/views/reports/`.)
 - Server-side report generation queued; UI shows status and download link when ready.
 - Filters: date range, employee, department, employment type, status.
 
@@ -283,7 +283,7 @@ Bonus shipped beyond original scope:
 - Read-only audit log UI with filters (actor, action, date range, target).
 - Detail drawer showing before/after diff per entry.
 - Export audit log to CSV for external review.
-- Verify every payroll-affecting action across phases produces an audit entry — gap analysis.
+- [x] Verify every payroll-affecting action across phases produces an audit entry — gap analysis. Executable as `tests/Feature/Acceptance/AuditCoverageTest.php`. Two gaps found and fixed: `School` was never audited, and payslips destroyed by the payroll-run delete cascade left no trail. Documented non-audits: the `SchoolObserver` bulk catalog clone (deliberate — it is a system copy, not a user edit) and the login-time `pas_users` upsert (LMS identity sync, not a payroll action).
 - Retention policy documented (e.g., audit logs retained indefinitely; payroll runs retained for at least 10 years per Philippine tax record requirements).
 
 #### Week 15 — UAT, performance, and bug fixes
@@ -303,11 +303,63 @@ Bonus shipped beyond original scope:
 
 **Phase 4 acceptance criteria**
 
-- [ ] Three reports (summary, employee history, audit) export cleanly to all three formats
-- [ ] Every state-changing action across the system has an audit log entry; spot-check passes for each role
+- [x] Three reports (summary, employee history, audit) export cleanly to all three formats — xlsx / csv / pdf, via a `format` query parameter on each `/export` endpoint
+- [x] Every state-changing action across the system has an audit log entry; spot-check passes for each role — pinned by `tests/Feature/Acceptance/AuditCoverageTest.php`, which drives each endpoint, asserts the row and its actor, and structurally guards that every persisted `pas_*` model carries the Auditable trait
 - [ ] Production deployment completes without data loss and the smoke-test checklist passes
 - [ ] User documentation reviewed and accepted by client HR contact
 - [ ] All P0 and P1 bugs from UAT closed; P2/P3 logged in the backlog with owners
+
+---
+
+### Phase 5 — Invoicing & Accounting (post-v1)
+
+**Goal:** the accounting half of "Payroll & Accounting" — chart of accounts, a balanced
+double-entry journal, VAT-aware sales invoices and supplier bills with BIR-compliant numbering,
+payment allocation, and the financial reports the client listed in
+`Financial Reports With Formula.docx`. Full plan:
+`~/.claude/plans/i-want-to-implemement-proud-taco.md`. Section 11 below explains why this was
+deferred out of v1.
+
+Ordering is load-bearing: the journal must be trustworthy before any document posts to it.
+
+#### Slice 1 — Ledger foundation
+- [x] `pas_chart_of_accounts` — per-school, with `normal_balance` and `cash_flow_category` stored
+      explicitly so the General Ledger and Cash Flow reports can be correct.
+- [x] `pas_tax_rates` — rates in integer basis points (12% = 1200), never floats.
+- [x] `pas_accounting_periods` promoted from a dormant Phase-1 table to a real model, admin UI,
+      and close / reopen transitions with actor stamps.
+- [x] `SchoolObserver` extended to clone both catalogs onto new schools, remapping the intra-set
+      foreign keys (`parent_id`, `account_id`) so a tenant never points at another's rows.
+- [x] `AccountingCatalogSeeder` — default Philippine private-school chart + the four VAT rates.
+- [x] `accountant` role seeded; `AccountingRoles` shares one role list across all three policies.
+
+#### Slice 2 — Journal entries and invariants
+- [ ] `pas_journal_entries` + `pas_journal_entry_lines`.
+- [ ] `PostJournalEntry` asserting debits === credits in cents before persisting.
+- [ ] Posting guard rejecting any entry dated inside a closed period.
+- [ ] Void-by-reversal — a posted entry is never mutated.
+- [ ] Manual journal entry UI using the debit/credit table from `THEME.md` §6.3.
+
+#### Slice 3 — Payroll → GL posting seam
+- [ ] `config/accounting.php` mapping payroll components to account codes.
+- [ ] `posting_payload` JSON column on `pas_payroll_runs`.
+- [ ] `LedgerPostingService::post(PayrollRun $run)`, wired into `PostPayrollRunAction`.
+      Pays off the Section 11 debt — none of this was built in v1.
+
+#### Slices 4–7 — Documents
+- [ ] Contacts (customer / supplier, TIN, per-contact AR/AP control accounts).
+- [ ] Sales invoices: gapless BIR numbering, VAT-aware lines, PDF, credit notes, receipts.
+- [ ] Supplier bills, reusing the invoice engine with the posting direction inverted.
+- [ ] Payments and allocation (partial, multi-invoice).
+
+#### Slice 8 — Financial reports
+- [ ] Trial Balance, General Ledger, Journal Report, Income Statement, Balance Sheet,
+      Cash Flow Statement, Statement of Changes in Equity.
+- [ ] Aged Receivables (summary + detail), Customer Statement, Invoice Register,
+      Outstanding Invoices, Receipts Report, Credit Notes Report.
+
+**Explicit non-goals for Phase 5:** bank feeds and reconciliation, multi-currency, budgeting,
+fixed-asset depreciation schedules.
 
 ---
 
@@ -411,9 +463,13 @@ Decisions go in `docs/decisions/` as ADRs (Architecture Decision Records), one p
 
 ---
 
-## 11. The Accounting Side — Deferred to a Later Phase of This Same Project
+## 11. The Accounting Side — Now Phase 5 (In Progress)
 
 The system is named "Payroll & Accounting" and **both modules ship from this codebase**. v1 (the 16-week timeline above) covers payroll only. The accounting half (general ledger, journal entries, chart of accounts, financial statements) is a **later phase of this same project**, not a separate codebase or external system.
+
+**Status (2026-08-24): this is now Phase 5, and Slice 1 has shipped.** See the Phase 5 breakdown
+in Section 5 above. Note that the three v1 groundwork promises listed below were **never actually
+built** — verified absent on 2026-08-24 — so Slice 3 delivers them rather than building on them.
 
 Why deferred:
 
@@ -462,6 +518,16 @@ Month 4: Reports, Audit, Polish, Launch
   W16 Documentation, deployment, handover         [Gate 4 / Launch]
 
 Week 17: Hypercare (post-launch, outside the plan)
+
+Phase 5: Invoicing & Accounting (post-v1, see Section 5)
+  S1  Ledger foundation — chart of accounts, tax rates, periods   [shipped]
+  S2  Journal entries + balance/period invariants
+  S3  Payroll → GL posting seam (pays off the Section 11 debt)
+  S4  Contacts
+  S5  Sales invoices (AR) — BIR numbering, VAT, PDF, credit notes
+  S6  Supplier bills (AP)
+  S7  Payments & allocation
+  S8  Financial reports
 ```
 
 ---

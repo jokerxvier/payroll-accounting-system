@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use App\Models\Pas\Allowance;
+use App\Models\Pas\AuditLog;
 use App\Models\Pas\DeductionType;
 use App\Models\Pas\School;
 use App\Observers\SchoolObserver;
+use Spatie\Multitenancy\Models\Tenant;
 
 /*
  * Stage F of the multi-tenant catalog conversion (auto-clone observer).
@@ -137,6 +139,15 @@ it('skips silently when the default school does not exist', function (): void {
     // A fresh-bootstrap dev/test env may create a school before the default
     // is seeded (rare, but possible during seeders themselves). The observer
     // must defensively no-op rather than throwing.
+    // School is audited, so the default school's own creation row has to go
+    // before the school can be removed — pas_audit_logs.school_id is
+    // restrictOnDelete. Forget the tenant too, or the School created below
+    // files its audit against the row we just deleted.
+    Tenant::forgetCurrent();
+
+    $defaultId = School::query()->where('slug', 'default')->value('id');
+    AuditLog::query()->withoutGlobalScopes()->where('school_id', $defaultId)->delete();
+
     School::query()->where('slug', 'default')->delete();
 
     // Creating a new school should not throw.

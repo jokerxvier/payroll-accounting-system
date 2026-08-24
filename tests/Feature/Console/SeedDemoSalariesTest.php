@@ -8,11 +8,11 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 uses(RefreshDatabase::class);
 
 it('assigns a random round-thousand salary only to zero-salary active rows', function () {
-    EmployeeProfile::factory()->create([
+    $zeroSalaryA = EmployeeProfile::factory()->create([
         'is_active' => true,
         'basic_salary_centavos' => 0,
     ]);
-    EmployeeProfile::factory()->create([
+    $zeroSalaryB = EmployeeProfile::factory()->create([
         'is_active' => true,
         'basic_salary_centavos' => 0,
     ]);
@@ -30,9 +30,14 @@ it('assigns a random round-thousand salary only to zero-salary active rows', fun
         ->assertSuccessful();
 
     // Active zero-salary rows are now non-zero and round-thousand pesos.
+    //
+    // Identified by id, NOT by "salary != 5,000,000". The action picks a
+    // random round-thousand between ₱25,000 and ₱75,000, so ₱50,000 is one
+    // of the 51 values it can legitimately assign — filtering by value made
+    // this test fail whenever a seeded row happened to land on exactly the
+    // pre-set figure, roughly 1 - (50/51)^2 ≈ 3.9% of runs.
     $touched = EmployeeProfile::query()
-        ->where('is_active', true)
-        ->where('basic_salary_centavos', '!=', 5_000_000)
+        ->whereKey([$zeroSalaryA->getKey(), $zeroSalaryB->getKey()])
         ->get();
 
     expect($touched)->toHaveCount(2);
