@@ -11,12 +11,14 @@ use App\Models\Pas\EmployeeAllowance;
 use App\Models\Pas\EmployeeDeduction;
 use App\Models\Pas\EmployeeLoan;
 use App\Models\Pas\EmployeeProfile;
+use App\Models\Pas\JournalEntry;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollAdjustment;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\School;
 use App\Models\Pas\StatutoryContribution;
 use App\Models\Pas\TaxRate;
+use App\Observers\JournalEntryObserver;
 use App\Observers\PayrollRunObserver;
 use App\Observers\SchoolObserver;
 use App\Policies\Pas\AccountingPeriodPolicy;
@@ -91,6 +93,7 @@ class AppServiceProvider extends ServiceProvider
         School::observe(SchoolObserver::class);
         // Auto-close a pay period when its payroll posts; reopen on delete.
         PayrollRun::observe(PayrollRunObserver::class);
+        JournalEntry::observe(JournalEntryObserver::class);
     }
 
     /**
