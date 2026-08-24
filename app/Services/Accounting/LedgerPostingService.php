@@ -17,6 +17,7 @@ use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -223,7 +224,24 @@ final class LedgerPostingService
         /** @var array<string, string> $map */
         $map = (array) config("accounting.payroll.{$bucket}", []);
 
-        return (string) ($map[$code] ?? $map['default'] ?? '');
+        if (isset($map[$code])) {
+            return (string) $map[$code];
+        }
+
+        // Falling back keeps the entry balanced, but it also hides a mapping
+        // error: a real payroll run once sent every peso of withholding tax
+        // to the default account because the config named the contribution's
+        // bare code rather than the `_EMPLOYEE` line code the engine emits.
+        // The books still balanced, so nothing failed — it just quietly went
+        // to the wrong account. Say so.
+        Log::warning('Payroll line fell through to the default ledger account.', [
+            'bucket' => $bucket,
+            'line_code' => $code,
+            'default_account_code' => $map['default'] ?? null,
+            'hint' => 'Add an explicit mapping in config/accounting.php if this belongs elsewhere.',
+        ]);
+
+        return (string) ($map['default'] ?? '');
     }
 
     /**

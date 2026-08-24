@@ -81,7 +81,7 @@ function payslipWithLines(PayrollRun $run, int $gross = 4_500_000): Payslip
         'audit_lines' => [
             ['code' => PayrollLineItem::CODE_BASIC_PAY, 'label' => 'Basic pay', 'amount' => $gross, 'bucket' => PayrollLineItem::BUCKET_EARNING, 'meta' => null],
             ['code' => 'SSS_EMPLOYEE', 'label' => 'SSS (employee)', 'amount' => $sssEmployee, 'bucket' => PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION, 'meta' => null],
-            ['code' => 'BIR_WITHHOLDING', 'label' => 'Withholding tax', 'amount' => $tax, 'bucket' => PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION, 'meta' => null],
+            ['code' => 'BIR_WITHHOLDING_EMPLOYEE', 'label' => 'Withholding tax', 'amount' => $tax, 'bucket' => PayrollLineItem::BUCKET_EMPLOYEE_DEDUCTION, 'meta' => null],
             ['code' => 'SSS_EMPLOYER', 'label' => 'SSS (employer)', 'amount' => $sssEmployer, 'bucket' => PayrollLineItem::BUCKET_EMPLOYER_CONTRIBUTION, 'meta' => null],
         ],
     ]);
@@ -314,4 +314,41 @@ it('posts on the pay period end date, not today', function () {
     $entry = postRun($run)->journalEntry;
 
     expect($entry->date->toDateString())->toBe('2026-08-31');
+});
+
+it('maps withholding tax to the tax payable account, not the fallback', function () {
+    // Regression: config once mapped the contribution's bare code
+    // ("BIR_WITHHOLDING") while the engine emits the composed line code
+    // ("BIR_WITHHOLDING_EMPLOYEE"). Every peso of withholding tax fell
+    // through to the default account. The entry still balanced, so nothing
+    // failed — it just quietly went to Accounts Payable.
+    $run = runForLedger();
+    payslipWithLines($run);
+
+    $entry = postRun($run)->journalEntry->load('lines.account');
+    $byCode = $entry->lines->keyBy(fn (JournalEntryLine $l) => $l->account->code);
+
+    expect($byCode->has('2340'))->toBeTrue('Withholding tax should post to 2340')
+        ->and($byCode['2340']->credit_centavos)->toBe(310_000);
+
+    // And it must NOT have landed in the employee-deduction fallback.
+    expect($byCode->has('2100'))->toBeFalse(
+        'Nothing in this payslip should reach the default Accounts Payable account',
+    );
+});
+
+it('names every statutory line code the engine actually emits', function () {
+    // The engine composes statutory codes as {contribution}_EMPLOYEE /
+    // _EMPLOYER / _EMPLOYER_EC. Each one the default chart cares about must
+    // have an explicit mapping, or it silently lands in the bucket default.
+    $deductions = config('accounting.payroll.employee_deductions');
+    $employer = config('accounting.payroll.employer_contributions');
+
+    foreach (['SSS_EMPLOYEE', 'PHILHEALTH_EMPLOYEE', 'PAGIBIG_EMPLOYEE', 'BIR_WITHHOLDING_EMPLOYEE'] as $code) {
+        expect($deductions)->toHaveKey($code);
+    }
+
+    foreach (['SSS_EMPLOYER', 'SSS_EMPLOYER_EC', 'PHILHEALTH_EMPLOYER', 'PAGIBIG_EMPLOYER'] as $code) {
+        expect($employer)->toHaveKey($code);
+    }
 });

@@ -56,7 +56,12 @@ return [
             'SSS_EMPLOYEE' => '2310',
             'PHILHEALTH_EMPLOYEE' => '2320',
             'PAGIBIG_EMPLOYEE' => '2330',
-            'BIR_WITHHOLDING' => '2340',
+            // NOTE the _EMPLOYEE suffix. The engine composes statutory line
+            // codes as `{contribution_code}_EMPLOYEE`, so the line emitted for
+            // the BIR_WITHHOLDING contribution row is BIR_WITHHOLDING_EMPLOYEE.
+            // Mapping the bare code silently sent every peso of withholding
+            // tax to the bucket default instead.
+            'BIR_WITHHOLDING_EMPLOYEE' => '2340',
             'unpaid_days' => '5100',
             'loan_amortization' => '2100',
             'custom_deduction' => '2100',
