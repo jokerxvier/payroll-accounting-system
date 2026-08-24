@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Admin\Accounting\AccountingPeriodController;
 use App\Http\Controllers\Admin\Accounting\ChartOfAccountController;
+use App\Http\Controllers\Admin\Accounting\JournalEntryController;
 use App\Http\Controllers\Admin\Accounting\TaxRateController;
 use App\Http\Controllers\Admin\AllowanceController;
 use App\Http\Controllers\Admin\AuditLogController;
@@ -180,6 +181,20 @@ Route::middleware(['auth', 'verified'])
         Route::resource('tax-rates', TaxRateController::class)
             ->parameters(['tax-rates' => 'taxRate'])
             ->except(['show']);
+
+        // Journal entries. Unlike the other accounting resources this keeps
+        // its create/edit pages: the line grid needs the width (see the
+        // controller docblock).
+        //
+        // post / reverse are registered BEFORE the resource so their static
+        // segments win against `journal-entries/{journalEntry}` — the same
+        // ordering constraint as the period transitions above.
+        Route::post('journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post'])
+            ->name('journal-entries.post');
+        Route::post('journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])
+            ->name('journal-entries.reverse');
+        Route::resource('journal-entries', JournalEntryController::class)
+            ->parameters(['journal-entries' => 'journalEntry']);
 
         // Accounting periods. `destroy` is excluded on purpose — the policy
         // refuses deletion outright, because Slice 2 attaches journal entries

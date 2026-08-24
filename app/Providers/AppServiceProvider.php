@@ -29,6 +29,7 @@ use App\Policies\Pas\EmployeeAllowancePolicy;
 use App\Policies\Pas\EmployeeDeductionPolicy;
 use App\Policies\Pas\EmployeeLoanPolicy;
 use App\Policies\Pas\EmployeeProfilePolicy;
+use App\Policies\Pas\JournalEntryPolicy;
 use App\Policies\Pas\PayPeriodPolicy;
 use App\Policies\Pas\PayrollAdjustmentPolicy;
 use App\Policies\Pas\PayrollRunPolicy;
@@ -171,6 +172,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(ChartOfAccount::class, ChartOfAccountPolicy::class);
         Gate::policy(TaxRate::class, TaxRatePolicy::class);
         Gate::policy(AccountingPeriod::class, AccountingPeriodPolicy::class);
+
+        // Phase 5 Slice 2 — the journal.
+        Gate::policy(JournalEntry::class, JournalEntryPolicy::class);
 
         // Week 8 — real-time gross-to-net preview. Class-level Gate (no
         // underlying model), so it lives outside Gate::policy() registrations.

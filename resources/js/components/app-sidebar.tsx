@@ -2,6 +2,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 import {
     BarChart3,
     BookOpen,
+    BookText,
     Building2,
     Calculator,
     CalendarDays,
@@ -48,6 +49,7 @@ import { index as adminAllowancesIndex } from '@/routes/admin/allowances';
 import { index as adminChartOfAccountsIndex } from '@/routes/admin/chart-of-accounts';
 import { index as adminContributionTablesIndex } from '@/routes/admin/contribution-tables';
 import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
+import { index as adminJournalEntriesIndex } from '@/routes/admin/journal-entries';
 import { index as adminPayPeriodsIndex } from '@/routes/admin/pay-periods';
 import { index as adminPayrollRunsIndex } from '@/routes/admin/payroll-runs';
 import {
@@ -193,6 +195,11 @@ const accountingNavItems: NavItem[] = [
         title: 'Chart of accounts',
         href: adminChartOfAccountsIndex(),
         icon: BookOpen,
+    },
+    {
+        title: 'Journal',
+        href: adminJournalEntriesIndex(),
+        icon: BookText,
     },
     {
         title: 'Tax rates',

@@ -334,11 +334,16 @@ Ordering is load-bearing: the journal must be trustworthy before any document po
 - [x] `accountant` role seeded; `AccountingRoles` shares one role list across all three policies.
 
 #### Slice 2 — Journal entries and invariants
-- [ ] `pas_journal_entries` + `pas_journal_entry_lines`.
-- [ ] `PostJournalEntry` asserting debits === credits in cents before persisting.
-- [ ] Posting guard rejecting any entry dated inside a closed period.
-- [ ] Void-by-reversal — a posted entry is never mutated.
-- [ ] Manual journal entry UI using the debit/credit table from `THEME.md` §6.3.
+- [x] `pas_journal_entries` + `pas_journal_entry_lines`.
+- [x] `PostJournalEntry` asserting debits === credits in cents before persisting.
+- [x] Posting guard rejecting any entry dated inside a closed period
+      (`AccountingPeriodGuard` — the single gate every posting passes through).
+- [x] Correction by reversal — a posted entry is never mutated, and BOTH the
+      original and its reversal stay posted so they offset. Marking the original
+      voided would drop it from `scopePosted()` and understate the account by the
+      full amount. Action is `ReverseJournalEntry`; stamps are `reversed_*`.
+- [x] Manual journal entry UI using the debit/credit table from `THEME.md` §6.3,
+      with a live running balance so an imbalance is visible before submit.
 
 #### Slice 3 — Payroll → GL posting seam
 - [ ] `config/accounting.php` mapping payroll components to account codes.

@@ -49,6 +49,19 @@ final class AccountingRoles
     public const VIEW = ['super-admin', 'accountant', 'payroll-officer', 'auditor'];
 
     /**
+     * Post an entry to the ledger, and reverse one that is already posted.
+     *
+     * Narrower than MANAGE on purpose, giving the journal the same
+     * maker-checker shape as the payroll run lifecycle: anyone in MANAGE can
+     * draft an entry and get the figures right, but committing it to the
+     * books — or correcting something already committed — sits with the
+     * people who own the ledger.
+     *
+     * @var list<string>
+     */
+    public const POST_LEDGER = ['super-admin', 'accountant'];
+
+    /**
      * Close and reopen an accounting period.
      *
      * Deliberately narrower than MANAGE: closing freezes the ledger and
