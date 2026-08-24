@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\Accounting\DocumentNumberSeriesController;
 use App\Http\Controllers\Admin\Accounting\InvoiceController;
 use App\Http\Controllers\Admin\Accounting\InvoicePrintController;
 use App\Http\Controllers\Admin\Accounting\JournalEntryController;
+use App\Http\Controllers\Admin\Accounting\PaymentController;
 use App\Http\Controllers\Admin\Accounting\TaxRateController;
 use App\Http\Controllers\Admin\AllowanceController;
 use App\Http\Controllers\Admin\AuditLogController;
@@ -237,6 +238,17 @@ Route::middleware(['auth', 'verified'])
         Route::get('invoices/{invoice}/print', [InvoicePrintController::class, 'show'])
             ->name('invoices.print');
         Route::resource('invoices', InvoiceController::class);
+
+        // Phase 5 Slice 7 — payments and allocation.
+        //
+        // The post / void transitions are registered BEFORE the resource so
+        // their static segments win the match against `payments/{payment}`,
+        // the same ordering constraint as the invoice transitions above.
+        Route::post('payments/{payment}/post', [PaymentController::class, 'post'])
+            ->name('payments.post');
+        Route::post('payments/{payment}/void', [PaymentController::class, 'void'])
+            ->name('payments.void');
+        Route::resource('payments', PaymentController::class);
 
         // Document numbering series. No `destroy` — a series that has issued
         // numbers is the record of which serials went out, so it is

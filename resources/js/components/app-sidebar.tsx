@@ -10,6 +10,7 @@ import {
     CalendarRange,
     Check,
     ChevronsUpDown,
+    FileInput,
     FileSearch,
     FileText,
     Hash,
@@ -21,6 +22,7 @@ import {
     RotateCcw,
     ShieldCheck,
     Users,
+    Wallet,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -57,6 +59,7 @@ import { index as adminDocumentSeriesIndex } from '@/routes/admin/document-serie
 import { index as adminInvoicesIndex } from '@/routes/admin/invoices';
 import { index as adminJournalEntriesIndex } from '@/routes/admin/journal-entries';
 import { index as adminPayPeriodsIndex } from '@/routes/admin/pay-periods';
+import { index as adminPaymentsIndex } from '@/routes/admin/payments';
 import { index as adminPayrollRunsIndex } from '@/routes/admin/payroll-runs';
 import {
     index as adminSchoolsIndex,
@@ -214,6 +217,21 @@ const accountingNavItems: NavItem[] = [
         title: 'Invoices',
         href: adminInvoicesIndex(),
         icon: FileText,
+    },
+    // Bills share the invoice controller and policy — the `type` filter is
+    // what separates them. Its own entry because a screen reachable only by
+    // hand-editing a query string is not reachable.
+    {
+        title: 'Bills',
+        href: adminInvoicesIndex({ query: { type: 'purchase' } }),
+        icon: FileInput,
+    },
+    // Mirrors App\Policies\Pas\PaymentPolicy::viewAny, which reuses
+    // AccountingRoles::VIEW — same set as the group gate above.
+    {
+        title: 'Payments',
+        href: adminPaymentsIndex(),
+        icon: Wallet,
     },
     // Mirrors App\Policies\Pas\ContactPolicy, which reuses AccountingRoles.
     {

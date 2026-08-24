@@ -8,6 +8,7 @@ use App\Actions\Accounting\ApproveInvoice;
 use App\Concerns\Auditable;
 use App\Concerns\BelongsToTenant;
 use App\Models\User;
+use App\Services\Accounting\InvoiceBalanceService;
 use App\ValueObjects\Money;
 use Carbon\CarbonImmutable;
 use Database\Factories\Pas\InvoiceFactory;
@@ -317,6 +318,21 @@ final class Invoice extends Model
     public function lines(): HasMany
     {
         return $this->hasMany(InvoiceLine::class)->orderBy('line_number');
+    }
+
+    /**
+     * Payments applied to this document.
+     *
+     * Includes allocations from drafts and voided payments — they are kept
+     * as the record of what was applied. Anything reporting what is actually
+     * paid must filter to posted payments, which is what
+     * {@see InvoiceBalanceService} does.
+     *
+     * @return HasMany<PaymentAllocation, $this>
+     */
+    public function allocations(): HasMany
+    {
+        return $this->hasMany(PaymentAllocation::class);
     }
 
     /** @return BelongsTo<Contact, $this> */

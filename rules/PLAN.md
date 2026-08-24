@@ -389,8 +389,36 @@ Ordering is load-bearing: the journal must be trustworthy before any document po
       legally issue is Open Question 1, not something to infer in code. The
       `DocumentNumberSeries::TYPE_CREDIT_NOTE` and `TYPE_OFFICIAL_RECEIPT`
       constants already exist, so both are purely additive.
-- [ ] Supplier bills, reusing the invoice engine with the posting direction inverted.
-- [ ] Payments and allocation (partial, multi-invoice).
+- [x] Supplier bills, reusing the invoice engine with the posting direction
+      inverted. Delivered by Slice 5 rather than as a slice of its own: the
+      single `type`-discriminated `pas_invoices` table meant the AP path —
+      inverted posting, its own numbering series, expense accounts, the
+      "Purchase Bill" face — came out of the same code, covered by the same
+      tests. Slice 7 added the sidebar entry; until then bills existed but
+      were reachable only by hand-editing `?type=purchase`, which is not
+      reachable.
+- [x] Payments and allocation (partial, multi-invoice).
+      One `pas_payments` table with a `type` discriminator (receipt |
+      disbursement) and `pas_payment_allocations` joining it to documents, so
+      one payment settles several and one document is settled over time.
+      `InvoiceBalanceService` is the single place a paid amount is derived,
+      and it counts allocations from **posted** payments only — which is what
+      keeps a keyed-but-uncommitted draft from marking an invoice paid, and
+      what lets a void restore every balance without deleting a single
+      allocation row. Overpayment credits its own account (`2410 Advances
+      from Customers`, `1450 Advances to Suppliers`) rather than driving the
+      receivable negative: an advance is a liability owed back in goods, not
+      a receivable owed backwards. Both accounts were backfilled onto existing
+      charts. Payments carry a free-text reference rather than a serial — a
+      payment records money moving, not a document issued, and drawing from
+      the official-receipt series would commit to an answer for Open Question
+      1 that the client has not given. `ControlAccountResolver` was extracted
+      from `InvoicePostingService` so an invoice debiting a receivable and a
+      receipt crediting it cannot disagree about which account that is.
+      Closes the Slice 5 gap where nothing could write
+      `amount_paid_centavos`: `partially_paid` / `paid` are now reachable,
+      `scopeOutstanding()` means something, and `VoidInvoice`'s "reverse the
+      payment first" guard fires for the first time.
 
 #### Slice 8 — Financial reports
 - [ ] Trial Balance, General Ledger, Journal Report, Income Statement, Balance Sheet,
@@ -566,8 +594,10 @@ Phase 5: Invoicing & Accounting (post-v1, see Section 5)
   S4  Contacts                                                     [shipped]
   S5  Sales invoices (AR) — BIR numbering, VAT, PDF                [shipped]
       (credit notes + official receipts split out, pending Open Question 1)
-  S6  Supplier bills (AP)
-  S7  Payments & allocation
+  S6  Supplier bills (AP)                                          [shipped]
+      (delivered by Slice 5's shared invoice table; Slice 7 added the
+       sidebar entry that made bills reachable)
+  S7  Payments & allocation                                        [shipped]
   S8  Financial reports
 ```
 

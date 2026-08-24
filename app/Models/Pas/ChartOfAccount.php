@@ -103,6 +103,20 @@ final class ChartOfAccount extends Model
 
     public const SYSTEM_PAYROLL_CLEARING = 'PAYROLL_CLEARING';
 
+    /**
+     * Money received that no invoice has claimed yet — a liability until it
+     * is allocated.
+     *
+     * Deliberately NOT `2400 Unearned Tuition Revenue`, which answers a
+     * different question: tuition billed but not yet earned. An unallocated
+     * receipt is cash held against nothing at all. Merging the two would
+     * leave neither figure trustworthy.
+     */
+    public const SYSTEM_CUSTOMER_ADVANCES = 'CUSTOMER_ADVANCES';
+
+    /** The mirror on the buying side: money paid ahead of any bill. */
+    public const SYSTEM_SUPPLIER_ADVANCES = 'SUPPLIER_ADVANCES';
+
     /** @var list<string> */
     public const SYSTEM_CODES = [
         self::SYSTEM_AR_CONTROL,
@@ -111,6 +125,8 @@ final class ChartOfAccount extends Model
         self::SYSTEM_VAT_INPUT,
         self::SYSTEM_RETAINED_EARNINGS,
         self::SYSTEM_PAYROLL_CLEARING,
+        self::SYSTEM_CUSTOMER_ADVANCES,
+        self::SYSTEM_SUPPLIER_ADVANCES,
     ];
 
     protected $table = 'pas_chart_of_accounts';
