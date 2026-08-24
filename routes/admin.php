@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\Accounting\DocumentNumberSeriesController;
 use App\Http\Controllers\Admin\Accounting\InvoiceController;
 use App\Http\Controllers\Admin\Accounting\InvoicePrintController;
 use App\Http\Controllers\Admin\Accounting\JournalEntryController;
+use App\Http\Controllers\Admin\Accounting\LedgerReportController;
 use App\Http\Controllers\Admin\Accounting\PaymentController;
 use App\Http\Controllers\Admin\Accounting\TaxRateController;
 use App\Http\Controllers\Admin\AllowanceController;
@@ -249,6 +250,25 @@ Route::middleware(['auth', 'verified'])
         Route::post('payments/{payment}/void', [PaymentController::class, 'void'])
             ->name('payments.void');
         Route::resource('payments', PaymentController::class);
+
+        // Phase 5 Slice 8a — ledger reports.
+        //
+        // GET-only and read-only, so no resource controller: each report is a
+        // page plus its export sibling. Registered before nothing in
+        // particular — `reports/` collides with no wildcard segment — but kept
+        // together so the three stay discoverable as a group.
+        Route::get('reports/trial-balance', [LedgerReportController::class, 'trialBalance'])
+            ->name('reports.trial-balance');
+        Route::get('reports/trial-balance/export', [LedgerReportController::class, 'trialBalanceExport'])
+            ->name('reports.trial-balance.export');
+        Route::get('reports/general-ledger', [LedgerReportController::class, 'generalLedger'])
+            ->name('reports.general-ledger');
+        Route::get('reports/general-ledger/export', [LedgerReportController::class, 'generalLedgerExport'])
+            ->name('reports.general-ledger.export');
+        Route::get('reports/journal-report', [LedgerReportController::class, 'journal'])
+            ->name('reports.journal-report');
+        Route::get('reports/journal-report/export', [LedgerReportController::class, 'journalExport'])
+            ->name('reports.journal-report.export');
 
         // Document numbering series. No `destroy` — a series that has issued
         // numbers is the record of which serials went out, so it is

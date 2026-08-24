@@ -274,8 +274,12 @@ it('refuses a platform admin the same edits, despite Gate::before', function () 
     $this->actingAs(invoiceAuthAs('accountant'))
         ->post(route('admin.invoices.approve', $invoice));
 
-    $platformAdmin = User::factory()->create(['lms_user_id' => null]);
+    // withoutLmsMirror() is required — see the note in PaymentControllerTest.
+    // The plain attribute override is undone by the factory's afterCreating
+    // hook, leaving a user the Gate::before short-circuit never fires for.
+    $platformAdmin = User::factory()->withoutLmsMirror()->create();
     $platformAdmin->syncRoles(['platform-admin']);
+    $platformAdmin = $platformAdmin->fresh();
 
     $this->actingAs($platformAdmin)
         ->put(route('admin.invoices.update', $invoice->refresh()), invoicePayload())

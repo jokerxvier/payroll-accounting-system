@@ -18,9 +18,12 @@ import {
     MinusCircle,
     Percent,
     PlayCircle,
+    Scale,
+    ScrollText,
     PlusCircle,
     RotateCcw,
     ShieldCheck,
+    Sigma,
     Users,
     Wallet,
 } from 'lucide-react';
@@ -61,6 +64,11 @@ import { index as adminJournalEntriesIndex } from '@/routes/admin/journal-entrie
 import { index as adminPayPeriodsIndex } from '@/routes/admin/pay-periods';
 import { index as adminPaymentsIndex } from '@/routes/admin/payments';
 import { index as adminPayrollRunsIndex } from '@/routes/admin/payroll-runs';
+import {
+    generalLedger as adminGeneralLedgerReport,
+    journalReport as adminJournalReport,
+    trialBalance as adminTrialBalanceReport,
+} from '@/routes/admin/reports';
 import {
     index as adminSchoolsIndex,
     switchMethod as adminSchoolsSwitch,
@@ -248,6 +256,25 @@ const accountingNavItems: NavItem[] = [
         title: 'Periods',
         href: adminAccountingPeriodsIndex(),
         icon: CalendarRange,
+    },
+    // The three ledger reports. LedgerReportController authorizes all of them
+    // through JournalEntryPolicy::viewAny — reading a report is reading the
+    // ledger — which is AccountingRoles::VIEW, the same set as the group gate
+    // above, so no per-item gating is needed.
+    {
+        title: 'Trial balance',
+        href: adminTrialBalanceReport(),
+        icon: Scale,
+    },
+    {
+        title: 'General ledger',
+        href: adminGeneralLedgerReport(),
+        icon: ScrollText,
+    },
+    {
+        title: 'Journal report',
+        href: adminJournalReport(),
+        icon: Sigma,
     },
     // Mirrors App\Policies\Pas\DocumentNumberSeriesPolicy::viewAny, which
     // reuses AccountingRoles::VIEW. Editing is narrower (POST_LEDGER), and

@@ -287,8 +287,14 @@ it('refuses a platform admin the same edits, despite Gate::before', function () 
     $payment = storedPayment();
     $this->actingAs(paymentAuthAs('accountant'))->post(route('admin.payments.post', $payment));
 
-    $platformAdmin = User::factory()->create(['lms_user_id' => null]);
+    // withoutLmsMirror(), not create(['lms_user_id' => null]): the factory's
+    // own afterCreating hook backfills lms_user_id = id *after* the attribute
+    // override, so the plain form produces an LMS-derived user that never
+    // reaches the Gate::before short-circuit — and this test would then pass
+    // without ever exercising the bypass it exists to guard.
+    $platformAdmin = User::factory()->withoutLmsMirror()->create();
     $platformAdmin->syncRoles(['platform-admin']);
+    $platformAdmin = $platformAdmin->fresh();
 
     $this->actingAs($platformAdmin)
         ->put(route('admin.payments.update', $payment->refresh()), paymentPayload())

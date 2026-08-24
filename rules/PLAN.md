@@ -421,10 +421,57 @@ Ordering is load-bearing: the journal must be trustworthy before any document po
       payment first" guard fires for the first time.
 
 #### Slice 8 — Financial reports
-- [ ] Trial Balance, General Ledger, Journal Report, Income Statement, Balance Sheet,
-      Cash Flow Statement, Statement of Changes in Equity.
+Split into three, because the thirteen reports fall into three groups that share
+nothing but a date filter. 8a reads the ledger directly; 8b classifies and
+subtotals what 8a returns; 8c reads invoices and payments rather than the ledger.
+
+**8a — Ledger reports**
+- [x] Trial Balance, General Ledger, Journal Report. Each with an Inertia page
+      and xlsx / csv / pdf exports, all three built on one
+      `LedgerReportService`. Shipped 2026-08-25.
+
+      The Trial Balance is the first code in Phase 5 that adds Slices 1–7
+      together, so it states its own verdict on the page rather than leaving
+      the reader to foot six columns. Against the dev ledger it closes at
+      ₱1,163,770.00 on both sides.
+
+      Two decisions the later slices inherit. **Raw and natural signing are
+      kept apart**: the Dr/Cr columns use `debits − credits`, which is what
+      makes them foot, and the directional figure the statements will consume
+      goes through `ChartOfAccount::movementCentavos()`. Signing early is what
+      would make a trial balance stop balancing. **Ranges are taken on the
+      entry's own date, never `posted_at`**, so a backdated entry lands in the
+      period it belongs to and a closed period's figures cannot move.
+
+      Found and fixed on the way: `pas_journal_entries.date` compares as a
+      *string* under SQLite, where Eloquent's date cast writes
+      `Y-m-d H:i:s` — so `<= '2026-08-31'` silently dropped the last day of
+      every range. Boundaries now go through `dayStart()` / `dayEnd()`, which
+      is correct on both databases and keeps the index usable.
+
+      Also fixed: `User::factory()->create(['lms_user_id' => null])` does not
+      make a platform admin — the factory's own `afterCreating` hook backfills
+      the column afterwards. The Slice 5 and Slice 7 platform-admin regression
+      tests were passing without ever reaching the `Gate::before` bypass they
+      exist to guard. All three now use `withoutLmsMirror()` and still pass.
+- [ ] Income Statement, Balance Sheet, Cash Flow Statement, Statement of
+      Changes in Equity.
+
+      **8b needs a schema addition first.** A Cash Flow Statement has to know
+      which accounts *are* cash, and nothing records that today:
+      `cash_flow_category` is set on every account including the cash ones, and
+      `PaymentController::cashAccountOptions()` currently approximates it as
+      "any asset without a `system_code`" — which admits Prepaid Expenses and
+      Property, Plant and Equipment. An `is_cash_equivalent` flag on
+      `pas_chart_of_accounts` fixes the report and tightens that control at the
+      same time.
+
+**8c — Receivables and document reports**
 - [ ] Aged Receivables (summary + detail), Customer Statement, Invoice Register,
       Outstanding Invoices, Receipts Report, Credit Notes Report.
+
+      Credit Notes Report stays blocked behind Open Question 1, same as the
+      credit-note document itself.
 
 **Explicit non-goals for Phase 5:** bank feeds and reconciliation, multi-currency, budgeting,
 fixed-asset depreciation schedules.
