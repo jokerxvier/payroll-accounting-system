@@ -117,6 +117,21 @@ final class ChartOfAccountController extends Controller
     {
         Gate::authorize('delete', $chartOfAccount);
 
+        // ChartOfAccountPolicy::delete() already refuses a locked account,
+        // but the `Gate::before` short-circuit grants a platform admin every
+        // ability and sails past the state half of that check. Deleting a
+        // system account breaks invoice, bill, payment, and payroll posting,
+        // which is not a permission anyone holds — so the refusal lives here
+        // too, outside authorization.
+        abort_if(
+            $chartOfAccount->is_locked,
+            403,
+            sprintf(
+                'Account %s is a system account. The software posts to it automatically, so it cannot be deleted.',
+                $chartOfAccount->code,
+            ),
+        );
+
         if ($chartOfAccount->children()->exists()) {
             return redirect()
                 ->route('admin.chart-of-accounts.index')

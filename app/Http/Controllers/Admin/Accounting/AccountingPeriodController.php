@@ -92,6 +92,7 @@ final class AccountingPeriodController extends Controller
     public function edit(AccountingPeriod $accountingPeriod): Response
     {
         Gate::authorize('update', $accountingPeriod);
+        $this->assertOpen($accountingPeriod);
 
         return Inertia::render('admin/accounting/periods/edit', [
             'period' => [
@@ -107,6 +108,7 @@ final class AccountingPeriodController extends Controller
         AccountingPeriod $accountingPeriod,
     ): RedirectResponse {
         Gate::authorize('update', $accountingPeriod);
+        $this->assertOpen($accountingPeriod);
 
         /** @var array<string, mixed> $data */
         $data = $request->validated();
@@ -116,6 +118,27 @@ final class AccountingPeriodController extends Controller
         return redirect()
             ->route('admin.accounting-periods.index')
             ->with('success', "Accounting period '{$accountingPeriod->code}' updated.");
+    }
+
+    /**
+     * Refuse to reshape a period that is already closed.
+     *
+     * AccountingPeriodPolicy::update() folds `isOpen()` into its check, but
+     * the `Gate::before` short-circuit grants a platform admin every ability
+     * and bypasses the state half. Moving a closed period's boundaries would
+     * silently change which entries it froze, so the refusal belongs outside
+     * authorization.
+     */
+    private function assertOpen(AccountingPeriod $period): void
+    {
+        abort_if(
+            ! $period->isOpen(),
+            403,
+            sprintf(
+                'Accounting period %s is closed. Reopen it before changing its dates — its boundaries are what every entry inside it was filed against.',
+                $period->code,
+            ),
+        );
     }
 
     public function close(

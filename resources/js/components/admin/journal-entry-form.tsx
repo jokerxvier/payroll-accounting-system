@@ -1,6 +1,6 @@
 import { Link, useForm } from '@inertiajs/react';
 import { Plus, Trash2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
 import InputError from '@/components/input-error';
@@ -122,12 +122,47 @@ function pesosToCentavos(input: string): number {
     return Math.round(parsed * 100);
 }
 
+/**
+ * Digits, at most one decimal point, at most two places after it.
+ *
+ * Applied as a gate on each keystroke rather than sanitising afterwards, so
+ * a rejected character simply never appears. That also covers the minus
+ * sign: a line moves one side by a positive amount, so a negative is not a
+ * value to correct later, it is a keystroke to refuse now.
+ *
+ * A trailing point ("1234.") passes — it is a legitimate half-finished
+ * entry, and refusing it would eat the key the moment it was pressed.
+ */
+const AMOUNT_PATTERN = /^\d*\.?\d{0,2}$/;
+
+/** The raw text sitting in one line's two amount inputs. */
+interface RawAmounts {
+    debit: string;
+    credit: string;
+}
+
+function rawFor(line: JournalEntryLineDraft): RawAmounts {
+    return {
+        debit: centavosToPesos(line.debit_centavos),
+        credit: centavosToPesos(line.credit_centavos),
+    };
+}
+
 export function JournalEntryForm({
     mode,
     accountOptions,
 }: JournalEntryFormProps) {
     const form = useForm<FormShape>(buildDefaults(mode));
     const isEdit = mode.kind === 'edit';
+
+    // The amount inputs are driven by their own raw text, not by the parsed
+    // centavos. Deriving the displayed value from the parsed number means
+    // every keystroke reformats it — typing "5" becomes "5.00" and the next
+    // character lands after the decimals — so a multi-digit figure cannot be
+    // typed at all. Same reason allowance-form.tsx keeps local string state.
+    const [raw, setRaw] = useState<RawAmounts[]>(() =>
+        form.data.lines.map(rawFor),
+    );
 
     const { totalDebit, totalCredit, difference } = useMemo(() => {
         const debit = form.data.lines.reduce(
@@ -160,8 +195,82 @@ export function JournalEntryForm({
         );
     };
 
+    /**
+     * Handle a keystroke in one of a line's two amount inputs.
+     *
+     * Keeps the raw text and the parsed centavos in step, and clears the
+     * opposite side once this one carries a figure — a line moves exactly
+     * one side, and the server rejects both being set.
+     */
+    const setAmount = (
+        index: number,
+        side: 'debit' | 'credit',
+        input: string,
+    ): void => {
+        if (!AMOUNT_PATTERN.test(input)) {
+            return;
+        }
+
+        const centavos = pesosToCentavos(input);
+        const clearsOther = centavos > 0;
+
+        setRaw((prev) =>
+            prev.map((entry, i) => {
+                if (i !== index) {
+                    return entry;
+                }
+
+                if (side === 'debit') {
+                    return {
+                        debit: input,
+                        credit: clearsOther ? '' : entry.credit,
+                    };
+                }
+
+                return {
+                    debit: clearsOther ? '' : entry.debit,
+                    credit: input,
+                };
+            }),
+        );
+
+        updateLine(
+            index,
+            side === 'debit'
+                ? {
+                      debit_centavos: centavos,
+                      ...(clearsOther ? { credit_centavos: 0 } : {}),
+                  }
+                : {
+                      credit_centavos: centavos,
+                      ...(clearsOther ? { debit_centavos: 0 } : {}),
+                  },
+        );
+    };
+
+    /** Settle a half-finished figure ("1234.") into "1234.00" once focus leaves. */
+    const normaliseAmount = (index: number, side: 'debit' | 'credit'): void => {
+        const line = form.data.lines[index];
+
+        if (line === undefined) {
+            return;
+        }
+
+        const centavos =
+            side === 'debit' ? line.debit_centavos : line.credit_centavos;
+
+        setRaw((prev) =>
+            prev.map((entry, i) =>
+                i === index
+                    ? { ...entry, [side]: centavosToPesos(centavos) }
+                    : entry,
+            ),
+        );
+    };
+
     const addLine = (): void => {
         form.setData('lines', [...form.data.lines, emptyLine()]);
+        setRaw((prev) => [...prev, { debit: '', credit: '' }]);
     };
 
     const removeLine = (index: number): void => {
@@ -174,6 +283,7 @@ export function JournalEntryForm({
             'lines',
             form.data.lines.filter((_, i) => i !== index),
         );
+        setRaw((prev) => prev.filter((_, i) => i !== index));
     };
 
     const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
@@ -365,27 +475,20 @@ export function JournalEntryForm({
                                             <Input
                                                 aria-label={`Debit for line ${index + 1}`}
                                                 inputMode="decimal"
-                                                value={centavosToPesos(
-                                                    line.debit_centavos,
-                                                )}
-                                                onChange={(e) => {
-                                                    const centavos =
-                                                        pesosToCentavos(
-                                                            e.target.value,
-                                                        );
-                                                    // Entering one side clears
-                                                    // the other: a line moves
-                                                    // exactly one, and the
-                                                    // server rejects both.
-                                                    updateLine(index, {
-                                                        debit_centavos:
-                                                            centavos,
-                                                        credit_centavos:
-                                                            centavos > 0
-                                                                ? 0
-                                                                : line.credit_centavos,
-                                                    });
-                                                }}
+                                                value={raw[index]?.debit ?? ''}
+                                                onChange={(e) =>
+                                                    setAmount(
+                                                        index,
+                                                        'debit',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                onBlur={() =>
+                                                    normaliseAmount(
+                                                        index,
+                                                        'debit',
+                                                    )
+                                                }
                                                 placeholder="0.00"
                                                 className="text-right tabular-nums"
                                             />
@@ -395,23 +498,20 @@ export function JournalEntryForm({
                                             <Input
                                                 aria-label={`Credit for line ${index + 1}`}
                                                 inputMode="decimal"
-                                                value={centavosToPesos(
-                                                    line.credit_centavos,
-                                                )}
-                                                onChange={(e) => {
-                                                    const centavos =
-                                                        pesosToCentavos(
-                                                            e.target.value,
-                                                        );
-                                                    updateLine(index, {
-                                                        credit_centavos:
-                                                            centavos,
-                                                        debit_centavos:
-                                                            centavos > 0
-                                                                ? 0
-                                                                : line.debit_centavos,
-                                                    });
-                                                }}
+                                                value={raw[index]?.credit ?? ''}
+                                                onChange={(e) =>
+                                                    setAmount(
+                                                        index,
+                                                        'credit',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                onBlur={() =>
+                                                    normaliseAmount(
+                                                        index,
+                                                        'credit',
+                                                    )
+                                                }
                                                 placeholder="0.00"
                                                 className="text-right tabular-nums"
                                             />

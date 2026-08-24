@@ -120,6 +120,7 @@ final class JournalEntryController extends Controller
     public function edit(JournalEntry $journalEntry): Response
     {
         Gate::authorize('update', $journalEntry);
+        $this->assertMutable($journalEntry);
 
         $journalEntry->load('lines');
 
@@ -143,6 +144,7 @@ final class JournalEntryController extends Controller
     public function update(JournalEntryRequest $request, JournalEntry $journalEntry): RedirectResponse
     {
         Gate::authorize('update', $journalEntry);
+        $this->assertMutable($journalEntry);
 
         /** @var array{date: string, reference: ?string, narration: ?string, lines: array<int, array<string, mixed>>} $data */
         $data = $request->validated();
@@ -165,6 +167,7 @@ final class JournalEntryController extends Controller
     public function destroy(JournalEntry $journalEntry): RedirectResponse
     {
         Gate::authorize('delete', $journalEntry);
+        $this->assertMutable($journalEntry);
 
         DB::transaction(fn () => $journalEntry->delete());
 
@@ -217,6 +220,33 @@ final class JournalEntryController extends Controller
         return redirect()
             ->route('admin.journal-entries.show', $reversal)
             ->with('success', "Reversing entry {$reversal->entry_number} posted. The original stays on the books and the two now offset.");
+    }
+
+    /**
+     * Refuse to touch an entry that has already reached the ledger.
+     *
+     * `JournalEntryPolicy` folds this same predicate into `update` and
+     * `delete`, but the policy alone is not enough: the `Gate::before`
+     * short-circuit in `AppServiceProvider::registerPlatformAdminGate()`
+     * returns true for every ability a platform admin asks about, which
+     * sails straight past the state half of the check. Without this guard a
+     * platform admin can rewrite or destroy posted books through these
+     * endpoints.
+     *
+     * Editing posted history is not a permission anyone holds, so the
+     * refusal belongs here — outside authorization entirely — rather than
+     * being expressed as a role that lacks it.
+     */
+    private function assertMutable(JournalEntry $entry): void
+    {
+        abort_if(
+            ! $entry->isMutable(),
+            403,
+            sprintf(
+                'Journal entry %s has been posted. A posted entry is corrected by posting a reversal, never by editing it.',
+                $entry->entry_number ?? ('#'.$entry->getKey()),
+            ),
+        );
     }
 
     /**
@@ -289,11 +319,17 @@ final class JournalEntryController extends Controller
                 'credit_centavos' => $line->credit_centavos,
                 'description' => $line->description,
             ])->values(),
+            // The state predicate is applied here as well as inside the
+            // policy. The Gate::before short-circuit grants a platform admin
+            // every ability, so asking the policy alone would offer them
+            // Edit, Delete and Post on an entry that is already posted —
+            // controls that either 403 or flash an error when pressed.
+            // Legality first, then permission.
             'can' => [
-                'update' => Gate::allows('update', $entry),
-                'delete' => Gate::allows('delete', $entry),
-                'post' => Gate::allows('post', $entry),
-                'reverse' => Gate::allows('reverse', $entry),
+                'update' => $entry->isMutable() && Gate::allows('update', $entry),
+                'delete' => $entry->isMutable() && Gate::allows('delete', $entry),
+                'post' => $entry->isPostable() && Gate::allows('post', $entry),
+                'reverse' => $entry->isReversible() && Gate::allows('reverse', $entry),
             ],
         ];
     }

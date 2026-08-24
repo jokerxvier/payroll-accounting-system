@@ -80,6 +80,23 @@ function typeAmount(label: string, value: string): void {
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
 }
 
+/**
+ * Type character by character, the way a person does.
+ *
+ * `fireEvent.change` with a whole string at once round-trips fine even
+ * through a badly controlled input, which is exactly how the reformat-on-
+ * every-keystroke bug shipped past the first version of these tests. Each
+ * character is appended to whatever the input is currently displaying, so a
+ * value that snaps back mid-entry shows up here.
+ */
+function typeChars(label: string, chars: string): void {
+    const input = screen.getByLabelText(label) as HTMLInputElement;
+
+    for (const char of chars) {
+        fireEvent.change(input, { target: { value: input.value + char } });
+    }
+}
+
 describe('JournalEntryForm', () => {
     it('starts with the two lines double-entry requires', () => {
         render(<Harness />);
@@ -137,17 +154,16 @@ describe('JournalEntryForm', () => {
     it('clears the other side when one side is entered', () => {
         render(<Harness />);
 
+        // The input shows what was typed, not a reformatted version of it —
+        // reformatting mid-entry is what made the field impossible to type
+        // in. Normalising happens on blur.
         typeAmount('Debit for line 1', '5000');
-        expect(screen.getByLabelText('Debit for line 1')).toHaveValue(
-            '5000.00',
-        );
+        expect(screen.getByLabelText('Debit for line 1')).toHaveValue('5000');
 
         // A line moves exactly one side; the server rejects both being set,
         // so the form must not let it happen in the first place.
         typeAmount('Credit for line 1', '3000');
-        expect(screen.getByLabelText('Credit for line 1')).toHaveValue(
-            '3000.00',
-        );
+        expect(screen.getByLabelText('Credit for line 1')).toHaveValue('3000');
         expect(screen.getByLabelText('Debit for line 1')).toHaveValue('');
     });
 
@@ -191,5 +207,59 @@ describe('JournalEntryForm', () => {
         typeAmount('Debit for line 1', '-5000');
 
         expect(screen.getByLabelText('Debit for line 1')).toHaveValue('');
+    });
+});
+
+describe('JournalEntryForm — typing amounts', () => {
+    it('lets a multi-digit amount be typed one character at a time', () => {
+        render(<Harness />);
+
+        typeChars('Debit for line 1', '5000');
+
+        expect(screen.getByLabelText('Debit for line 1')).toHaveValue('5000');
+    });
+
+    it('lets a decimal be typed without the point disappearing', () => {
+        render(<Harness />);
+
+        // "1234." is a legitimate half-finished value. Parsing it to a number
+        // mid-entry and re-rendering wipes the point the user just pressed.
+        typeChars('Credit for line 2', '1234.5');
+
+        expect(screen.getByLabelText('Credit for line 2')).toHaveValue(
+            '1234.5',
+        );
+    });
+
+    it('balances on the amounts actually typed', () => {
+        render(<Harness />);
+
+        typeChars('Debit for line 1', '5000');
+        typeChars('Credit for line 2', '5000');
+
+        expect(screen.getByText('Balanced')).toBeInTheDocument();
+    });
+
+    it('normalises to two decimals on blur', () => {
+        render(<Harness />);
+
+        typeChars('Debit for line 1', '5000');
+        fireEvent.blur(screen.getByLabelText('Debit for line 1'));
+
+        expect(screen.getByLabelText('Debit for line 1')).toHaveValue(
+            '5000.00',
+        );
+    });
+
+    it('lets an amount be cleared back to empty', () => {
+        render(<Harness />);
+
+        typeChars('Debit for line 1', '50');
+        fireEvent.change(screen.getByLabelText('Debit for line 1'), {
+            target: { value: '' },
+        });
+
+        expect(screen.getByLabelText('Debit for line 1')).toHaveValue('');
+        expect(screen.queryByText('Balanced')).not.toBeInTheDocument();
     });
 });

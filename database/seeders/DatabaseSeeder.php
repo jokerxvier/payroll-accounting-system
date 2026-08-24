@@ -24,6 +24,9 @@ class DatabaseSeeder extends Seeder
      *
      *   DemoUsersSeeder     ✓ safe  — writes pas_users; school_id is nullable on
      *                                 pas_users by design (platform admins).
+     *   DemoJournalSeeder   ✓ safe  — binds the default school as the current
+     *                                 tenant before writing, which is the fix the
+     *                                 two broken seeders below still need.
      *   DemoCatalogSeeder   ✗ BROKEN as of 2026-06-09. Writes to Allowance +
      *                                 DeductionType (both BelongsToTenant, both
      *                                 per-tenant catalogs). Tenant::current() is
@@ -44,6 +47,7 @@ class DatabaseSeeder extends Seeder
      *   php artisan db:seed --class=Week7CatalogSeeder
      *   php artisan db:seed --class=AccountingCatalogSeeder
      *   php artisan db:seed --class=DemoUsersSeeder
+     *   php artisan db:seed --class=DemoJournalSeeder
      *
      * Bare `php artisan db:seed` is currently NOT recommended on APP_ENV=local
      * because it will fail at DemoCatalogSeeder.
@@ -70,6 +74,10 @@ class DatabaseSeeder extends Seeder
 
         if (app()->environment('local')) {
             $this->call(DemoUsersSeeder::class);
+            // Posts through the real actions, so the seeded books are
+            // guaranteed balanced and correctly numbered. Safe to re-run —
+            // it no-ops when the DEMO-* entries already exist.
+            $this->call(DemoJournalSeeder::class);
             $this->call(DemoCatalogSeeder::class);
             $this->call(DemoPayrollSeeder::class);
         }
