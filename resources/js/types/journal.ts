@@ -54,6 +54,16 @@ export interface JournalEntryRow {
     has_been_reversed: boolean;
     /** True when this entry exists to reverse another. */
     is_reversal: boolean;
+    /**
+     * Per-row policy results, so the list renders only the actions that are
+     * legal for this entry. Edit and delete are drafts-only; a posted entry
+     * is corrected by posting a reversal.
+     */
+    can: {
+        update: boolean;
+        delete: boolean;
+        reverse: boolean;
+    };
 }
 
 export interface JournalEntryDetail extends JournalEntryRow {
@@ -62,12 +72,11 @@ export interface JournalEntryDetail extends JournalEntryRow {
     reversed_at: string | null;
     period_status: string | null;
     lines: JournalEntryLineRow[];
-    can: {
-        update: boolean;
-        delete: boolean;
-        post: boolean;
-        reverse: boolean;
-    };
+    /**
+     * The detail page additionally offers Post, which the list deliberately
+     * does not — posting is irreversible, so it keeps its confirmation step.
+     */
+    can: JournalEntryRow['can'] & { post: boolean };
 }
 
 /** Shape the edit page hands to the form. */

@@ -326,3 +326,78 @@ it('ships per-entry permissions with the detail page', function () {
             ->where('entry.can.update', true)
             ->has('entry.lines', 2));
 });
+
+/* ── Per-row permissions on the list ────────────────────────────────── */
+
+it('ships per-row permissions with the index', function () {
+    $draft = draftWithLines();
+
+    $this->actingAs(journalAuthAs('accountant'))
+        ->get('/admin/journal-entries')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/accounting/journal/index', false)
+            ->where('entries.data.0.can.update', true)
+            ->where('entries.data.0.can.delete', true)
+            ->where('entries.data.0.can.reverse', false));
+
+    expect($draft->fresh()->isMutable())->toBeTrue();
+});
+
+it('offers no edit or delete on a posted row, even to a platform admin', function () {
+    // Regression guard for 9c8e385: Gate::before grants a platform admin every
+    // ability, so asking the policy alone would put Edit and Delete on an
+    // entry that is already posted — controls the endpoint then refuses.
+    $entry = draftWithLines();
+    $this->actingAs(journalAuthAs('accountant'))
+        ->post("/admin/journal-entries/{$entry->id}/post");
+
+    $platformAdmin = User::factory()->withoutLmsMirror()->create();
+    $platformAdmin->syncRoles(['platform-admin']);
+
+    $this->actingAs($platformAdmin->fresh())
+        ->get('/admin/journal-entries')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/accounting/journal/index', false)
+            ->where('entries.data.0.can.update', false)
+            ->where('entries.data.0.can.delete', false)
+            // Reversing IS legal on a posted entry, so it stays available.
+            ->where('entries.data.0.can.reverse', true));
+});
+
+/* ── Draft totals ───────────────────────────────────────────────────── */
+
+it('reports a draft total from its lines, not the unwritten columns', function () {
+    // PostJournalEntry only writes total_*_centavos at post time, so a draft
+    // has zeroes stored. The detail footer sits directly under the lines, so
+    // reading the stored column would show 0.00 beneath lines summing to
+    // 5,000.00 — on the screen where the figures get checked before posting.
+    $draft = draftWithLines();
+
+    expect($draft->total_debit_centavos)->toBe(0);
+
+    $this->actingAs(journalAuthAs('accountant'))
+        ->get("/admin/journal-entries/{$draft->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('entry.total_debit_centavos', 500_000)
+            ->where('entry.total_credit_centavos', 500_000));
+});
+
+it('reports a posted total identically whichever source is used', function () {
+    // For a posted entry the computed and stored figures must agree — the
+    // action derived the stored columns from these same lines.
+    $entry = draftWithLines();
+    $this->actingAs(journalAuthAs('accountant'))
+        ->post("/admin/journal-entries/{$entry->id}/post");
+
+    $posted = $entry->fresh();
+
+    $this->actingAs(journalAuthAs('accountant'))
+        ->get("/admin/journal-entries/{$posted->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('entry.total_debit_centavos', $posted->total_debit_centavos)
+            ->where('entry.total_credit_centavos', $posted->total_credit_centavos));
+});

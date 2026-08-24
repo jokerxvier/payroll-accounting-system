@@ -295,6 +295,19 @@ final class JournalEntryController extends Controller
             'total_credit_centavos' => $entry->total_credit_centavos,
             'has_been_reversed' => $entry->hasBeenReversed(),
             'is_reversal' => $entry->isReversal(),
+            // Per-row permissions so the list can offer exactly the actions
+            // that are legal for each entry.
+            //
+            // State predicate FIRST, then the policy. The `Gate::before`
+            // short-circuit in registerPlatformAdminGate() returns true for
+            // every ability a platform admin asks about, so asking the policy
+            // alone would put Edit and Delete on posted entries — the bug
+            // fixed in 9c8e385.
+            'can' => [
+                'update' => $entry->isMutable() && Gate::allows('update', $entry),
+                'delete' => $entry->isMutable() && Gate::allows('delete', $entry),
+                'reverse' => $entry->isReversible() && Gate::allows('reverse', $entry),
+            ],
         ];
     }
 
@@ -305,6 +318,15 @@ final class JournalEntryController extends Controller
     {
         return [
             ...$this->summarise($entry),
+            // Totals come from the lines, not the denormalised columns.
+            // PostJournalEntry only writes those at post time, so on a draft
+            // they are still zero — and the footer would then read 0.00
+            // directly beneath lines that plainly sum to something else, on
+            // the one screen where an operator checks the figures before
+            // committing them. For a posted entry these are identical: the
+            // action computed the stored columns from these same lines.
+            'total_debit_centavos' => $entry->lines->sum('debit_centavos'),
+            'total_credit_centavos' => $entry->lines->sum('credit_centavos'),
             'reversal_of_entry_id' => $entry->reversal_of_entry_id,
             'posted_at' => $entry->posted_at?->toIso8601String(),
             'reversed_at' => $entry->reversed_at?->toIso8601String(),
@@ -319,12 +341,9 @@ final class JournalEntryController extends Controller
                 'credit_centavos' => $line->credit_centavos,
                 'description' => $line->description,
             ])->values(),
-            // The state predicate is applied here as well as inside the
-            // policy. The Gate::before short-circuit grants a platform admin
-            // every ability, so asking the policy alone would offer them
-            // Edit, Delete and Post on an entry that is already posted —
-            // controls that either 403 or flash an error when pressed.
-            // Legality first, then permission.
+            // Overrides the block summarise() set: the detail page also
+            // offers Post, which the list deliberately does not. Same
+            // legality-then-permission ordering, same reason.
             'can' => [
                 'update' => $entry->isMutable() && Gate::allows('update', $entry),
                 'delete' => $entry->isMutable() && Gate::allows('delete', $entry),

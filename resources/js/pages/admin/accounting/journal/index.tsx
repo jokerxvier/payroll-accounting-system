@@ -1,8 +1,20 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { BookText, Plus } from 'lucide-react';
+import { BookText, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,6 +35,8 @@ import {
 } from '@/components/ui/table';
 import {
     create as journalCreate,
+    destroy as journalDestroy,
+    edit as journalEdit,
     index as journalIndex,
     show as journalShow,
 } from '@/routes/admin/journal-entries';
@@ -35,10 +49,55 @@ export default function JournalIndex({
     filters,
     can,
 }: JournalEntryIndexProps) {
+    const [pendingDelete, setPendingDelete] = useState<JournalEntryRow | null>(
+        null,
+    );
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const onStatusChange = (value: string): void => {
         router.get(journalIndex().url, value === ALL ? {} : { status: value }, {
             preserveScroll: true,
             preserveState: true,
+        });
+    };
+
+    /**
+     * Carry the active status filter across a page change. Passing only
+     * `{ page }` would silently drop it and drop the operator back into an
+     * unfiltered list.
+     */
+    const goPage = (page: number): void => {
+        const query: Record<string, string | number> = { page };
+
+        if (filters.status) {
+            query.status = filters.status;
+        }
+
+        router.get(journalIndex().url, query, {
+            preserveScroll: true,
+            preserveState: true,
+        });
+    };
+
+    const handleConfirmDelete = (): void => {
+        if (pendingDelete === null) {
+            return;
+        }
+
+        setIsDeleting(true);
+
+        router.delete(journalDestroy({ journalEntry: pendingDelete.id }).url, {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success('Draft journal entry deleted.');
+                setPendingDelete(null);
+            },
+            onError: () => {
+                toast.error('Could not delete this draft.');
+            },
+            onFinish: () => {
+                setIsDeleting(false);
+            },
         });
     };
 
@@ -128,24 +187,16 @@ export default function JournalIndex({
                                             <TableHead className="text-xs tracking-wide text-muted-foreground uppercase">
                                                 Status
                                             </TableHead>
+                                            <TableHead className="sr-only text-right">
+                                                Actions
+                                            </TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {entries.data.map((row) => (
                                             <TableRow key={row.id}>
                                                 <TableCell className="font-mono text-xs">
-                                                    <Link
-                                                        href={
-                                                            journalShow({
-                                                                journalEntry:
-                                                                    row.id,
-                                                            }).url
-                                                        }
-                                                        className="underline-offset-4 hover:underline"
-                                                    >
-                                                        {row.entry_number ??
-                                                            '—'}
-                                                    </Link>
+                                                    {row.entry_number ?? '—'}
                                                 </TableCell>
                                                 <TableCell className="tabular-nums">
                                                     {row.date}
@@ -171,6 +222,14 @@ export default function JournalIndex({
                                                         row={row}
                                                     />
                                                 </TableCell>
+                                                <TableCell className="text-right">
+                                                    <RowActions
+                                                        row={row}
+                                                        onRequestDelete={
+                                                            setPendingDelete
+                                                        }
+                                                    />
+                                                </TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
@@ -179,8 +238,137 @@ export default function JournalIndex({
                         </CardContent>
                     </Card>
                 )}
+
+                {entries.last_page > 1 ? (
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={entries.current_page === 1}
+                            onClick={() => goPage(entries.current_page - 1)}
+                        >
+                            Previous
+                        </Button>
+                        <span className="tabular-nums">
+                            Page {entries.current_page} of {entries.last_page}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={
+                                entries.current_page === entries.last_page
+                            }
+                            onClick={() => goPage(entries.current_page + 1)}
+                        >
+                            Next
+                        </Button>
+                    </div>
+                ) : null}
             </div>
+
+            <AlertDialog
+                open={pendingDelete !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setPendingDelete(null);
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this draft?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {pendingDelete
+                                ? `"${pendingDelete.narration ?? 'Untitled entry'}" has never reached the ledger, so it can be removed outright. Posted entries cannot be deleted — they are corrected by posting a reversal.`
+                                : ''}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            disabled={isDeleting}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                handleConfirmDelete();
+                            }}
+                        >
+                            {isDeleting ? 'Deleting…' : 'Delete draft'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
+    );
+}
+
+/**
+ * Per-row controls.
+ *
+ * Edit and Delete appear only on drafts — the server refuses both on a posted
+ * entry, and offering a control that 403s is worse than not offering it. The
+ * chevron is always present so every row, numbered or not, has one obvious
+ * way in.
+ *
+ * Post and Reverse deliberately live on the detail page instead. Posting is
+ * irreversible — it is corrected only by posting a further entry — and a
+ * one-click irreversible action sitting beside Delete in a list is a misclick
+ * waiting to happen.
+ */
+function RowActions({
+    row,
+    onRequestDelete,
+}: {
+    row: JournalEntryRow;
+    onRequestDelete: (row: JournalEntryRow) => void;
+}) {
+    // A draft has no entry number, so labels fall back to the id rather than
+    // naming the control "Edit journal entry —".
+    const label = row.entry_number ?? `#${row.id}`;
+
+    return (
+        <div className="flex justify-end gap-1">
+            {row.can.update ? (
+                <Button
+                    asChild
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    aria-label={`Edit journal entry ${label}`}
+                >
+                    <Link href={journalEdit({ journalEntry: row.id }).url}>
+                        <Pencil className="h-4 w-4" />
+                    </Link>
+                </Button>
+            ) : null}
+
+            {row.can.delete ? (
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`Delete journal entry ${label}`}
+                    onClick={() => onRequestDelete(row)}
+                >
+                    <Trash2 className="h-4 w-4" />
+                </Button>
+            ) : null}
+
+            <Button
+                asChild
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                aria-label={`Open journal entry ${label}`}
+            >
+                <Link href={journalShow({ journalEntry: row.id }).url}>
+                    <ChevronRight className="h-4 w-4" />
+                </Link>
+            </Button>
+        </div>
     );
 }
 
