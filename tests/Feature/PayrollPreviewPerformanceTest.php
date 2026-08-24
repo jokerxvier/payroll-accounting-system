@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Models\Lms\Staff;
 use App\Models\Pas\EmployeeProfile;
-use App\Models\User;
 use Database\Seeders\StatutoryContributionSeeder;
 
 /*
@@ -27,19 +26,6 @@ use Database\Seeders\StatutoryContributionSeeder;
  * the contract. A regression here is a P1 to surface before the Phase 2
  * demo, not a number to massage.
  */
-
-function authPerfAs(string $payrollRole): User
-{
-    config([
-        'payroll.employee_role_allowlist' => [1, 4, 5],
-        'payroll.lms_role_to_payroll_role' => [],
-    ]);
-
-    $user = User::factory()->create();
-    $user->syncRoles([$payrollRole]);
-
-    return $user;
-}
 
 function makePerfProfile(int $basicSalaryCentavos = 4_500_000): EmployeeProfile
 {

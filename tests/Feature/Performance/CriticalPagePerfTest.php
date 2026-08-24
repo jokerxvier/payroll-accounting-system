@@ -7,7 +7,6 @@ use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\Payslip;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 
@@ -25,19 +24,6 @@ uses(RefreshDatabase::class);
  * involved adding ONE legitimate eager-load, bump the threshold by ONE.
  * Don't bump by N to silence an N+1.
  */
-
-function authPerfAs(string $role): User
-{
-    config([
-        'payroll.employee_role_allowlist' => [1, 4, 5],
-        'payroll.lms_role_to_payroll_role' => [],
-    ]);
-
-    $user = User::factory()->create();
-    $user->syncRoles([$role]);
-
-    return $user;
-}
 
 function recordQueryCount(callable $fn): int
 {

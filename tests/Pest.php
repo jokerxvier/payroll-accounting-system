@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Pas\School;
+use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Database\Seeders\SchoolSeeder;
 use Illuminate\Database\Events\ConnectionEstablished;
@@ -188,7 +189,30 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * Build an authenticated user carrying one payroll role, for the performance
+ * suites.
+ *
+ * Lives here rather than in a test file because two suites need it —
+ * PayrollPreviewPerformanceTest and Performance/CriticalPagePerfTest. Pest
+ * declares helpers in test files as plain global functions, so both files
+ * declaring it meant "Cannot redeclare authPerfAs()" the moment PHPUnit
+ * loaded them into the same process. Individually each suite passed; running
+ * `tests/Feature` as a whole died before a single test executed, which is
+ * what had been masking whole-suite runs.
+ *
+ * The role allowlist and LMS mapping are pinned so the login listener does
+ * not overwrite the role under test with one derived from LMS data.
+ */
+function authPerfAs(string $payrollRole): User
 {
-    // ..
+    config([
+        'payroll.employee_role_allowlist' => [1, 4, 5],
+        'payroll.lms_role_to_payroll_role' => [],
+    ]);
+
+    $user = User::factory()->create();
+    $user->syncRoles([$payrollRole]);
+
+    return $user;
 }
