@@ -3,6 +3,7 @@ import {
     BarChart3,
     BookOpen,
     BookText,
+    Contact as ContactIcon,
     Building2,
     Calculator,
     CalendarDays,
@@ -47,6 +48,7 @@ import { dashboard } from '@/routes';
 import { index as adminAccountingPeriodsIndex } from '@/routes/admin/accounting-periods';
 import { index as adminAllowancesIndex } from '@/routes/admin/allowances';
 import { index as adminChartOfAccountsIndex } from '@/routes/admin/chart-of-accounts';
+import { index as adminContactsIndex } from '@/routes/admin/contacts';
 import { index as adminContributionTablesIndex } from '@/routes/admin/contribution-tables';
 import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
 import { index as adminJournalEntriesIndex } from '@/routes/admin/journal-entries';
@@ -200,6 +202,12 @@ const accountingNavItems: NavItem[] = [
         title: 'Journal',
         href: adminJournalEntriesIndex(),
         icon: BookText,
+    },
+    // Mirrors App\Policies\Pas\ContactPolicy, which reuses AccountingRoles.
+    {
+        title: 'Contacts',
+        href: adminContactsIndex(),
+        icon: ContactIcon,
     },
     {
         title: 'Tax rates',

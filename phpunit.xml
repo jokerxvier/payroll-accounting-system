@@ -24,6 +24,15 @@
         </include>
     </source>
     <php>
+        <!--
+            The suite runs as one process and needs more than PHP's 128M
+            default: 1375 tests with RefreshDatabase measured at just under
+            256M. Set here rather than as a `php -d` flag on one command, so
+            every entry point gets it — `artisan test`, a bare `vendor/bin/pest`,
+            and CI. Without it `composer ci:check` dies with "Allowed memory
+            size exhausted" partway through.
+        -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>

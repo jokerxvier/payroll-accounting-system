@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\Pas\AccountingPeriod;
 use App\Models\Pas\ChartOfAccount;
+use App\Models\Pas\Contact;
 use App\Models\Pas\School;
 use App\Models\Pas\TaxRate;
 use App\Models\User;
@@ -24,6 +25,7 @@ use App\Models\User;
  */
 
 beforeEach(function (): void {
+    Contact::query()->withoutGlobalScopes()->delete();
     TaxRate::query()->withoutGlobalScopes()->delete();
     ChartOfAccount::query()->withoutGlobalScopes()->delete();
     AccountingPeriod::query()->withoutGlobalScopes()->delete();
@@ -186,4 +188,70 @@ it('scopes the period overlap check to the current school', function (): void {
         ->assertSessionHasNoErrors();
 
     expect(AccountingPeriod::query()->where('code', '2026-09')->count())->toBe(1);
+});
+
+it('hides another school contacts from the register', function (): void {
+    $default = School::query()->where('slug', 'default')->firstOrFail();
+    $other = School::factory()->create(['slug' => 'contact-scope-other']);
+
+    $default->makeCurrent();
+    $mine = Contact::factory()->create(['code' => 'MINE']);
+
+    $other->makeCurrent();
+    $theirs = Contact::factory()->create(['code' => 'THEIRS']);
+
+    $default->makeCurrent();
+
+    $this->actingAs(accountingTenantAuthAs('accountant'))
+        ->get('/admin/contacts')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/accounting/contacts/index', false)
+            ->where('contacts.data', fn ($rows) => collect($rows)->pluck('id')->contains($mine->id)
+                && ! collect($rows)->pluck('id')->contains($theirs->id),
+            ),
+        );
+});
+
+it('404s when updating another school contact', function (): void {
+    $default = School::query()->where('slug', 'default')->firstOrFail();
+    $other = School::factory()->create(['slug' => 'contact-scope-edit']);
+
+    $other->makeCurrent();
+    $theirs = Contact::factory()->create(['code' => 'THEIRS', 'name' => 'Theirs Ltd']);
+
+    $default->makeCurrent();
+
+    // Route-model binding runs through the global scope, so the row is
+    // invisible and binding fails rather than leaking another tenant's data.
+    $this->actingAs(accountingTenantAuthAs('accountant'))
+        ->patch("/admin/contacts/{$theirs->getKey()}", [
+            'code' => 'THEIRS',
+            'name' => 'Hijacked',
+            'is_customer' => true,
+            'is_supplier' => false,
+            'is_active' => true,
+        ])
+        ->assertNotFound();
+
+    expect($theirs->fresh()->name)->toBe('Theirs Ltd');
+});
+
+it('lets two schools each hold the same contact code and TIN', function (): void {
+    $default = School::query()->where('slug', 'default')->firstOrFail();
+    $other = School::factory()->create(['slug' => 'contact-dup-codes']);
+
+    $default->makeCurrent();
+    Contact::factory()->withTin('123456789')->create(['code' => 'ACME']);
+
+    $other->makeCurrent();
+
+    // Contacts are NOT cloned to a new school — a customer list is business
+    // data, not a catalog template — so the register starts empty and the
+    // composite uniques make the same code and TIN legal here.
+    expect(Contact::query()->count())->toBe(0);
+
+    Contact::factory()->withTin('123456789')->create(['code' => 'ACME']);
+
+    expect(Contact::query()->withoutGlobalScopes()->where('code', 'ACME')->count())->toBe(2);
 });

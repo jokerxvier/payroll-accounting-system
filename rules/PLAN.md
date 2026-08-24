@@ -357,7 +357,14 @@ Ordering is load-bearing: the journal must be trustworthy before any document po
       idempotent so retrying is safe. Payroll is not blocked on accounting.
 
 #### Slices 4–7 — Documents
-- [ ] Contacts (customer / supplier, TIN, per-contact AR/AP control accounts).
+- [x] Contacts (customer / supplier, TIN, per-contact AR/AP control accounts).
+      One record with two flags, since plenty of counterparties are both. TIN is
+      normalised to digits and unique per school when present. Control accounts
+      are OVERRIDES — null means the school's AR_CONTROL / AP_CONTROL system
+      account, which is how Slice 5 will resolve them. Deliberately NOT cloned
+      to new schools: a customer list is business data, not a catalog template.
+      `lms_student_id` exists as a nullable pointer but nothing populates it —
+      reading LMS student tables is outside §2 (Open Question 2).
 - [ ] Sales invoices: gapless BIR numbering, VAT-aware lines, PDF, credit notes, receipts.
 - [ ] Supplier bills, reusing the invoice engine with the posting direction inverted.
 - [ ] Payments and allocation (partial, multi-invoice).

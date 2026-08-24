@@ -6,6 +6,7 @@ use App\Listeners\AssignPayrollRoleOnLogin;
 use App\Models\Pas\AccountingPeriod;
 use App\Models\Pas\Allowance;
 use App\Models\Pas\ChartOfAccount;
+use App\Models\Pas\Contact;
 use App\Models\Pas\DeductionType;
 use App\Models\Pas\EmployeeAllowance;
 use App\Models\Pas\EmployeeDeduction;
@@ -24,6 +25,7 @@ use App\Observers\SchoolObserver;
 use App\Policies\Pas\AccountingPeriodPolicy;
 use App\Policies\Pas\AllowancePolicy;
 use App\Policies\Pas\ChartOfAccountPolicy;
+use App\Policies\Pas\ContactPolicy;
 use App\Policies\Pas\DeductionTypePolicy;
 use App\Policies\Pas\EmployeeAllowancePolicy;
 use App\Policies\Pas\EmployeeDeductionPolicy;
@@ -175,6 +177,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Phase 5 Slice 2 — the journal.
         Gate::policy(JournalEntry::class, JournalEntryPolicy::class);
+
+        // Phase 5 Slice 4 — the contact register.
+        Gate::policy(Contact::class, ContactPolicy::class);
 
         // Week 8 — real-time gross-to-net preview. Class-level Gate (no
         // underlying model), so it lives outside Gate::policy() registrations.
