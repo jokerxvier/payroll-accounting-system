@@ -1,6 +1,7 @@
 import { Head, router } from '@inertiajs/react';
-import { Download, FileSearch, X } from 'lucide-react';
+import { FileSearch, X } from 'lucide-react';
 import { useState } from 'react';
+import { ReportExportMenu } from '@/components/admin/report-export-menu';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -214,12 +215,10 @@ export default function AuditLogIndex({
                     title="Audit log"
                     description="Append-only trail of every payroll-affecting action. Click a row for the full before/after diff."
                     actions={
-                        <Button asChild variant="outline" size="sm">
-                            <a href={buildExportUrl()}>
-                                <Download className="mr-1 h-4 w-4" />
-                                Export CSV
-                            </a>
-                        </Button>
+                        <ReportExportMenu
+                            baseUrl={buildExportUrl()}
+                            formats={['csv', 'xlsx', 'pdf']}
+                        />
                     }
                 />
 

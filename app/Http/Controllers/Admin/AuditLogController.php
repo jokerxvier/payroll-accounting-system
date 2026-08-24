@@ -8,12 +8,15 @@ use App\Exports\AuditLogExport;
 use App\Http\Controllers\Controller;
 use App\Models\Pas\AuditLog;
 use App\Models\User;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Excel as ExcelWriter;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -38,6 +41,18 @@ final class AuditLogController extends Controller
     // audit aggregation is intentionally not built (per plan-2.md "out of
     // scope: cross-tenant reporting").
     private const AUDIT_ROLES = ['platform-admin', 'super-admin', 'auditor'];
+
+    /**
+     * Export formats, per the Phase 4 acceptance criterion "three reports
+     * export cleanly to all three formats".
+     *
+     * `csv` is first because it is the default here: the W14 Stage B export
+     * link carries no `format` parameter and must keep returning CSV, which
+     * is also the format an auditor handoff or retention archive wants.
+     *
+     * @var list<string>
+     */
+    private const EXPORT_FORMATS = ['csv', 'xlsx', 'pdf'];
 
     public function index(Request $request): Response
     {
@@ -73,17 +88,19 @@ final class AuditLogController extends Controller
         ]);
     }
 
-    public function export(Request $request): BinaryFileResponse
+    public function export(Request $request): BinaryFileResponse|HttpResponse
     {
         $this->authorizeAudit();
 
+        $format = $this->resolveExportFormat($request);
         $filters = $this->resolveFilters($request);
         $entries = $this->buildQuery($filters)->limit(10_000)->get();
 
         $filename = sprintf(
-            'audit-log_%s_%s.csv',
+            'audit-log_%s_%s.%s',
             $filters['from'] ?? 'all',
             $filters['to'] ?? CarbonImmutable::now()->toDateString(),
+            $format,
         );
 
         $actorIds = $entries->pluck('actor_id')->filter()->unique();
@@ -92,11 +109,45 @@ final class AuditLogController extends Controller
             ->get(['id', 'name'])
             ->keyBy('id');
 
+        if ($format === 'pdf') {
+            // The before/after JSON blobs are omitted from the PDF on
+            // purpose: they are unbounded in width and would either overflow
+            // the page or shrink the whole table past readability. The PDF is
+            // the review-and-sign artefact; CSV and xlsx remain the formats
+            // that carry the full diff payload.
+            return Pdf::loadView('reports.audit-log-pdf', [
+                'entries' => $entries,
+                'actorNames' => $actorNames,
+                'filters' => $filters,
+                'generatedAt' => CarbonImmutable::now(),
+            ])->setPaper('a4', 'landscape')->download($filename);
+        }
+
         return Excel::download(
             new AuditLogExport($entries, $actorNames),
             $filename,
-            \Maatwebsite\Excel\Excel::CSV,
+            $format === 'xlsx' ? ExcelWriter::XLSX : ExcelWriter::CSV,
         );
+    }
+
+    /**
+     * Read and validate the requested export format. Defaults to `csv` so
+     * the existing export link keeps behaving exactly as it did; an
+     * unrecognised value is rejected rather than silently falling back.
+     */
+    private function resolveExportFormat(Request $request): string
+    {
+        $format = strtolower(trim((string) $request->query('format', 'csv')));
+
+        if (! in_array($format, self::EXPORT_FORMATS, true)) {
+            abort(422, sprintf(
+                "Unsupported export format '%s'. Use one of: %s.",
+                $format,
+                implode(', ', self::EXPORT_FORMATS),
+            ));
+        }
+
+        return $format;
     }
 
     private function authorizeAudit(): void

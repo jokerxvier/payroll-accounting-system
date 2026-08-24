@@ -1,6 +1,7 @@
 import { Head, router } from '@inertiajs/react';
-import { Check, ChevronsUpDown, Download, Users } from 'lucide-react';
+import { Check, ChevronsUpDown, Users } from 'lucide-react';
 import { useState } from 'react';
+import { ReportExportMenu } from '@/components/admin/report-export-menu';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -138,12 +139,7 @@ export default function EmployeeHistoryReport({
                     description="Per-employee timeline of payslips with cumulative totals across non-voided runs."
                     actions={
                         exportUrl ? (
-                            <Button asChild variant="outline" size="sm">
-                                <a href={exportUrl}>
-                                    <Download className="mr-1 h-4 w-4" />
-                                    Export Excel
-                                </a>
-                            </Button>
+                            <ReportExportMenu baseUrl={exportUrl} />
                         ) : undefined
                     }
                 />

@@ -275,7 +275,7 @@ Bonus shipped beyond original scope:
 - Payroll summary report: per-period totals across gross, statutory contributions (employee + employer), custom deductions, net.
 - Employee history report: per-employee timeline of payslips with running totals.
 - Year-to-date views per employee (groundwork for future year-end annualization).
-- Each report exportable to Excel, CSV, and PDF.
+- [x] Each report exportable to Excel, CSV, and PDF. (xlsx shipped in W13; csv + pdf added 2026-08-24 — dompdf views under `resources/views/reports/`.)
 - Server-side report generation queued; UI shows status and download link when ready.
 - Filters: date range, employee, department, employment type, status.
 
@@ -303,7 +303,7 @@ Bonus shipped beyond original scope:
 
 **Phase 4 acceptance criteria**
 
-- [ ] Three reports (summary, employee history, audit) export cleanly to all three formats
+- [x] Three reports (summary, employee history, audit) export cleanly to all three formats — xlsx / csv / pdf, via a `format` query parameter on each `/export` endpoint
 - [ ] Every state-changing action across the system has an audit log entry; spot-check passes for each role
 - [ ] Production deployment completes without data loss and the smoke-test checklist passes
 - [ ] User documentation reviewed and accepted by client HR contact

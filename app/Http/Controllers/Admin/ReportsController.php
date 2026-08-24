@@ -12,10 +12,13 @@ use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\Payslip;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Excel as ExcelWriter;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -40,6 +43,18 @@ final class ReportsController extends Controller
     /** @var list<string> */
     private const REPORT_ROLES = ['platform-admin', 'super-admin', 'payroll-officer', 'hr'];
 
+    /**
+     * Export formats every report supports, per the Phase 4 acceptance
+     * criterion "three reports export cleanly to all three formats".
+     *
+     * `xlsx` is first because it is the default: the original W13 export
+     * links carried no `format` parameter, so omitting one must keep
+     * returning a spreadsheet.
+     *
+     * @var list<string>
+     */
+    private const EXPORT_FORMATS = ['xlsx', 'csv', 'pdf'];
+
     public function payrollSummary(Request $request): Response
     {
         $this->authorizeReports();
@@ -57,20 +72,40 @@ final class ReportsController extends Controller
         ]);
     }
 
-    public function payrollSummaryExport(Request $request): BinaryFileResponse
+    public function payrollSummaryExport(Request $request): BinaryFileResponse|HttpResponse
     {
         $this->authorizeReports();
 
+        $format = $this->resolveExportFormat($request);
         [$from, $to] = $this->resolveDateRange($request);
         $rows = $this->buildPayrollSummaryRows($from, $to);
 
         $filename = sprintf(
-            'payroll-summary_%s_%s.xlsx',
+            'payroll-summary_%s_%s.%s',
             $from->toDateString(),
             $to->toDateString(),
+            $format,
         );
 
-        return Excel::download(new PayrollSummaryReportExport($rows, $from, $to), $filename);
+        if ($format === 'pdf') {
+            // Landscape: ten money columns do not fit A4 portrait without
+            // shrinking the type past readability.
+            return Pdf::loadView('reports.payroll-summary-pdf', [
+                'from' => $from,
+                'to' => $to,
+                'rows' => $rows,
+                'totals' => self::summariseTotals($rows),
+                'generatedAt' => CarbonImmutable::now(),
+            ])->setPaper('a4', 'landscape')->download($filename);
+        }
+
+        // xlsx and csv share one export class — Maatwebsite picks the writer
+        // from the third argument, so the row shape stays defined once.
+        return Excel::download(
+            new PayrollSummaryReportExport($rows, $from, $to),
+            $filename,
+            $this->writerTypeFor($format),
+        );
     }
 
     public function employeeHistory(Request $request): Response
@@ -97,9 +132,11 @@ final class ReportsController extends Controller
         ]);
     }
 
-    public function employeeHistoryExport(Request $request): BinaryFileResponse
+    public function employeeHistoryExport(Request $request): BinaryFileResponse|HttpResponse
     {
         $this->authorizeReports();
+
+        $format = $this->resolveExportFormat($request);
 
         $staffId = $request->integer('employee') ?: null;
         if ($staffId === null) {
@@ -109,14 +146,26 @@ final class ReportsController extends Controller
         [$employee, $rows, $totals, $ytdByYear] = $this->buildEmployeeHistoryRows($staffId);
 
         $filename = sprintf(
-            'employee-history_staff%d_%s.xlsx',
+            'employee-history_staff%d_%s.%s',
             $staffId,
             CarbonImmutable::now()->toDateString(),
+            $format,
         );
+
+        if ($format === 'pdf') {
+            return Pdf::loadView('reports.employee-history-pdf', [
+                'employee' => $employee,
+                'rows' => $rows,
+                'totals' => $totals,
+                'ytdByYear' => $ytdByYear,
+                'generatedAt' => CarbonImmutable::now(),
+            ])->setPaper('a4', 'landscape')->download($filename);
+        }
 
         return Excel::download(
             new EmployeeHistoryReportExport($employee, $rows, $ytdByYear),
             $filename,
+            $this->writerTypeFor($format),
         );
     }
 
@@ -125,6 +174,40 @@ final class ReportsController extends Controller
         if (! auth()->user()?->hasAnyRole(self::REPORT_ROLES)) {
             abort(403);
         }
+    }
+
+    /**
+     * Read and validate the requested export format.
+     *
+     * Defaults to `xlsx` so the pre-existing export links — which carry no
+     * `format` parameter — keep returning a spreadsheet. An unrecognised
+     * value is rejected rather than silently falling back, so a typo in a
+     * hand-built URL surfaces instead of quietly handing back the wrong
+     * file type.
+     */
+    private function resolveExportFormat(Request $request): string
+    {
+        $format = strtolower(trim((string) $request->query('format', 'xlsx')));
+
+        if (! in_array($format, self::EXPORT_FORMATS, true)) {
+            abort(422, sprintf(
+                "Unsupported export format '%s'. Use one of: %s.",
+                $format,
+                implode(', ', self::EXPORT_FORMATS),
+            ));
+        }
+
+        return $format;
+    }
+
+    /**
+     * Map a format to the Maatwebsite writer constant. Only reached for the
+     * spreadsheet formats — `pdf` is rendered through dompdf instead, which
+     * gives a laid-out document rather than a spreadsheet-shaped one.
+     */
+    private function writerTypeFor(string $format): string
+    {
+        return $format === 'csv' ? ExcelWriter::CSV : ExcelWriter::XLSX;
     }
 
     /**
