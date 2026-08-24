@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Admin\Accounting\AccountingPeriodController;
+use App\Http\Controllers\Admin\Accounting\ChartOfAccountController;
+use App\Http\Controllers\Admin\Accounting\TaxRateController;
 use App\Http\Controllers\Admin\AllowanceController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DeductionTypeController;
@@ -158,6 +161,40 @@ Route::middleware(['auth', 'verified'])
         Route::post('schools/switch', [SchoolController::class, 'clearSwitch'])
             ->name('schools.switch.clear');
         Route::resource('schools', SchoolController::class)->except(['show']);
+
+        // ── Phase 5 Slice 1 — accounting ledger foundation ──────────────
+        //
+        // Chart of accounts. `show` is excluded: the index is the listing
+        // surface, matching allowances / deduction-types / tax-rates.
+        // The kebab-case URI maps back to the camelCase {chartOfAccount}
+        // parameter so the controller keeps a conventional variable name.
+        Route::resource('chart-of-accounts', ChartOfAccountController::class)
+            ->parameters(['chart-of-accounts' => 'chartOfAccount'])
+            ->except(['show']);
+
+        // Tax rates. Default singular `taxRate` parameter after the
+        // kebab-to-camel mapping; no further override needed.
+        Route::resource('tax-rates', TaxRateController::class)
+            ->parameters(['tax-rates' => 'taxRate'])
+            ->except(['show']);
+
+        // Accounting periods. `destroy` is excluded on purpose — the policy
+        // refuses deletion outright, because Slice 2 attaches journal entries
+        // to periods and removing one would orphan them.
+        //
+        // The close / reopen transitions are registered BEFORE the resource
+        // so their static segments win the match against
+        // `accounting-periods/{accountingPeriod}`. Same ordering constraint
+        // as `schools/switch` and `contribution-tables/template` above —
+        // moving them below the resource would route them into show/update
+        // with "close" bound as a literal id.
+        Route::post('accounting-periods/{accountingPeriod}/close', [AccountingPeriodController::class, 'close'])
+            ->name('accounting-periods.close');
+        Route::post('accounting-periods/{accountingPeriod}/reopen', [AccountingPeriodController::class, 'reopen'])
+            ->name('accounting-periods.reopen');
+        Route::resource('accounting-periods', AccountingPeriodController::class)
+            ->parameters(['accounting-periods' => 'accountingPeriod'])
+            ->except(['show', 'destroy']);
 
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-

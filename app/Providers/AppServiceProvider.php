@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Listeners\AssignPayrollRoleOnLogin;
+use App\Models\Pas\AccountingPeriod;
 use App\Models\Pas\Allowance;
+use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\DeductionType;
 use App\Models\Pas\EmployeeAllowance;
 use App\Models\Pas\EmployeeDeduction;
@@ -14,9 +16,12 @@ use App\Models\Pas\PayrollAdjustment;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\School;
 use App\Models\Pas\StatutoryContribution;
+use App\Models\Pas\TaxRate;
 use App\Observers\PayrollRunObserver;
 use App\Observers\SchoolObserver;
+use App\Policies\Pas\AccountingPeriodPolicy;
 use App\Policies\Pas\AllowancePolicy;
+use App\Policies\Pas\ChartOfAccountPolicy;
 use App\Policies\Pas\DeductionTypePolicy;
 use App\Policies\Pas\EmployeeAllowancePolicy;
 use App\Policies\Pas\EmployeeDeductionPolicy;
@@ -27,6 +32,7 @@ use App\Policies\Pas\PayrollAdjustmentPolicy;
 use App\Policies\Pas\PayrollRunPolicy;
 use App\Policies\Pas\SchoolPolicy;
 use App\Policies\Pas\StatutoryContributionPolicy;
+use App\Policies\Pas\TaxRatePolicy;
 use App\Policies\PayrollPreviewPolicy;
 use App\Services\Statutory\StatutoryContributionResolver;
 use App\Services\Statutory\Strategies\BracketTableStrategy;
@@ -156,6 +162,12 @@ class AppServiceProvider extends ServiceProvider
         // Phase B.2 — multi-tenant schools registry. Super-admin only via
         // SchoolPolicy's before() hook.
         Gate::policy(School::class, SchoolPolicy::class);
+
+        // Phase 5 Slice 1 — ledger foundation. Role lists are shared across
+        // all three via App\Policies\Pas\AccountingRoles.
+        Gate::policy(ChartOfAccount::class, ChartOfAccountPolicy::class);
+        Gate::policy(TaxRate::class, TaxRatePolicy::class);
+        Gate::policy(AccountingPeriod::class, AccountingPeriodPolicy::class);
 
         // Week 8 — real-time gross-to-net preview. Class-level Gate (no
         // underlying model), so it lives outside Gate::policy() registrations.

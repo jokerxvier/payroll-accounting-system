@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
      *   SchoolSeeder               → default tenant (slug=default)
      *   StatutoryContributionSeeder
      *   Week7CatalogSeeder
+     *   AccountingCatalogSeeder    → default school chart of accounts + tax rates
      *
      * ## Local-only (APP_ENV=local)
      *
@@ -41,6 +42,7 @@ class DatabaseSeeder extends Seeder
      *   php artisan db:seed --class=SchoolSeeder
      *   php artisan db:seed --class=StatutoryContributionSeeder
      *   php artisan db:seed --class=Week7CatalogSeeder
+     *   php artisan db:seed --class=AccountingCatalogSeeder
      *   php artisan db:seed --class=DemoUsersSeeder
      *
      * Bare `php artisan db:seed` is currently NOT recommended on APP_ENV=local
@@ -60,6 +62,10 @@ class DatabaseSeeder extends Seeder
             SchoolSeeder::class,
             StatutoryContributionSeeder::class,
             Week7CatalogSeeder::class,
+            // Phase 5 Slice 1. Runs after SchoolSeeder because it targets the
+            // default school explicitly, and its tax rates FK to the chart of
+            // accounts it seeds first.
+            AccountingCatalogSeeder::class,
         ]);
 
         if (app()->environment('local')) {
