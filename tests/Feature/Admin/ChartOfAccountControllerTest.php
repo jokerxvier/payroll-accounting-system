@@ -12,6 +12,9 @@ use App\Models\User;
  * Pinned behaviours:
  *  - Role gates match App\Policies\Pas\AccountingRoles: manage roles get
  *    full CRUD, auditor is read-only, employee is locked out entirely.
+ *  - There are no create/edit pages — both happen in a sheet on the index —
+ *    so the index ships `parentOptions` and per-row `can` flags, and the
+ *    only write routes are store / update / destroy.
  *  - `normal_balance` is derived server-side from `type` and cannot be
  *    overridden by the client — a credit-normal asset would corrupt every
  *    report that reads the column.
@@ -63,18 +66,75 @@ it('lets every manage role view the index', function (string $role) {
 it('lets an auditor read the index but not create', function () {
     $auditor = coaAuthAs('auditor');
 
-    $this->actingAs($auditor)->get('/admin/chart-of-accounts')->assertOk();
-    $this->actingAs($auditor)->get('/admin/chart-of-accounts/create')->assertForbidden();
+    $this->actingAs($auditor)
+        ->get('/admin/chart-of-accounts')
+        ->assertOk()
+        // The sheet is never offered: `can.create` is false and every row's
+        // own flags are false too.
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/accounting/chart-of-accounts/index', false)
+            ->where('can.create', false),
+        );
+
     $this->actingAs($auditor)
         ->post('/admin/chart-of-accounts', validAccountPayload())
         ->assertForbidden();
+});
+
+it('ships the parent options and per-row permissions with the index', function () {
+    $locked = ChartOfAccount::factory()
+        ->asset()
+        ->system(ChartOfAccount::SYSTEM_AR_CONTROL)
+        ->create(['code' => '1200']);
+    ChartOfAccount::factory()->create(['code' => '5100']);
+
+    // The sheet opens without a second request, so the options have to
+    // arrive with the list.
+    $this->actingAs(coaAuthAs('accountant'))
+        ->get('/admin/chart-of-accounts')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('admin/accounting/chart-of-accounts/index', false)
+            ->has('parentOptions', 2)
+            ->where('can.create', true)
+            ->where('accounts', function ($accounts) use ($locked): bool {
+                $rows = collect($accounts)->keyBy('code');
+
+                // A locked system account is editable but not deletable.
+                return $rows['1200']['can']['update'] === true
+                    && $rows['1200']['can']['delete'] === false
+                    && $rows['5100']['can']['update'] === true
+                    && $rows['5100']['can']['delete'] === true
+                    && $rows['1200']['id'] === $locked->id;
+            }),
+        );
+});
+
+it('no longer serves standalone create or edit pages', function () {
+    // Both moved into a sheet on the index, so neither route is registered.
+    //
+    // /create answers 405, not 404: the single-segment URI still exists for
+    // PATCH and DELETE as `chart-of-accounts/{chartOfAccount}`, so the router
+    // matches the path and rejects the verb. /{id}/edit is two segments and
+    // matches nothing at all, so it is a plain 404.
+    $account = ChartOfAccount::factory()->create(['code' => '5100']);
+    $user = coaAuthAs('accountant');
+
+    $this->actingAs($user)
+        ->get('/admin/chart-of-accounts/create')
+        ->assertMethodNotAllowed();
+    $this->actingAs($user)
+        ->get("/admin/chart-of-accounts/{$account->getKey()}/edit")
+        ->assertNotFound();
 });
 
 it('locks an ordinary employee out of the chart of accounts entirely', function () {
     $employee = coaAuthAs('employee');
 
     $this->actingAs($employee)->get('/admin/chart-of-accounts')->assertForbidden();
-    $this->actingAs($employee)->get('/admin/chart-of-accounts/create')->assertForbidden();
+    $this->actingAs($employee)
+        ->post('/admin/chart-of-accounts', validAccountPayload())
+        ->assertForbidden();
 });
 
 it('requires authentication', function () {

@@ -27,6 +27,14 @@ use Inertia\Response;
  * scanned page by page, so index() returns the full list ordered by code
  * without pagination — same call as the allowance and deduction-type
  * catalogs.
+ *
+ * There are no `create` / `edit` pages. Both happen in a right-side sheet
+ * on the index, per `RULES.md` §807 and `THEME.md` §418 — an accounting
+ * record is edited against the surrounding chart, so navigating away from
+ * the list to a standalone form loses the context that makes the edit
+ * meaningful. The index therefore ships `parentOptions` up front so the
+ * sheet needs no second round trip, and per-row `can` flags so the client
+ * renders actions without re-deriving the policy.
  */
 final class ChartOfAccountController extends Controller
 {
@@ -36,24 +44,29 @@ final class ChartOfAccountController extends Controller
 
         $accounts = ChartOfAccount::query()
             ->orderBy('code')
-            ->get();
+            ->get()
+            ->map(fn (ChartOfAccount $account): array => [
+                ...$account->only([
+                    'id', 'code', 'name', 'type', 'subtype', 'normal_balance',
+                    'cash_flow_category', 'parent_id', 'system_code',
+                    'description', 'is_active', 'is_locked',
+                ]),
+                // The client renders per-row actions from these rather than
+                // re-deriving the policy in TypeScript.
+                'can' => [
+                    'update' => Gate::allows('update', $account),
+                    'delete' => Gate::allows('delete', $account),
+                ],
+            ]);
 
         return Inertia::render('admin/accounting/chart-of-accounts/index', [
             'accounts' => $accounts,
-            // The client renders per-row actions from these rather than
-            // re-deriving the policy in TypeScript.
+            // Shipped with the list so the edit sheet can populate its
+            // parent picker without a second request when it opens.
+            'parentOptions' => $this->parentOptions(),
             'can' => [
                 'create' => Gate::allows('create', ChartOfAccount::class),
             ],
-        ]);
-    }
-
-    public function create(): Response
-    {
-        Gate::authorize('create', ChartOfAccount::class);
-
-        return Inertia::render('admin/accounting/chart-of-accounts/create', [
-            'parentOptions' => $this->parentOptions(),
         ]);
     }
 
@@ -69,22 +82,6 @@ final class ChartOfAccountController extends Controller
         return redirect()
             ->route('admin.chart-of-accounts.index')
             ->with('success', "Account {$account->code} — {$account->name} created.");
-    }
-
-    public function edit(ChartOfAccount $chartOfAccount): Response
-    {
-        Gate::authorize('update', $chartOfAccount);
-
-        return Inertia::render('admin/accounting/chart-of-accounts/edit', [
-            'account' => $chartOfAccount,
-            // Exclude self so the form cannot offer an account as its own
-            // parent; the FormRequest rejects it too, but the UI should not
-            // present the option in the first place.
-            'parentOptions' => $this->parentOptions(exceptId: (int) $chartOfAccount->getKey()),
-            'can' => [
-                'delete' => Gate::allows('delete', $chartOfAccount),
-            ],
-        ]);
     }
 
     public function update(
@@ -142,12 +139,16 @@ final class ChartOfAccountController extends Controller
     /**
      * Accounts selectable as a parent, as a lean id/code/name list.
      *
+     * The whole list is sent; the sheet drops the account being edited from
+     * its own picker client-side, since it already holds every option. The
+     * FormRequest rejects a self-parent regardless — the client filter only
+     * stops the UI offering an option the server would then refuse.
+     *
      * @return Collection<int, ChartOfAccount>
      */
-    private function parentOptions(?int $exceptId = null): Collection
+    private function parentOptions(): Collection
     {
         return ChartOfAccount::query()
-            ->when($exceptId !== null, fn ($query) => $query->whereKeyNot($exceptId))
             ->orderBy('code')
             ->get(['id', 'code', 'name', 'type']);
     }

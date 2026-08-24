@@ -1,7 +1,8 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { BookOpen, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { ChartOfAccountEditSheet } from '@/components/admin/chart-of-account-edit-sheet';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import {
@@ -31,15 +32,14 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-    create as accountsCreate,
     destroy as accountsDestroy,
-    edit as accountsEdit,
     index as accountsIndex,
 } from '@/routes/admin/chart-of-accounts';
-import type { AccountType, ChartOfAccountRow } from '@/types';
+import type { AccountOption, AccountType, ChartOfAccountRow } from '@/types';
 
 interface Props {
     accounts: ChartOfAccountRow[];
+    parentOptions: AccountOption[];
     can: { create: boolean };
 }
 
@@ -81,7 +81,29 @@ function humanizeSubtype(subtype: string | null): string {
     return subtype.replaceAll('_', ' ');
 }
 
-export default function ChartOfAccountsIndex({ accounts, can }: Props) {
+export default function ChartOfAccountsIndex({
+    accounts,
+    parentOptions,
+    can,
+}: Props) {
+    // `undefined` while creating; a row while editing. `sheetOpen` is kept
+    // separate so the sheet can animate closed without the form blanking
+    // mid-transition.
+    const [sheetOpen, setSheetOpen] = useState(false);
+    const [editing, setEditing] = useState<ChartOfAccountRow | undefined>(
+        undefined,
+    );
+
+    const openCreate = (): void => {
+        setEditing(undefined);
+        setSheetOpen(true);
+    };
+
+    const openEdit = (row: ChartOfAccountRow): void => {
+        setEditing(row);
+        setSheetOpen(true);
+    };
+
     const [pendingDelete, setPendingDelete] =
         useState<ChartOfAccountRow | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -129,11 +151,9 @@ export default function ChartOfAccountsIndex({ accounts, can }: Props) {
                     description="Every account the ledger can post to, grouped as balance sheet then income statement. Locked accounts are used by the system and cannot be deleted."
                     actions={
                         can.create ? (
-                            <Button asChild>
-                                <Link href={accountsCreate().url}>
-                                    <Plus className="mr-1 h-4 w-4" />
-                                    New account
-                                </Link>
+                            <Button type="button" onClick={openCreate}>
+                                <Plus className="mr-1 h-4 w-4" />
+                                New account
                             </Button>
                         ) : undefined
                     }
@@ -146,11 +166,13 @@ export default function ChartOfAccountsIndex({ accounts, can }: Props) {
                         description="Add the first account, or run the accounting catalog seeder to load a standard Philippine school chart."
                         action={
                             can.create ? (
-                                <Button asChild size="sm">
-                                    <Link href={accountsCreate().url}>
-                                        <Plus className="mr-1 h-4 w-4" />
-                                        New account
-                                    </Link>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={openCreate}
+                                >
+                                    <Plus className="mr-1 h-4 w-4" />
+                                    New account
                                 </Button>
                             ) : undefined
                         }
@@ -191,6 +213,7 @@ export default function ChartOfAccountsIndex({ accounts, can }: Props) {
                                                 key={group.type}
                                                 type={group.type}
                                                 rows={group.rows}
+                                                onRequestEdit={openEdit}
                                                 onRequestDelete={
                                                     setPendingDelete
                                                 }
@@ -203,6 +226,13 @@ export default function ChartOfAccountsIndex({ accounts, can }: Props) {
                     </Card>
                 )}
             </div>
+
+            <ChartOfAccountEditSheet
+                open={sheetOpen}
+                onOpenChange={setSheetOpen}
+                account={editing}
+                parentOptions={parentOptions}
+            />
 
             <AlertDialog
                 open={pendingDelete !== null}
@@ -247,10 +277,12 @@ export default function ChartOfAccountsIndex({ accounts, can }: Props) {
 function AccountTypeSection({
     type,
     rows,
+    onRequestEdit,
     onRequestDelete,
 }: {
     type: AccountType;
     rows: ChartOfAccountRow[];
+    onRequestEdit: (row: ChartOfAccountRow) => void;
     onRequestDelete: (row: ChartOfAccountRow) => void;
 }) {
     return (
@@ -304,19 +336,13 @@ function AccountTypeSection({
                     <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                             <Button
-                                asChild
+                                type="button"
                                 size="sm"
                                 variant="ghost"
                                 aria-label={`Edit account ${row.code}`}
+                                onClick={() => onRequestEdit(row)}
                             >
-                                <Link
-                                    href={
-                                        accountsEdit({ chartOfAccount: row.id })
-                                            .url
-                                    }
-                                >
-                                    <Pencil className="h-4 w-4" />
-                                </Link>
+                                <Pencil className="h-4 w-4" />
                             </Button>
                             {row.is_locked ? null : (
                                 <Button

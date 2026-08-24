@@ -1,4 +1,9 @@
-import { render as rtlRender, screen, within } from '@testing-library/react';
+import {
+    fireEvent,
+    render as rtlRender,
+    screen,
+    within,
+} from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -32,6 +37,23 @@ vi.mock('sonner', () => ({
     toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+// The sheet has its own test file. Here we only care that the index opens
+// it with the right row, so it is stubbed down to something assertable.
+vi.mock('@/components/admin/chart-of-account-edit-sheet', () => ({
+    ChartOfAccountEditSheet: ({
+        open,
+        account,
+    }: {
+        open: boolean;
+        account?: { code: string };
+    }) =>
+        open ? (
+            <div data-testid="edit-sheet">
+                {account ? `editing:${account.code}` : 'creating'}
+            </div>
+        ) : null,
+}));
+
 function account(
     overrides: Partial<ChartOfAccountRow> = {},
 ): ChartOfAccountRow {
@@ -56,6 +78,7 @@ describe('ChartOfAccountsIndex', () => {
     it('groups accounts into statement sections in conventional order', () => {
         render(
             <ChartOfAccountsIndex
+                parentOptions={[]}
                 can={{ create: true }}
                 accounts={[
                     // Deliberately out of order — the page must impose the
@@ -102,6 +125,7 @@ describe('ChartOfAccountsIndex', () => {
     it('omits a section that has no accounts', () => {
         render(
             <ChartOfAccountsIndex
+                parentOptions={[]}
                 can={{ create: true }}
                 accounts={[account({ type: 'asset', normal_balance: 'debit' })]}
             />,
@@ -115,6 +139,7 @@ describe('ChartOfAccountsIndex', () => {
     it('shows the normal balance for each account', () => {
         render(
             <ChartOfAccountsIndex
+                parentOptions={[]}
                 can={{ create: true }}
                 accounts={[
                     account({
@@ -140,6 +165,7 @@ describe('ChartOfAccountsIndex', () => {
     it('marks a system account and hides its delete control', () => {
         render(
             <ChartOfAccountsIndex
+                parentOptions={[]}
                 can={{ create: true }}
                 accounts={[
                     account({
@@ -167,6 +193,7 @@ describe('ChartOfAccountsIndex', () => {
     it('offers deletion for an ordinary account', () => {
         render(
             <ChartOfAccountsIndex
+                parentOptions={[]}
                 can={{ create: true }}
                 accounts={[account({ id: 1, code: '5900' })]}
             />,
@@ -178,13 +205,25 @@ describe('ChartOfAccountsIndex', () => {
     });
 
     it('renders an empty state when the chart has no accounts', () => {
-        render(<ChartOfAccountsIndex can={{ create: true }} accounts={[]} />);
+        render(
+            <ChartOfAccountsIndex
+                parentOptions={[]}
+                can={{ create: true }}
+                accounts={[]}
+            />,
+        );
 
         expect(screen.getByText('No accounts yet')).toBeInTheDocument();
     });
 
     it('hides the create action when the viewer cannot create', () => {
-        render(<ChartOfAccountsIndex can={{ create: false }} accounts={[]} />);
+        render(
+            <ChartOfAccountsIndex
+                parentOptions={[]}
+                can={{ create: false }}
+                accounts={[]}
+            />,
+        );
 
         expect(screen.queryByText('New account')).not.toBeInTheDocument();
     });
@@ -192,6 +231,7 @@ describe('ChartOfAccountsIndex', () => {
     it('counts the accounts in each section', () => {
         render(
             <ChartOfAccountsIndex
+                parentOptions={[]}
                 can={{ create: true }}
                 accounts={[
                     account({ id: 1, code: '5100' }),
@@ -205,5 +245,96 @@ describe('ChartOfAccountsIndex', () => {
         const row = heading.closest('tr');
         expect(row).not.toBeNull();
         expect(within(row as HTMLElement).getByText('3')).toBeInTheDocument();
+    });
+});
+
+describe('ChartOfAccountsIndex — edit sheet', () => {
+    it('keeps the sheet closed until something asks for it', () => {
+        render(
+            <ChartOfAccountsIndex
+                parentOptions={[]}
+                can={{ create: true }}
+                accounts={[account({ id: 1, code: '5100' })]}
+            />,
+        );
+
+        expect(screen.queryByTestId('edit-sheet')).not.toBeInTheDocument();
+    });
+
+    it('opens the sheet in create mode from the header action', () => {
+        render(
+            <ChartOfAccountsIndex
+                parentOptions={[]}
+                can={{ create: true }}
+                accounts={[account({ id: 1, code: '5100' })]}
+            />,
+        );
+
+        fireEvent.click(screen.getByText('New account'));
+
+        expect(screen.getByTestId('edit-sheet')).toHaveTextContent('creating');
+    });
+
+    it('opens the sheet in create mode from the empty state', () => {
+        render(
+            <ChartOfAccountsIndex
+                parentOptions={[]}
+                can={{ create: true }}
+                accounts={[]}
+            />,
+        );
+
+        // With no accounts, both the page header and the empty state offer
+        // "New account". Click the second — the empty-state one is the
+        // subject here, and the header is already covered above.
+        const triggers = screen.getAllByText('New account');
+        expect(triggers).toHaveLength(2);
+        fireEvent.click(triggers[1]);
+
+        expect(screen.getByTestId('edit-sheet')).toHaveTextContent('creating');
+    });
+
+    it('opens the sheet on the row that was clicked', () => {
+        render(
+            <ChartOfAccountsIndex
+                parentOptions={[]}
+                can={{ create: true }}
+                accounts={[
+                    account({ id: 1, code: '5100' }),
+                    account({ id: 2, code: '5200' }),
+                ]}
+            />,
+        );
+
+        fireEvent.click(screen.getByLabelText('Edit account 5200'));
+
+        expect(screen.getByTestId('edit-sheet')).toHaveTextContent(
+            'editing:5200',
+        );
+    });
+
+    it('edits a locked system account rather than navigating away', () => {
+        render(
+            <ChartOfAccountsIndex
+                parentOptions={[]}
+                can={{ create: true }}
+                accounts={[
+                    account({
+                        id: 1,
+                        code: '1200',
+                        type: 'asset',
+                        normal_balance: 'debit',
+                        system_code: 'AR_CONTROL',
+                        is_locked: true,
+                    }),
+                ]}
+            />,
+        );
+
+        fireEvent.click(screen.getByLabelText('Edit account 1200'));
+
+        expect(screen.getByTestId('edit-sheet')).toHaveTextContent(
+            'editing:1200',
+        );
     });
 });

@@ -164,13 +164,16 @@ Route::middleware(['auth', 'verified'])
 
         // ── Phase 5 Slice 1 — accounting ledger foundation ──────────────
         //
-        // Chart of accounts. `show` is excluded: the index is the listing
-        // surface, matching allowances / deduction-types / tax-rates.
+        // Chart of accounts. `show`, `create`, and `edit` are all excluded:
+        // the index is the listing surface, and creating/editing happens in
+        // a sheet on that same page (RULES.md §807), so there are no
+        // standalone form pages to route to. store / update / destroy are
+        // what the sheet posts to.
         // The kebab-case URI maps back to the camelCase {chartOfAccount}
         // parameter so the controller keeps a conventional variable name.
         Route::resource('chart-of-accounts', ChartOfAccountController::class)
             ->parameters(['chart-of-accounts' => 'chartOfAccount'])
-            ->except(['show']);
+            ->except(['show', 'create', 'edit']);
 
         // Tax rates. Default singular `taxRate` parameter after the
         // kebab-to-camel mapping; no further override needed.

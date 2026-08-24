@@ -62,7 +62,7 @@ it('hides another school accounts from the chart index', function (): void {
         );
 });
 
-it('404s when editing another school account', function (): void {
+it('404s when updating another school account', function (): void {
     $default = School::query()->where('slug', 'default')->firstOrFail();
     $other = School::factory()->create(['slug' => 'coa-scope-edit']);
 
@@ -75,9 +75,19 @@ it('404s when editing another school account', function (): void {
 
     // Route-model binding runs through the global scope, so the row is
     // invisible and binding fails rather than leaking another tenant's data.
+    // Asserted on PATCH because editing now happens in a sheet — there is no
+    // /edit page route to probe.
     $this->actingAs(accountingTenantAuthAs('accountant'))
-        ->get("/admin/chart-of-accounts/{$theirs->getKey()}/edit")
+        ->patch("/admin/chart-of-accounts/{$theirs->getKey()}", [
+            'code' => '9100',
+            'name' => 'Hijacked',
+            'type' => ChartOfAccount::TYPE_EXPENSE,
+            'cash_flow_category' => ChartOfAccount::CASH_FLOW_OPERATING,
+            'is_active' => true,
+        ])
         ->assertNotFound();
+
+    expect($theirs->fresh()->name)->not()->toBe('Hijacked');
 });
 
 it('404s when editing another school tax rate', function (): void {
