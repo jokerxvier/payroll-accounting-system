@@ -2,6 +2,7 @@ export type * from './accounting';
 export type * from './auth';
 export type * from './contact';
 export type * from './employee';
+export type * from './invoice';
 export type * from './journal';
 export type * from './navigation';
 export type * from './pagination';

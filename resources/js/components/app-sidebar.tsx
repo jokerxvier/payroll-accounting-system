@@ -11,6 +11,8 @@ import {
     Check,
     ChevronsUpDown,
     FileSearch,
+    FileText,
+    Hash,
     LayoutGrid,
     MinusCircle,
     Percent,
@@ -51,6 +53,8 @@ import { index as adminChartOfAccountsIndex } from '@/routes/admin/chart-of-acco
 import { index as adminContactsIndex } from '@/routes/admin/contacts';
 import { index as adminContributionTablesIndex } from '@/routes/admin/contribution-tables';
 import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
+import { index as adminDocumentSeriesIndex } from '@/routes/admin/document-series';
+import { index as adminInvoicesIndex } from '@/routes/admin/invoices';
 import { index as adminJournalEntriesIndex } from '@/routes/admin/journal-entries';
 import { index as adminPayPeriodsIndex } from '@/routes/admin/pay-periods';
 import { index as adminPayrollRunsIndex } from '@/routes/admin/payroll-runs';
@@ -203,6 +207,14 @@ const accountingNavItems: NavItem[] = [
         href: adminJournalEntriesIndex(),
         icon: BookText,
     },
+    // Mirrors App\Policies\Pas\InvoicePolicy::viewAny, which reuses
+    // AccountingRoles::VIEW — same set as the group gate above, so no
+    // per-item gating is needed.
+    {
+        title: 'Invoices',
+        href: adminInvoicesIndex(),
+        icon: FileText,
+    },
     // Mirrors App\Policies\Pas\ContactPolicy, which reuses AccountingRoles.
     {
         title: 'Contacts',
@@ -218,6 +230,14 @@ const accountingNavItems: NavItem[] = [
         title: 'Periods',
         href: adminAccountingPeriodsIndex(),
         icon: CalendarRange,
+    },
+    // Mirrors App\Policies\Pas\DocumentNumberSeriesPolicy::viewAny, which
+    // reuses AccountingRoles::VIEW. Editing is narrower (POST_LEDGER), and
+    // that is gated per-row by the `can.update` flag the controller sends.
+    {
+        title: 'Document numbering',
+        href: adminDocumentSeriesIndex(),
+        icon: Hash,
     },
 ];
 
