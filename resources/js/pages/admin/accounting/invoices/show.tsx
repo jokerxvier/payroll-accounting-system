@@ -42,6 +42,7 @@ import {
     voidMethod as invoiceVoid,
 } from '@/routes/admin/invoices';
 import { show as journalShow } from '@/routes/admin/journal-entries';
+import { show as paymentShow } from '@/routes/admin/payments';
 import type { InvoiceDetail } from '@/types';
 import { InvoiceStatusBadge } from './index';
 
@@ -365,6 +366,53 @@ export default function InvoiceShow({ invoice }: Props) {
                                 ) : null}
                             </CardContent>
                         </Card>
+
+                        {invoice.payments.length > 0 ? (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Payments</CardTitle>
+                                    <CardDescription>
+                                        Applied to this document.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <dl className="space-y-2 text-sm">
+                                        {invoice.payments.map((payment) => (
+                                            <div
+                                                key={payment.id}
+                                                className="flex items-center justify-between gap-4"
+                                            >
+                                                <dt>
+                                                    <Link
+                                                        className="font-mono text-xs underline underline-offset-4"
+                                                        href={
+                                                            paymentShow({
+                                                                payment:
+                                                                    payment.payment_id,
+                                                            }).url
+                                                        }
+                                                    >
+                                                        {payment.reference ??
+                                                            `#${payment.payment_id}`}
+                                                    </Link>
+                                                    <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+                                                        {payment.payment_date}
+                                                    </span>
+                                                </dt>
+                                                <dd>
+                                                    <Money
+                                                        amount={
+                                                            payment.amount_centavos /
+                                                            100
+                                                        }
+                                                    />
+                                                </dd>
+                                            </div>
+                                        ))}
+                                    </dl>
+                                </CardContent>
+                            </Card>
+                        ) : null}
 
                         {invoice.notes ? (
                             <Card>

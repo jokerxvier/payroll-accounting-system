@@ -123,6 +123,18 @@ export interface InvoiceDetail extends InvoiceRow {
         status: string;
     } | null;
     lines: InvoiceLineRow[];
+    /**
+     * Posted payments applied to this document. Drafts are excluded — one
+     * settles nothing, and listing it would imply money that has not
+     * arrived.
+     */
+    payments: Array<{
+        id: number;
+        payment_id: number;
+        reference: string | null;
+        payment_date: string | null;
+        amount_centavos: number;
+    }>;
     can: InvoiceRow['can'] & { print: boolean };
 }
 

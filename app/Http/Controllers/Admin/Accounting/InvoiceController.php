@@ -15,6 +15,7 @@ use App\Models\Pas\Contact;
 use App\Models\Pas\DocumentNumberSeries;
 use App\Models\Pas\Invoice;
 use App\Models\Pas\InvoiceLine;
+use App\Models\Pas\PaymentAllocation;
 use App\Models\Pas\TaxRate;
 use App\Services\Accounting\DocumentNumberAllocator;
 use App\Services\Accounting\InvoiceTotalsCalculator;
@@ -126,6 +127,10 @@ final class InvoiceController extends Controller
             'lines.account:id,code,name',
             'lines.taxRate:id,code,name,rate_bps,type',
             'journalEntry:id,entry_number,status',
+            // Slice 7 — what has actually been applied to this document.
+            // Only posted payments are shown: a draft settles nothing, and
+            // listing one here would imply money that has not arrived.
+            'allocations.payment:id,reference,payment_date,status,type',
         ]);
 
         return Inertia::render('admin/accounting/invoices/show', [
@@ -420,6 +425,16 @@ final class InvoiceController extends Controller
                 'line_net_centavos' => $line->line_net_centavos,
                 'line_tax_centavos' => $line->line_tax_centavos,
             ])->values(),
+            'payments' => $invoice->allocations
+                ->filter(fn (PaymentAllocation $allocation): bool => $allocation->payment?->isPosted() === true)
+                ->map(fn (PaymentAllocation $allocation): array => [
+                    'id' => $allocation->id,
+                    'payment_id' => $allocation->payment_id,
+                    'reference' => $allocation->payment?->reference,
+                    'payment_date' => $allocation->payment?->payment_date?->toDateString(),
+                    'amount_centavos' => $allocation->amount_centavos,
+                ])
+                ->values(),
             'can' => [
                 ...$this->summarise($invoice)['can'],
                 'print' => Gate::allows('print', $invoice),

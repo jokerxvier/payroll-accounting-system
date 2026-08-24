@@ -48,6 +48,7 @@ final class InvoicePostingService
 {
     public function __construct(
         private readonly PostJournalEntry $poster,
+        private readonly ControlAccountResolver $controlAccounts,
     ) {}
 
     /**
@@ -121,7 +122,7 @@ final class InvoicePostingService
             JournalEntryLine::create([
                 'journal_entry_id' => $entry->getKey(),
                 'line_number' => $lineNumber++,
-                'account_id' => $this->controlAccountFor($invoice)->getKey(),
+                'account_id' => $this->controlAccounts->resolve($invoice->contact, $invoice->isSales())->getKey(),
                 'debit_centavos' => $isSales ? $invoice->total_centavos : 0,
                 'credit_centavos' => $isSales ? 0 : $invoice->total_centavos,
                 'description' => $description,
@@ -154,7 +155,7 @@ final class InvoicePostingService
             if ($invoice->vat_centavos !== 0) {
                 // Output VAT on a sale is a liability owed to the BIR;
                 // input VAT on a purchase is an asset creditable against it.
-                $vatAccount = $this->systemAccount(
+                $vatAccount = $this->controlAccounts->systemAccount(
                     $isSales
                         ? ChartOfAccount::SYSTEM_VAT_OUTPUT
                         : ChartOfAccount::SYSTEM_VAT_INPUT,
@@ -205,58 +206,6 @@ final class InvoicePostingService
         }
 
         return $buckets;
-    }
-
-    /**
-     * The receivable or payable account this document posts against.
-     *
-     * The contact's own override wins, so a school that tracks a major
-     * supplier or a scholarship fund on its own control account gets that.
-     * Otherwise the school's AR_CONTROL / AP_CONTROL — the fallback the
-     * contact register was built around.
-     */
-    private function controlAccountFor(Invoice $invoice): ChartOfAccount
-    {
-        $contact = $invoice->contact;
-
-        $overrideId = $invoice->isSales()
-            ? $contact?->receivable_account_id
-            : $contact?->payable_account_id;
-
-        if ($overrideId !== null) {
-            $override = ChartOfAccount::query()->find($overrideId);
-
-            if ($override !== null) {
-                return $override;
-            }
-        }
-
-        return $this->systemAccount(
-            $invoice->isSales()
-                ? ChartOfAccount::SYSTEM_AR_CONTROL
-                : ChartOfAccount::SYSTEM_AP_CONTROL,
-        );
-    }
-
-    /**
-     * Resolve a system account within the posting school.
-     *
-     * Throws rather than inventing one. A missing control account is a setup
-     * error the operator has to fix, and quietly posting real money into a
-     * substitute would put it somewhere nobody chose.
-     */
-    private function systemAccount(string $systemCode): ChartOfAccount
-    {
-        $account = ChartOfAccount::query()->where('system_code', $systemCode)->first();
-
-        if ($account === null) {
-            throw new RuntimeException(sprintf(
-                "This school's chart of accounts has no '%s' account, which invoicing needs in order to post.",
-                $systemCode,
-            ));
-        }
-
-        return $account;
     }
 
     private function narration(Invoice $invoice): string

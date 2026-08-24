@@ -15,6 +15,7 @@ use App\Models\Pas\EmployeeLoan;
 use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\Invoice;
 use App\Models\Pas\JournalEntry;
+use App\Models\Pas\Payment;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollAdjustment;
 use App\Models\Pas\PayrollRun;
@@ -23,6 +24,7 @@ use App\Models\Pas\StatutoryContribution;
 use App\Models\Pas\TaxRate;
 use App\Observers\InvoiceObserver;
 use App\Observers\JournalEntryObserver;
+use App\Observers\PaymentObserver;
 use App\Observers\PayrollRunObserver;
 use App\Observers\SchoolObserver;
 use App\Policies\Pas\AccountingPeriodPolicy;
@@ -37,6 +39,7 @@ use App\Policies\Pas\EmployeeLoanPolicy;
 use App\Policies\Pas\EmployeeProfilePolicy;
 use App\Policies\Pas\InvoicePolicy;
 use App\Policies\Pas\JournalEntryPolicy;
+use App\Policies\Pas\PaymentPolicy;
 use App\Policies\Pas\PayPeriodPolicy;
 use App\Policies\Pas\PayrollAdjustmentPolicy;
 use App\Policies\Pas\PayrollRunPolicy;
@@ -103,6 +106,7 @@ class AppServiceProvider extends ServiceProvider
         PayrollRun::observe(PayrollRunObserver::class);
         JournalEntry::observe(JournalEntryObserver::class);
         Invoice::observe(InvoiceObserver::class);
+        Payment::observe(PaymentObserver::class);
     }
 
     /**
@@ -190,6 +194,9 @@ class AppServiceProvider extends ServiceProvider
         // Phase 5 Slice 5 — invoices and the serials they draw from.
         Gate::policy(Invoice::class, InvoicePolicy::class);
         Gate::policy(DocumentNumberSeries::class, DocumentNumberSeriesPolicy::class);
+
+        // Phase 5 Slice 7 — payments and allocation.
+        Gate::policy(Payment::class, PaymentPolicy::class);
 
         // Week 8 — real-time gross-to-net preview. Class-level Gate (no
         // underlying model), so it lives outside Gate::policy() registrations.

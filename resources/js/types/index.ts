@@ -6,6 +6,7 @@ export type * from './invoice';
 export type * from './journal';
 export type * from './navigation';
 export type * from './pagination';
+export type * from './payment';
 export type * from './payroll';
 export type * from './payroll-preview';
 export type * from './school';

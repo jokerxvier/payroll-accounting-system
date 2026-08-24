@@ -53,6 +53,7 @@ final class AccountingCatalogSeeder extends Seeder
         ['code' => '1210', 'name' => 'Allowance for Doubtful Accounts', 'type' => 'asset', 'subtype' => 'contra_asset', 'cash_flow' => 'operating'],
         ['code' => '1300', 'name' => 'Input VAT', 'type' => 'asset', 'subtype' => 'current_asset', 'cash_flow' => 'operating', 'system' => ChartOfAccount::SYSTEM_VAT_INPUT, 'description' => 'VAT paid on purchases, creditable against output VAT.'],
         ['code' => '1400', 'name' => 'Prepaid Expenses', 'type' => 'asset', 'subtype' => 'current_asset', 'cash_flow' => 'operating'],
+        ['code' => '1450', 'name' => 'Advances to Suppliers', 'type' => 'asset', 'subtype' => 'current_asset', 'cash_flow' => 'operating', 'system' => ChartOfAccount::SYSTEM_SUPPLIER_ADVANCES, 'description' => 'Money paid to a supplier that no bill has claimed yet. Cleared as bills are allocated against it.'],
         ['code' => '1510', 'name' => 'Property, Plant and Equipment', 'type' => 'asset', 'subtype' => 'non_current_asset', 'cash_flow' => 'investing'],
         ['code' => '1520', 'name' => 'Accumulated Depreciation', 'type' => 'asset', 'subtype' => 'contra_asset', 'cash_flow' => 'investing'],
 
@@ -64,6 +65,7 @@ final class AccountingCatalogSeeder extends Seeder
         ['code' => '2320', 'name' => 'PhilHealth Contributions Payable', 'type' => 'liability', 'subtype' => 'current_liability', 'cash_flow' => 'operating'],
         ['code' => '2330', 'name' => 'Pag-IBIG Contributions Payable', 'type' => 'liability', 'subtype' => 'current_liability', 'cash_flow' => 'operating'],
         ['code' => '2340', 'name' => 'Withholding Tax Payable', 'type' => 'liability', 'subtype' => 'current_liability', 'cash_flow' => 'operating'],
+        ['code' => '2410', 'name' => 'Advances from Customers', 'type' => 'liability', 'subtype' => 'current_liability', 'cash_flow' => 'operating', 'system' => ChartOfAccount::SYSTEM_CUSTOMER_ADVANCES, 'description' => 'Money received that no invoice has claimed yet. Distinct from Unearned Tuition Revenue, which is tuition billed but not yet earned.'],
         ['code' => '2400', 'name' => 'Unearned Tuition Revenue', 'type' => 'liability', 'subtype' => 'current_liability', 'cash_flow' => 'operating', 'description' => 'Tuition billed or collected in advance of the term it covers.'],
         ['code' => '2510', 'name' => 'Long-Term Loans Payable', 'type' => 'liability', 'subtype' => 'non_current_liability', 'cash_flow' => 'financing'],
 
