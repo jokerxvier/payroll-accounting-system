@@ -254,10 +254,15 @@ class EmployeeController extends Controller
         }
 
         // `firstOrCreateForStaff` keys on `lms_staff_id`, so re-posting for a
-        // staff that already has a profile is a no-op (the supplied defaults
+        // staff that already has a profile is a no-op (the submitted values
         // are ignored — Eloquent's firstOrCreate semantics). The frontend
         // gates the affordance on `has_profile === false`, so this is the
         // expected path; the no-op behavior is defensive against double POSTs.
+        //
+        // The four values come from the request, not from column defaults:
+        // EmployeeProfileStoreRequest requires basic_salary_centavos,
+        // employment_classification, pay_frequency, and is_active, and
+        // profile-setup-sheet.tsx collects all four before posting.
         $this->repo->firstOrCreateForStaff($staffId, $request->validated());
 
         return back()->with('success', 'Payroll profile created.');

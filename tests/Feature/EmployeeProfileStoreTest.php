@@ -12,9 +12,36 @@ uses(RefreshDatabase::class);
 
 /*
  * POST /employees/{staffId}/profile creates a payroll profile for the staff
- * id, populating sensible defaults via the migration's column defaults.
- * The endpoint is idempotent — POSTing twice does not duplicate the row.
+ * id from the four values the setup sheet collects. The endpoint is
+ * idempotent — POSTing twice does not duplicate the row.
+ *
+ * These tests previously posted an empty body, from an older contract where
+ * the endpoint filled the row from the migration's column defaults.
+ * EmployeeProfileStoreRequest requires all four fields now, matching what
+ * `resources/js/components/employees/profile-setup-sheet.tsx` actually sends.
+ *
+ * The empty body went unnoticed because a validation failure redirects BACK
+ * to the same URL, so `assertRedirect()` could not tell it apart from
+ * success. Every write below therefore also asserts the session carries no
+ * errors — without that, this file passes while creating nothing.
  */
+
+/**
+ * The payload the setup sheet posts. Mirrors DEFAULTS in
+ * profile-setup-sheet.tsx, except pay_frequency, which is exercised here as
+ * semi_monthly to prove the submitted value is what persists.
+ *
+ * @return array<string, mixed>
+ */
+function validProfilePayload(array $overrides = []): array
+{
+    return array_merge([
+        'basic_salary_centavos' => 0,
+        'employment_classification' => 'regular',
+        'pay_frequency' => 'semi_monthly',
+        'is_active' => true,
+    ], $overrides);
+}
 
 function authStoreAs(string $payrollRole): User
 {
@@ -29,7 +56,7 @@ function authStoreAs(string $payrollRole): User
     return $user;
 }
 
-it('creates a payroll profile with default values', function () {
+it('creates a payroll profile from the submitted values', function () {
     $user = authStoreAs('super-admin');
 
     $staff = Staff::query()->whereIn('role_id', [1, 4, 5])->first();
@@ -38,7 +65,8 @@ it('creates a payroll profile with default values', function () {
 
     $this->actingAs($user)
         ->from('/employees/'.(int) $staff->id)
-        ->post('/employees/'.(int) $staff->id.'/profile')
+        ->post('/employees/'.(int) $staff->id.'/profile', validProfilePayload())
+        ->assertSessionHasNoErrors()
         ->assertRedirect('/employees/'.(int) $staff->id);
 
     $profile = EmployeeProfile::query()->where('lms_staff_id', $staff->id)->first();
@@ -57,7 +85,8 @@ it('writes a created audit row when creating a profile', function () {
     expect($staff)->not->toBeNull();
 
     $this->actingAs($user)
-        ->post('/employees/'.(int) $staff->id.'/profile')
+        ->post('/employees/'.(int) $staff->id.'/profile', validProfilePayload())
+        ->assertSessionHasNoErrors()
         ->assertRedirect();
 
     $profile = EmployeeProfile::query()->where('lms_staff_id', $staff->id)->firstOrFail();
@@ -79,11 +108,13 @@ it('is idempotent — posting twice does not duplicate the profile', function ()
     expect($staff)->not->toBeNull();
 
     $this->actingAs($user)
-        ->post('/employees/'.(int) $staff->id.'/profile')
+        ->post('/employees/'.(int) $staff->id.'/profile', validProfilePayload())
+        ->assertSessionHasNoErrors()
         ->assertRedirect();
 
     $this->actingAs($user)
-        ->post('/employees/'.(int) $staff->id.'/profile')
+        ->post('/employees/'.(int) $staff->id.'/profile', validProfilePayload())
+        ->assertSessionHasNoErrors()
         ->assertRedirect();
 
     expect(EmployeeProfile::query()->where('lms_staff_id', $staff->id)->count())->toBe(1);
@@ -94,8 +125,10 @@ it('forbids the auditor role on create', function () {
 
     $staff = Staff::query()->whereIn('role_id', [1, 4, 5])->first();
 
+    // Valid payload on purpose: the 403 must come from authorize(), not from
+    // validation happening to reject an empty body.
     $this->actingAs($user)
-        ->post('/employees/'.(int) $staff->id.'/profile')
+        ->post('/employees/'.(int) $staff->id.'/profile', validProfilePayload())
         ->assertForbidden();
 });
 
@@ -105,15 +138,17 @@ it('forbids the employee role on create', function () {
     $staff = Staff::query()->whereIn('role_id', [1, 4, 5])->first();
 
     $this->actingAs($user)
-        ->post('/employees/'.(int) $staff->id.'/profile')
+        ->post('/employees/'.(int) $staff->id.'/profile', validProfilePayload())
         ->assertForbidden();
 });
 
 it('returns 404 for an unknown staff id', function () {
     $user = authStoreAs('super-admin');
 
+    // The body has to be valid, or validation 302s before the controller
+    // ever gets to decide the staff does not exist.
     $this->actingAs($user)
-        ->post('/employees/9999999/profile')
+        ->post('/employees/9999999/profile', validProfilePayload())
         ->assertNotFound();
 });
 
@@ -126,7 +161,7 @@ it('returns 404 for a staff id whose role is not in the payroll allowlist', func
     expect($staff)->not->toBeNull();
 
     $this->actingAs($user)
-        ->post('/employees/'.(int) $staff->id.'/profile')
+        ->post('/employees/'.(int) $staff->id.'/profile', validProfilePayload())
         ->assertNotFound();
 
     expect(EmployeeProfile::query()->where('lms_staff_id', $staff->id)->exists())->toBeFalse();
