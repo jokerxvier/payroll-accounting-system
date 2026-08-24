@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Models\Pas\AuditLog;
 use App\Models\Pas\School;
 use App\Multitenancy\Finders\SchoolTenantFinder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Spatie\Multitenancy\Models\Tenant;
 
 uses(RefreshDatabase::class);
 
@@ -33,6 +35,22 @@ beforeEach(function (): void {
     // finder tests assert raw resolution semantics directly, so clear that
     // row first to avoid masking precondition checks (and so each test
     // controls exactly which schools are present).
+    //
+    // Order matters. The global beforeEach also calls makeCurrent() on that
+    // row, and School is audited, so a School created later in the test
+    // would write an audit row whose school_id auto-fills to the deleted
+    // tenant and trip the foreign key. Drop the tenant binding first, then
+    // the school's own audit rows, then the school.
+    Tenant::forgetCurrent();
+
+    $defaultId = School::query()->where('slug', 'default')->value('id');
+
+    if ($defaultId !== null) {
+        AuditLog::query()->withoutGlobalScopes()
+            ->where('school_id', $defaultId)
+            ->delete();
+    }
+
     School::query()->where('slug', 'default')->delete();
 });
 

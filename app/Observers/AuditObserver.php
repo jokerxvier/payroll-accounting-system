@@ -26,6 +26,9 @@ use Illuminate\Support\Facades\Auth;
  *
  * Request context (ip, user_agent) is read from the request() helper if a
  * request is bound to the container; otherwise both fields are null.
+ *
+ * Tenant: resolved from the audited record where it has one, otherwise from
+ * the current tenant — see {@see self::resolveSchoolId()}.
  */
 final class AuditObserver
 {
@@ -84,6 +87,7 @@ final class AuditObserver
         AuditLog::query()->create([
             'auditable_type' => $model::class,
             'auditable_id' => $model->getKey(),
+            'school_id' => $this->resolveSchoolId($model),
             'actor_id' => Auth::id(),
             'action' => $action,
             'before' => $before,
@@ -121,5 +125,33 @@ final class AuditObserver
         }
 
         return [];
+    }
+
+    /**
+     * Which tenant this audit row belongs to.
+     *
+     * `AuditLog` uses `BelongsToTenant`, which auto-fills `school_id` from
+     * `Tenant::current()` when the attribute is left null. Resolving it from
+     * the audited record instead makes the row depend on the data rather
+     * than on ambient request state — the two agree in normal operation,
+     * because you can only mutate your own tenant's rows, but the explicit
+     * form does not quietly misfile anything if that ever stops holding.
+     *
+     * Returning null keeps the trait's current-tenant fallback in place (it
+     * only fills when the attribute is null), which is what we want for
+     * models that are not tenant-scoped.
+     *
+     * A School deliberately falls into that fallback rather than being filed
+     * under itself. A tenant registry row is not tenant-scoped *data* — it
+     * IS the tenant — and filing its audit under its own id would create a
+     * self-reference that `pas_audit_logs.school_id`'s restrictOnDelete then
+     * uses to block ever deleting that school. `auditable_type` plus
+     * `auditable_id` already identify the school precisely.
+     */
+    private function resolveSchoolId(Model $model): ?int
+    {
+        $schoolId = $model->getAttribute('school_id');
+
+        return $schoolId === null ? null : (int) $schoolId;
     }
 }

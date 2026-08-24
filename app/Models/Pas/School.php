@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models\Pas;
 
+use App\Concerns\Auditable;
 use Database\Factories\Pas\SchoolFactory;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -47,6 +48,8 @@ use Spatie\Multitenancy\Models\Tenant;
  */
 class School extends Tenant
 {
+    use Auditable;
+
     /** @use HasFactory<SchoolFactory> */
     use HasFactory;
 
@@ -90,5 +93,22 @@ class School extends Tenant
     public function getDatabaseName(): string
     {
         return (string) $this->lms_db_database;
+    }
+
+    /**
+     * Keep the tenant's LMS database password out of the audit trail.
+     *
+     * The column is `encrypted` at rest, but an audit row is a second copy
+     * of the credential in a table that auditors can export to CSV and PDF.
+     * A tenant's database password has no business travelling with a change
+     * log, so it is dropped from both the before and after snapshots — the
+     * fact that it changed is still visible, because `updated_at` moves and
+     * the surrounding columns are recorded.
+     *
+     * @return list<string>
+     */
+    public function auditExclude(): array
+    {
+        return ['lms_db_password'];
     }
 }

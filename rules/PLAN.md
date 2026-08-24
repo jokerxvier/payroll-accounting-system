@@ -283,7 +283,7 @@ Bonus shipped beyond original scope:
 - Read-only audit log UI with filters (actor, action, date range, target).
 - Detail drawer showing before/after diff per entry.
 - Export audit log to CSV for external review.
-- Verify every payroll-affecting action across phases produces an audit entry — gap analysis.
+- [x] Verify every payroll-affecting action across phases produces an audit entry — gap analysis. Executable as `tests/Feature/Acceptance/AuditCoverageTest.php`. Two gaps found and fixed: `School` was never audited, and payslips destroyed by the payroll-run delete cascade left no trail. Documented non-audits: the `SchoolObserver` bulk catalog clone (deliberate — it is a system copy, not a user edit) and the login-time `pas_users` upsert (LMS identity sync, not a payroll action).
 - Retention policy documented (e.g., audit logs retained indefinitely; payroll runs retained for at least 10 years per Philippine tax record requirements).
 
 #### Week 15 — UAT, performance, and bug fixes
@@ -304,7 +304,7 @@ Bonus shipped beyond original scope:
 **Phase 4 acceptance criteria**
 
 - [x] Three reports (summary, employee history, audit) export cleanly to all three formats — xlsx / csv / pdf, via a `format` query parameter on each `/export` endpoint
-- [ ] Every state-changing action across the system has an audit log entry; spot-check passes for each role
+- [x] Every state-changing action across the system has an audit log entry; spot-check passes for each role — pinned by `tests/Feature/Acceptance/AuditCoverageTest.php`, which drives each endpoint, asserts the row and its actor, and structurally guards that every persisted `pas_*` model carries the Auditable trait
 - [ ] Production deployment completes without data loss and the smoke-test checklist passes
 - [ ] User documentation reviewed and accepted by client HR contact
 - [ ] All P0 and P1 bugs from UAT closed; P2/P3 logged in the backlog with owners
