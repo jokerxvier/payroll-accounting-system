@@ -365,7 +365,30 @@ Ordering is load-bearing: the journal must be trustworthy before any document po
       to new schools: a customer list is business data, not a catalog template.
       `lms_student_id` exists as a nullable pointer but nothing populates it —
       reading LMS student tables is outside §2 (Open Question 2).
-- [ ] Sales invoices: gapless BIR numbering, VAT-aware lines, PDF, credit notes, receipts.
+- [x] Sales invoices: gapless BIR numbering, VAT-aware lines, PDF.
+      `DocumentNumberAllocator` refuses to run outside a transaction, so a
+      document that fails to save returns its serial instead of burning it —
+      a gap in an authorised range is an audit finding, unlike a gap in the
+      internal journal sequence. Issuing past `serial_end` is refused
+      outright rather than warned about. `/admin/document-series` is where the
+      client's Authority To Print details go; a series without them still
+      issues numbers and the printed face simply omits the permit footer.
+      Totals carry the three BIR sales buckets separately (VATable, exempt,
+      zero-rated) because the return reports them separately and merging them
+      loses the distinction for good. Rounding is per line, never on the
+      total, so the invoice equals the lines a customer can add up.
+      Approval numbers, recomputes, and posts inside one transaction —
+      unlike payroll, a ledger failure FAILS the approval, because a numbered
+      document must never reach a third party while the books reject it.
+      `pas_schools` gained nullable `registered_name` / `tin` /
+      `business_address`, which a BIR invoice face requires and the table did
+      not carry.
+- [ ] Credit notes and official receipts. Split out of the line above rather
+      than left implied: both are separate BIR document types with their own
+      permits and their own series, and which of them a given school may
+      legally issue is Open Question 1, not something to infer in code. The
+      `DocumentNumberSeries::TYPE_CREDIT_NOTE` and `TYPE_OFFICIAL_RECEIPT`
+      constants already exist, so both are purely additive.
 - [ ] Supplier bills, reusing the invoice engine with the posting direction inverted.
 - [ ] Payments and allocation (partial, multi-invoice).
 
@@ -538,10 +561,11 @@ Week 17: Hypercare (post-launch, outside the plan)
 
 Phase 5: Invoicing & Accounting (post-v1, see Section 5)
   S1  Ledger foundation — chart of accounts, tax rates, periods   [shipped]
-  S2  Journal entries + balance/period invariants
-  S3  Payroll → GL posting seam (pays off the Section 11 debt)
-  S4  Contacts
-  S5  Sales invoices (AR) — BIR numbering, VAT, PDF, credit notes
+  S2  Journal entries + balance/period invariants                  [shipped]
+  S3  Payroll → GL posting seam (pays off the Section 11 debt)     [shipped]
+  S4  Contacts                                                     [shipped]
+  S5  Sales invoices (AR) — BIR numbering, VAT, PDF                [shipped]
+      (credit notes + official receipts split out, pending Open Question 1)
   S6  Supplier bills (AP)
   S7  Payments & allocation
   S8  Financial reports

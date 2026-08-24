@@ -8,10 +8,12 @@ use App\Models\Pas\Allowance;
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\Contact;
 use App\Models\Pas\DeductionType;
+use App\Models\Pas\DocumentNumberSeries;
 use App\Models\Pas\EmployeeAllowance;
 use App\Models\Pas\EmployeeDeduction;
 use App\Models\Pas\EmployeeLoan;
 use App\Models\Pas\EmployeeProfile;
+use App\Models\Pas\Invoice;
 use App\Models\Pas\JournalEntry;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollAdjustment;
@@ -19,6 +21,7 @@ use App\Models\Pas\PayrollRun;
 use App\Models\Pas\School;
 use App\Models\Pas\StatutoryContribution;
 use App\Models\Pas\TaxRate;
+use App\Observers\InvoiceObserver;
 use App\Observers\JournalEntryObserver;
 use App\Observers\PayrollRunObserver;
 use App\Observers\SchoolObserver;
@@ -27,10 +30,12 @@ use App\Policies\Pas\AllowancePolicy;
 use App\Policies\Pas\ChartOfAccountPolicy;
 use App\Policies\Pas\ContactPolicy;
 use App\Policies\Pas\DeductionTypePolicy;
+use App\Policies\Pas\DocumentNumberSeriesPolicy;
 use App\Policies\Pas\EmployeeAllowancePolicy;
 use App\Policies\Pas\EmployeeDeductionPolicy;
 use App\Policies\Pas\EmployeeLoanPolicy;
 use App\Policies\Pas\EmployeeProfilePolicy;
+use App\Policies\Pas\InvoicePolicy;
 use App\Policies\Pas\JournalEntryPolicy;
 use App\Policies\Pas\PayPeriodPolicy;
 use App\Policies\Pas\PayrollAdjustmentPolicy;
@@ -97,6 +102,7 @@ class AppServiceProvider extends ServiceProvider
         // Auto-close a pay period when its payroll posts; reopen on delete.
         PayrollRun::observe(PayrollRunObserver::class);
         JournalEntry::observe(JournalEntryObserver::class);
+        Invoice::observe(InvoiceObserver::class);
     }
 
     /**
@@ -180,6 +186,10 @@ class AppServiceProvider extends ServiceProvider
 
         // Phase 5 Slice 4 — the contact register.
         Gate::policy(Contact::class, ContactPolicy::class);
+
+        // Phase 5 Slice 5 — invoices and the serials they draw from.
+        Gate::policy(Invoice::class, InvoicePolicy::class);
+        Gate::policy(DocumentNumberSeries::class, DocumentNumberSeriesPolicy::class);
 
         // Week 8 — real-time gross-to-net preview. Class-level Gate (no
         // underlying model), so it lives outside Gate::policy() registrations.

@@ -5,6 +5,9 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\Accounting\AccountingPeriodController;
 use App\Http\Controllers\Admin\Accounting\ChartOfAccountController;
 use App\Http\Controllers\Admin\Accounting\ContactController;
+use App\Http\Controllers\Admin\Accounting\DocumentNumberSeriesController;
+use App\Http\Controllers\Admin\Accounting\InvoiceController;
+use App\Http\Controllers\Admin\Accounting\InvoicePrintController;
 use App\Http\Controllers\Admin\Accounting\JournalEntryController;
 use App\Http\Controllers\Admin\Accounting\TaxRateController;
 use App\Http\Controllers\Admin\AllowanceController;
@@ -220,6 +223,27 @@ Route::middleware(['auth', 'verified'])
         Route::resource('accounting-periods', AccountingPeriodController::class)
             ->parameters(['accounting-periods' => 'accountingPeriod'])
             ->except(['show', 'destroy']);
+
+        // Phase 5 Slice 5 — invoices and bills.
+        //
+        // The approve / void transitions are registered BEFORE the resource
+        // so their static segments win the match against
+        // `invoices/{invoice}` — the same ordering constraint as
+        // `journal-entries/{journalEntry}/post` above.
+        Route::post('invoices/{invoice}/approve', [InvoiceController::class, 'approve'])
+            ->name('invoices.approve');
+        Route::post('invoices/{invoice}/void', [InvoiceController::class, 'void'])
+            ->name('invoices.void');
+        Route::get('invoices/{invoice}/print', [InvoicePrintController::class, 'show'])
+            ->name('invoices.print');
+        Route::resource('invoices', InvoiceController::class);
+
+        // Document numbering series. No `destroy` — a series that has issued
+        // numbers is the record of which serials went out, so it is
+        // deactivated rather than removed.
+        Route::resource('document-series', DocumentNumberSeriesController::class)
+            ->parameters(['document-series' => 'documentSeries'])
+            ->only(['index', 'store', 'update']);
 
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-

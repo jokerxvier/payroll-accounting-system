@@ -58,6 +58,9 @@ class School extends Tenant
     /** @var list<string> */
     protected $fillable = [
         'name',
+        'registered_name',
+        'tin',
+        'business_address',
         'slug',
         'domain',
         'lms_db_host',
