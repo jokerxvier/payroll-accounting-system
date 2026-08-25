@@ -373,30 +373,6 @@ parameters:
 			path: tests/Feature/Auth/PasswordConfirmationTest.php
 
 		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:assertAuthenticated\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/RegistrationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:get\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/RegistrationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:post\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/RegistrationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:skipUnlessFortifyHas\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/RegistrationTest.php
-
-		-
 			message: '#^Cannot access property \$roles on App\\Models\\User\|null\.$#'
 			identifier: property.nonObject
 			count: 2

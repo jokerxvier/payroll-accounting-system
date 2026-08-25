@@ -27,6 +27,7 @@ use InvalidArgumentException;
  * @property ?string $subtype
  * @property string $normal_balance
  * @property string $cash_flow_category
+ * @property bool $is_cash_equivalent
  * @property ?int $parent_id
  * @property ?string $system_code
  * @property ?string $description
@@ -140,6 +141,7 @@ final class ChartOfAccount extends Model
         'subtype',
         'normal_balance',
         'cash_flow_category',
+        'is_cash_equivalent',
         'parent_id',
         'system_code',
         'description',
@@ -161,6 +163,7 @@ final class ChartOfAccount extends Model
             'parent_id' => 'integer',
             'is_active' => 'boolean',
             'is_locked' => 'boolean',
+            'is_cash_equivalent' => 'boolean',
         ];
     }
 
@@ -216,6 +219,25 @@ final class ChartOfAccount extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    /**
+     * Restrict to accounts that are themselves cash or a cash equivalent.
+     *
+     * Distinct from `cash_flow_category`, which classifies the movements of
+     * every account into operating / investing / financing. This scope
+     * answers the other question the Cash Flow Statement asks: which
+     * balances are the cash those sections reconcile to.
+     *
+     * Also the allowlist for money movement — a payment may only be received
+     * into, or paid out of, an account this scope returns.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeCashEquivalent(Builder $query): Builder
+    {
+        return $query->where('is_cash_equivalent', true);
     }
 
     /**

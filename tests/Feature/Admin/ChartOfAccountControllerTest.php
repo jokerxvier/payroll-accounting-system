@@ -43,6 +43,7 @@ function validAccountPayload(array $overrides = []): array
         'type' => ChartOfAccount::TYPE_EXPENSE,
         'subtype' => 'operating_expense',
         'cash_flow_category' => ChartOfAccount::CASH_FLOW_OPERATING,
+        'is_cash_equivalent' => false,
         'parent_id' => null,
         'description' => null,
         'is_active' => true,
@@ -186,6 +187,70 @@ it('will not let the client mint a second system account', function () {
         ->assertRedirect('/admin/chart-of-accounts');
 
     expect(ChartOfAccount::query()->where('code', '1201')->value('system_code'))->toBeNull();
+});
+
+it('marks an asset account as holding cash', function () {
+    $this->actingAs(coaAuthAs('accountant'))
+        ->post('/admin/chart-of-accounts', validAccountPayload([
+            'code' => '1120',
+            'name' => 'Cash in Bank — Payroll',
+            'type' => ChartOfAccount::TYPE_ASSET,
+            'is_cash_equivalent' => true,
+        ]))
+        ->assertRedirect('/admin/chart-of-accounts');
+
+    expect(ChartOfAccount::query()->where('code', '1120')->value('is_cash_equivalent'))
+        ->toBeTrue();
+});
+
+it('refuses to mark a non-asset account as holding cash', function (string $type) {
+    // Cash sits in an asset account. Admitting a liability or income account
+    // here would put it in the payment form's picker, and a receipt into an
+    // income account records money arriving in a place it cannot be.
+    $this->actingAs(coaAuthAs('accountant'))
+        ->post('/admin/chart-of-accounts', validAccountPayload([
+            'code' => '9100',
+            'type' => $type,
+            'is_cash_equivalent' => true,
+        ]))
+        ->assertSessionHasErrors('is_cash_equivalent');
+
+    expect(ChartOfAccount::query()->where('code', '9100')->exists())->toBeFalse();
+})->with([
+    ChartOfAccount::TYPE_LIABILITY,
+    ChartOfAccount::TYPE_EQUITY,
+    ChartOfAccount::TYPE_INCOME,
+    ChartOfAccount::TYPE_EXPENSE,
+]);
+
+it('catches an edit that retypes a cash account without clearing the flag', function () {
+    // The form clears the flag client-side when the type stops being an
+    // asset. A payload that skipped the form must not get the weaker rule.
+    $account = ChartOfAccount::factory()->cashEquivalent()->create(['code' => '1110']);
+
+    $this->actingAs(coaAuthAs('accountant'))
+        ->patch("/admin/chart-of-accounts/{$account->getKey()}", validAccountPayload([
+            'code' => '1110',
+            'type' => ChartOfAccount::TYPE_LIABILITY,
+            'is_cash_equivalent' => true,
+        ]))
+        ->assertSessionHasErrors('is_cash_equivalent');
+
+    expect($account->fresh()->type)->toBe(ChartOfAccount::TYPE_ASSET);
+});
+
+it('lets a cash account stop being one', function () {
+    $account = ChartOfAccount::factory()->cashEquivalent()->create(['code' => '1130']);
+
+    $this->actingAs(coaAuthAs('accountant'))
+        ->patch("/admin/chart-of-accounts/{$account->getKey()}", validAccountPayload([
+            'code' => '1130',
+            'type' => ChartOfAccount::TYPE_ASSET,
+            'is_cash_equivalent' => false,
+        ]))
+        ->assertRedirect('/admin/chart-of-accounts');
+
+    expect($account->fresh()->is_cash_equivalent)->toBeFalse();
 });
 
 it('rejects a duplicate code within the same school', function () {

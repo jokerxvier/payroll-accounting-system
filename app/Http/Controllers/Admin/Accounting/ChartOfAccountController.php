@@ -48,7 +48,7 @@ final class ChartOfAccountController extends Controller
             ->map(fn (ChartOfAccount $account): array => [
                 ...$account->only([
                     'id', 'code', 'name', 'type', 'subtype', 'normal_balance',
-                    'cash_flow_category', 'parent_id', 'system_code',
+                    'cash_flow_category', 'is_cash_equivalent', 'parent_id', 'system_code',
                     'description', 'is_active', 'is_locked',
                 ]),
                 // The client renders per-row actions from these rather than

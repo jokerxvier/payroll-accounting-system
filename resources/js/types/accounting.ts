@@ -29,6 +29,12 @@ export interface ChartOfAccountRow {
      */
     normal_balance: NormalBalance;
     cash_flow_category: CashFlowCategory;
+    /**
+     * Whether the account IS cash, as opposed to which cash-flow section its
+     * movements belong to. Gates the payment form's account picker and the
+     * cash balance the Cash Flow Statement reconciles to. Assets only.
+     */
+    is_cash_equivalent: boolean;
     parent_id: number | null;
     /**
      * Non-null on accounts the software itself posts to (AR control, VAT

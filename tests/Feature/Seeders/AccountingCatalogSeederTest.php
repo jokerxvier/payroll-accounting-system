@@ -88,6 +88,21 @@ it('marks depreciation as a non-cash account', function () {
         ->toBe(ChartOfAccount::CASH_FLOW_OPERATING);
 });
 
+it('marks exactly the two cash accounts as holding cash', function () {
+    $this->seed(AccountingCatalogSeeder::class);
+
+    $cashCodes = ChartOfAccount::query()
+        ->where('is_cash_equivalent', true)
+        ->orderBy('code')
+        ->pluck('code')
+        ->all();
+
+    // Being an operating asset is not the same as being cash: 1400 Prepaid
+    // Expenses and 1200 Accounts Receivable are both operating assets, and
+    // money cannot be paid out of either.
+    expect($cashCodes)->toBe(['1100', '1110']);
+});
+
 it('wires the VAT rates to their system accounts', function () {
     $this->seed(AccountingCatalogSeeder::class);
 

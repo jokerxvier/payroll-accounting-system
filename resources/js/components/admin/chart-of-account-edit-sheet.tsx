@@ -54,6 +54,7 @@ interface FormShape {
     type: AccountType;
     subtype: string;
     cash_flow_category: CashFlowCategory;
+    is_cash_equivalent: boolean;
     parent_id: number | null;
     description: string;
     is_active: boolean;
@@ -115,6 +116,7 @@ function buildDefaults(account?: ChartOfAccountRow): FormShape {
             type: 'expense',
             subtype: '',
             cash_flow_category: 'operating',
+            is_cash_equivalent: false,
             parent_id: null,
             description: '',
             is_active: true,
@@ -127,6 +129,7 @@ function buildDefaults(account?: ChartOfAccountRow): FormShape {
         type: account.type,
         subtype: account.subtype ?? '',
         cash_flow_category: account.cash_flow_category,
+        is_cash_equivalent: account.is_cash_equivalent,
         parent_id: account.parent_id,
         description: account.description ?? '',
         is_active: account.is_active,
@@ -264,9 +267,22 @@ export function ChartOfAccountEditSheet({
                             <Label htmlFor="coa-type">Type</Label>
                             <Select
                                 value={form.data.type}
-                                onValueChange={(value) =>
-                                    form.setData('type', value as AccountType)
-                                }
+                                onValueChange={(value) => {
+                                    const type = value as AccountType;
+
+                                    // Only an asset can hold cash. Clearing
+                                    // the flag here rather than letting the
+                                    // server reject it keeps the form from
+                                    // holding a combination it cannot save.
+                                    form.setData((data) => ({
+                                        ...data,
+                                        type,
+                                        is_cash_equivalent:
+                                            type === 'asset'
+                                                ? data.is_cash_equivalent
+                                                : false,
+                                    }));
+                                }}
                                 disabled={isLocked}
                             >
                                 <SelectTrigger id="coa-type" className="w-full">
@@ -420,6 +436,26 @@ export function ChartOfAccountEditSheet({
                             />
                         </div>
                         <InputError message={form.errors.is_active} />
+
+                        <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                            <div className="space-y-0.5">
+                                <Label htmlFor="coa-cash">Holds cash</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    {form.data.type === 'asset'
+                                        ? 'Money can be received into and paid out of this account, and its balance counts as cash on the Cash Flow Statement. Turn this on for cash and bank accounts only.'
+                                        : 'Only an asset account can hold cash. Change the type to asset to turn this on.'}
+                                </p>
+                            </div>
+                            <Switch
+                                id="coa-cash"
+                                checked={form.data.is_cash_equivalent}
+                                disabled={form.data.type !== 'asset'}
+                                onCheckedChange={(checked) =>
+                                    form.setData('is_cash_equivalent', checked)
+                                }
+                            />
+                        </div>
+                        <InputError message={form.errors.is_cash_equivalent} />
 
                         <div className="grid gap-2">
                             <Label htmlFor="coa-description">

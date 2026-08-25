@@ -454,17 +454,37 @@ subtotals what 8a returns; 8c reads invoices and payments rather than the ledger
       the column afterwards. The Slice 5 and Slice 7 platform-admin regression
       tests were passing without ever reaching the `Gate::before` bypass they
       exist to guard. All three now use `withoutLmsMirror()` and still pass.
+- [x] `is_cash_equivalent` on `pas_chart_of_accounts` — the schema addition 8b
+      needed before any statement could be written. Shipped 2026-08-25.
+
+      A Cash Flow Statement has to know which accounts *are* cash, and nothing
+      recorded that: `cash_flow_category` is set on every account including the
+      cash ones, because it says which SECTION an account's movements belong
+      to, not whether the account is part of the cash balance those sections
+      reconcile to. Two different questions, so a second column rather than
+      another value in the first.
+
+      It was also a live control gap, not just missing report data.
+      `PaymentController::cashAccountOptions()` approximated cash as "any
+      active asset with no `system_code`", and `PaymentRequest` only checked
+      that the account was an asset — so a receipt could be posted into Prepaid
+      Expenses or Property, Plant and Equipment. Both now key off the flag, and
+      the form's picker and the validator enforce the same rule, since a
+      payload that skipped the form must not get the weaker one.
+
+      Backfill is deliberately narrow: only the two codes the seeder ships as
+      cash (`1100`, `1110`), with the type re-checked so a school that reused
+      one of those codes is not swept in. Default false is the safe direction —
+      an account wrongly left off is visible immediately (missing from the
+      picker), while an account wrongly included is the silent bug this closes.
+      A school that renumbered its chart ticks its own accounts in the UI.
+
+      `ValidatesCashEquivalentAccounts` holds the assets-only rule for both
+      chart-of-accounts requests. A bank overdraft is arguably a cash
+      equivalent under PAS 7, but it is a liability account and admitting
+      liabilities to serve that one case opens the door to every payable.
 - [ ] Income Statement, Balance Sheet, Cash Flow Statement, Statement of
       Changes in Equity.
-
-      **8b needs a schema addition first.** A Cash Flow Statement has to know
-      which accounts *are* cash, and nothing records that today:
-      `cash_flow_category` is set on every account including the cash ones, and
-      `PaymentController::cashAccountOptions()` currently approximates it as
-      "any asset without a `system_code`" — which admits Prepaid Expenses and
-      Property, Plant and Equipment. An `is_cash_equivalent` flag on
-      `pas_chart_of_accounts` fixes the report and tightens that control at the
-      same time.
 
 **8c — Receivables and document reports**
 - [ ] Aged Receivables (summary + detail), Customer Statement, Invoice Register,

@@ -32,6 +32,7 @@ class ChartOfAccountFactory extends Factory
             'subtype' => null,
             'normal_balance' => ChartOfAccount::normalBalanceForType(ChartOfAccount::TYPE_EXPENSE),
             'cash_flow_category' => ChartOfAccount::CASH_FLOW_OPERATING,
+            'is_cash_equivalent' => false,
             'parent_id' => null,
             'system_code' => null,
             'description' => null,
@@ -96,5 +97,21 @@ class ChartOfAccountFactory extends Factory
     public function cashFlow(string $category): self
     {
         return $this->state(fn (): array => ['cash_flow_category' => $category]);
+    }
+
+    /**
+     * An account money actually moves through — a cash or bank account.
+     *
+     * Forces `asset` alongside the flag: the two disagreeing is precisely
+     * what ChartOfAccountStoreRequest refuses, so a factory that could
+     * produce it would let a test assert on a state the app cannot reach.
+     */
+    public function cashEquivalent(): self
+    {
+        return $this->state(fn (): array => [
+            'type' => ChartOfAccount::TYPE_ASSET,
+            'normal_balance' => ChartOfAccount::normalBalanceForType(ChartOfAccount::TYPE_ASSET),
+            'is_cash_equivalent' => true,
+        ]);
     }
 }
