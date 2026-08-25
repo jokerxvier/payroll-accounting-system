@@ -96,6 +96,7 @@ it('audits creating, editing, and deleting a chart-of-accounts row', function ()
             'type' => ChartOfAccount::TYPE_EXPENSE,
             'subtype' => 'operating_expense',
             'cash_flow_category' => ChartOfAccount::CASH_FLOW_OPERATING,
+            'is_cash_equivalent' => false,
             'parent_id' => null,
             'description' => null,
             'is_active' => true,
@@ -115,6 +116,7 @@ it('audits creating, editing, and deleting a chart-of-accounts row', function ()
             'name' => 'Renamed',
             'type' => ChartOfAccount::TYPE_EXPENSE,
             'cash_flow_category' => ChartOfAccount::CASH_FLOW_OPERATING,
+            'is_cash_equivalent' => false,
             'is_active' => true,
         ])->assertRedirect();
     });
@@ -344,6 +346,7 @@ it('records the acting role correctly for each role that can write', function (s
             'name' => "Written by {$role}",
             'type' => ChartOfAccount::TYPE_EXPENSE,
             'cash_flow_category' => ChartOfAccount::CASH_FLOW_OPERATING,
+            'is_cash_equivalent' => false,
             'is_active' => true,
         ])->assertRedirect();
     });

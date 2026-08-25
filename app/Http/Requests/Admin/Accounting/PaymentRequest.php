@@ -110,11 +110,21 @@ final class PaymentRequest extends FormRequest
     }
 
     /**
-     * Money has to move through an asset account.
+     * Money has to move through an account that actually holds cash.
      *
-     * Picking an income or liability account here would balance arithmetically
-     * and describe something that never happened — the whole point of the
-     * cash line is to say which real account the money is sitting in.
+     * Two checks, narrowing. Picking an income or liability account would
+     * balance arithmetically and describe something that never happened —
+     * the whole point of the cash line is to say which real account the money
+     * is sitting in. But asset-ness alone was never enough: Prepaid Expenses
+     * and Property, Plant and Equipment are assets too, and paying a supplier
+     * out of PPE is not a transaction. Slice 8b's `is_cash_equivalent` is the
+     * real test; the type check is kept ahead of it because "that is a
+     * liability account" is a more useful thing to be told than "that is not
+     * cash".
+     *
+     * Enforced here as well as in the form's account picker: the picker is a
+     * convenience, and a payload that never went through it must not get a
+     * weaker rule.
      */
     private function assertCashAccountIsAnAsset(Validator $v): void
     {
@@ -128,6 +138,15 @@ final class PaymentRequest extends FormRequest
             $v->errors()->add(
                 'cash_account_id',
                 "{$account->name} is a {$account->type} account. Money has to be received into, or paid out of, an asset account.",
+            );
+
+            return;
+        }
+
+        if (! $account->is_cash_equivalent) {
+            $v->errors()->add(
+                'cash_account_id',
+                "{$account->name} is not a cash account. Mark it as one in the chart of accounts if money really is held there, or pick a cash or bank account.",
             );
         }
     }

@@ -70,6 +70,22 @@ it('clones the chart of accounts onto a newly created school', function () {
         ->toBe($defaultCodes);
 });
 
+it('carries the cash flag onto the cloned chart', function () {
+    // SchoolObserver copies columns generically, so a new column rides along
+    // without the observer changing. This pins that: a new school whose cash
+    // accounts arrived unflagged would open the payment form to an empty
+    // account picker.
+    seedDefaultAccountingCatalog();
+    ChartOfAccount::factory()->cashEquivalent()->create(['code' => '1110', 'name' => 'Cash in Bank']);
+
+    $newSchool = School::factory()->create(['slug' => 'coa-cash-clone-target']);
+    $newSchool->makeCurrent();
+
+    expect(
+        ChartOfAccount::query()->where('is_cash_equivalent', true)->orderBy('code')->pluck('code')->all()
+    )->toBe(['1110']);
+});
+
 it('repoints a cloned account parent at the new school own row', function () {
     seedDefaultAccountingCatalog();
 

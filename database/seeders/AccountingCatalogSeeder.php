@@ -43,12 +43,18 @@ final class AccountingCatalogSeeder extends Seeder
      * 5400 Interest Expense are both expenses, but only the first is an
      * operating cash flow.
      *
-     * @var list<array{code: string, name: string, type: string, subtype: string, cash_flow: string, system?: string, description?: string}>
+     * `cash` marks the accounts that ARE cash, which is a different question
+     * again: 1400 Prepaid Expenses is an operating asset but paying a bill
+     * out of it is meaningless. Only the two accounts flagged here may
+     * receive or disburse money, and only they are summed as the cash
+     * balance a Cash Flow Statement reconciles to.
+     *
+     * @var list<array{code: string, name: string, type: string, subtype: string, cash_flow: string, cash?: bool, system?: string, description?: string}>
      */
     private const ACCOUNTS = [
         // ── Assets ────────────────────────────────────────────────────────
-        ['code' => '1100', 'name' => 'Cash on Hand', 'type' => 'asset', 'subtype' => 'current_asset', 'cash_flow' => 'operating'],
-        ['code' => '1110', 'name' => 'Cash in Bank', 'type' => 'asset', 'subtype' => 'current_asset', 'cash_flow' => 'operating'],
+        ['code' => '1100', 'name' => 'Cash on Hand', 'type' => 'asset', 'subtype' => 'current_asset', 'cash_flow' => 'operating', 'cash' => true],
+        ['code' => '1110', 'name' => 'Cash in Bank', 'type' => 'asset', 'subtype' => 'current_asset', 'cash_flow' => 'operating', 'cash' => true],
         ['code' => '1200', 'name' => 'Accounts Receivable', 'type' => 'asset', 'subtype' => 'current_asset', 'cash_flow' => 'operating', 'system' => ChartOfAccount::SYSTEM_AR_CONTROL, 'description' => 'Control account. Every approved sales invoice debits this; every receipt credits it. Do not post to it by hand.'],
         ['code' => '1210', 'name' => 'Allowance for Doubtful Accounts', 'type' => 'asset', 'subtype' => 'contra_asset', 'cash_flow' => 'operating'],
         ['code' => '1300', 'name' => 'Input VAT', 'type' => 'asset', 'subtype' => 'current_asset', 'cash_flow' => 'operating', 'system' => ChartOfAccount::SYSTEM_VAT_INPUT, 'description' => 'VAT paid on purchases, creditable against output VAT.'],
@@ -129,6 +135,7 @@ final class AccountingCatalogSeeder extends Seeder
                     'subtype' => $account['subtype'],
                     'normal_balance' => ChartOfAccount::normalBalanceForType($account['type']),
                     'cash_flow_category' => $account['cash_flow'],
+                    'is_cash_equivalent' => $account['cash'] ?? false,
                     'system_code' => $account['system'] ?? null,
                     'description' => $account['description'] ?? null,
                     'is_active' => true,

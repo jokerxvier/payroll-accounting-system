@@ -421,10 +421,77 @@ Ordering is load-bearing: the journal must be trustworthy before any document po
       payment first" guard fires for the first time.
 
 #### Slice 8 — Financial reports
-- [ ] Trial Balance, General Ledger, Journal Report, Income Statement, Balance Sheet,
-      Cash Flow Statement, Statement of Changes in Equity.
+Split into three, because the thirteen reports fall into three groups that share
+nothing but a date filter. 8a reads the ledger directly; 8b classifies and
+subtotals what 8a returns; 8c reads invoices and payments rather than the ledger.
+
+**8a — Ledger reports**
+- [x] Trial Balance, General Ledger, Journal Report. Each with an Inertia page
+      and xlsx / csv / pdf exports, all three built on one
+      `LedgerReportService`. Shipped 2026-08-25.
+
+      The Trial Balance is the first code in Phase 5 that adds Slices 1–7
+      together, so it states its own verdict on the page rather than leaving
+      the reader to foot six columns. Against the dev ledger it closes at
+      ₱1,163,770.00 on both sides.
+
+      Two decisions the later slices inherit. **Raw and natural signing are
+      kept apart**: the Dr/Cr columns use `debits − credits`, which is what
+      makes them foot, and the directional figure the statements will consume
+      goes through `ChartOfAccount::movementCentavos()`. Signing early is what
+      would make a trial balance stop balancing. **Ranges are taken on the
+      entry's own date, never `posted_at`**, so a backdated entry lands in the
+      period it belongs to and a closed period's figures cannot move.
+
+      Found and fixed on the way: `pas_journal_entries.date` compares as a
+      *string* under SQLite, where Eloquent's date cast writes
+      `Y-m-d H:i:s` — so `<= '2026-08-31'` silently dropped the last day of
+      every range. Boundaries now go through `dayStart()` / `dayEnd()`, which
+      is correct on both databases and keeps the index usable.
+
+      Also fixed: `User::factory()->create(['lms_user_id' => null])` does not
+      make a platform admin — the factory's own `afterCreating` hook backfills
+      the column afterwards. The Slice 5 and Slice 7 platform-admin regression
+      tests were passing without ever reaching the `Gate::before` bypass they
+      exist to guard. All three now use `withoutLmsMirror()` and still pass.
+- [x] `is_cash_equivalent` on `pas_chart_of_accounts` — the schema addition 8b
+      needed before any statement could be written. Shipped 2026-08-25.
+
+      A Cash Flow Statement has to know which accounts *are* cash, and nothing
+      recorded that: `cash_flow_category` is set on every account including the
+      cash ones, because it says which SECTION an account's movements belong
+      to, not whether the account is part of the cash balance those sections
+      reconcile to. Two different questions, so a second column rather than
+      another value in the first.
+
+      It was also a live control gap, not just missing report data.
+      `PaymentController::cashAccountOptions()` approximated cash as "any
+      active asset with no `system_code`", and `PaymentRequest` only checked
+      that the account was an asset — so a receipt could be posted into Prepaid
+      Expenses or Property, Plant and Equipment. Both now key off the flag, and
+      the form's picker and the validator enforce the same rule, since a
+      payload that skipped the form must not get the weaker one.
+
+      Backfill is deliberately narrow: only the two codes the seeder ships as
+      cash (`1100`, `1110`), with the type re-checked so a school that reused
+      one of those codes is not swept in. Default false is the safe direction —
+      an account wrongly left off is visible immediately (missing from the
+      picker), while an account wrongly included is the silent bug this closes.
+      A school that renumbered its chart ticks its own accounts in the UI.
+
+      `ValidatesCashEquivalentAccounts` holds the assets-only rule for both
+      chart-of-accounts requests. A bank overdraft is arguably a cash
+      equivalent under PAS 7, but it is a liability account and admitting
+      liabilities to serve that one case opens the door to every payable.
+- [ ] Income Statement, Balance Sheet, Cash Flow Statement, Statement of
+      Changes in Equity.
+
+**8c — Receivables and document reports**
 - [ ] Aged Receivables (summary + detail), Customer Statement, Invoice Register,
       Outstanding Invoices, Receipts Report, Credit Notes Report.
+
+      Credit Notes Report stays blocked behind Open Question 1, same as the
+      credit-note document itself.
 
 **Explicit non-goals for Phase 5:** bank feeds and reconciliation, multi-currency, budgeting,
 fixed-asset depreciation schedules.

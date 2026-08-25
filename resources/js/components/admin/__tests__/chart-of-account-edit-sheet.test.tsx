@@ -17,11 +17,13 @@ vi.mock('@inertiajs/react', async () => {
             const [data, setData] = useStateInner<T>(initial);
 
             const setField = (
-                key: keyof T | Partial<T>,
+                key: keyof T | Partial<T> | ((prev: T) => T),
                 value?: T[keyof T],
             ): void => {
                 if (typeof key === 'string') {
                     setData((prev) => ({ ...prev, [key]: value }));
+                } else if (typeof key === 'function') {
+                    setData((prev) => (key as (prev: T) => T)(prev));
                 } else {
                     setData((prev) => ({ ...prev, ...(key as Partial<T>) }));
                 }
@@ -58,6 +60,7 @@ function account(
         subtype: 'operating_expense',
         normal_balance: 'debit',
         cash_flow_category: 'operating',
+        is_cash_equivalent: false,
         parent_id: null,
         system_code: null,
         description: null,
@@ -132,6 +135,42 @@ describe('ChartOfAccountEditSheet', () => {
         );
 
         expect(screen.getByText('credit')).toBeInTheDocument();
+    });
+
+    it('offers the cash toggle on an asset account', () => {
+        render(
+            <Harness
+                account={account({
+                    code: '1110',
+                    name: 'Cash in Bank',
+                    type: 'asset',
+                    normal_balance: 'debit',
+                    is_cash_equivalent: true,
+                })}
+            />,
+        );
+
+        const toggle = screen.getByLabelText('Holds cash');
+
+        expect(toggle).toBeEnabled();
+        expect(toggle).toBeChecked();
+        expect(
+            screen.getByText(/money can be received into and paid out of/i),
+        ).toBeInTheDocument();
+    });
+
+    it('will not let a non-asset account be marked as holding cash', () => {
+        // Mirrors the server rule in ValidatesCashEquivalentAccounts. The
+        // operator is told why rather than being allowed to try and fail.
+        render(<Harness account={account({ type: 'expense' })} />);
+
+        const toggle = screen.getByLabelText('Holds cash');
+
+        expect(toggle).toBeDisabled();
+        expect(toggle).not.toBeChecked();
+        expect(
+            screen.getByText(/only an asset account can hold cash/i),
+        ).toBeInTheDocument();
     });
 
     it('freezes code and type on a locked system account', () => {

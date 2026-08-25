@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin\Accounting;
 
+use App\Concerns\ValidatesCashEquivalentAccounts;
 use App\Models\Pas\ChartOfAccount;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Spatie\Multitenancy\Models\Tenant;
@@ -28,6 +30,8 @@ use Spatie\Multitenancy\Models\Tenant;
  */
 final class ChartOfAccountStoreRequest extends FormRequest
 {
+    use ValidatesCashEquivalentAccounts;
+
     public function authorize(): bool
     {
         return true;
@@ -70,6 +74,10 @@ final class ChartOfAccountStoreRequest extends FormRequest
             'subtype' => ['nullable', 'string', 'max:40'],
             'normal_balance' => ['required', 'string', Rule::in(ChartOfAccount::NORMAL_BALANCES)],
             'cash_flow_category' => ['required', 'string', Rule::in(ChartOfAccount::CASH_FLOW_CATEGORIES)],
+            // Whether the account IS cash, as opposed to which cash-flow
+            // section its movements belong to. See the trait for why assets
+            // only, and the Slice 8b migration for why it defaults off.
+            'is_cash_equivalent' => ['required', 'boolean'],
             'parent_id' => [
                 'nullable',
                 'integer',
@@ -83,6 +91,11 @@ final class ChartOfAccountStoreRequest extends FormRequest
             'description' => ['nullable', 'string'],
             'is_active' => ['required', 'boolean'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(fn (Validator $v) => $this->validateCashEquivalentIsAnAsset($v));
     }
 
     /**

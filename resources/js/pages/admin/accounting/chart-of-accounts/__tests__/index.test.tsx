@@ -65,6 +65,7 @@ function account(
         subtype: 'operating_expense',
         normal_balance: 'debit',
         cash_flow_category: 'operating',
+        is_cash_equivalent: false,
         parent_id: null,
         system_code: null,
         description: null,

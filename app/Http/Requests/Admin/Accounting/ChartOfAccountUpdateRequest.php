@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin\Accounting;
 
+use App\Concerns\ValidatesCashEquivalentAccounts;
 use App\Models\Pas\ChartOfAccount;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -29,6 +30,8 @@ use Spatie\Multitenancy\Models\Tenant;
  */
 final class ChartOfAccountUpdateRequest extends FormRequest
 {
+    use ValidatesCashEquivalentAccounts;
+
     public function authorize(): bool
     {
         return true;
@@ -66,6 +69,7 @@ final class ChartOfAccountUpdateRequest extends FormRequest
             'subtype' => ['nullable', 'string', 'max:40'],
             'normal_balance' => ['required', 'string', Rule::in(ChartOfAccount::NORMAL_BALANCES)],
             'cash_flow_category' => ['required', 'string', Rule::in(ChartOfAccount::CASH_FLOW_CATEGORIES)],
+            'is_cash_equivalent' => ['required', 'boolean'],
             'parent_id' => [
                 'nullable',
                 'integer',
@@ -81,6 +85,8 @@ final class ChartOfAccountUpdateRequest extends FormRequest
 
     public function withValidator(Validator $validator): void
     {
+        $validator->after(fn (Validator $v) => $this->validateCashEquivalentIsAnAsset($v));
+
         $validator->after(function (Validator $v): void {
             $account = $this->routeAccount();
 

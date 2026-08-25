@@ -237,6 +237,20 @@ it('refuses a cash account that is not an asset', function () {
         ->assertSessionHasErrors('cash_account_id');
 });
 
+it('refuses an asset account that does not hold cash', function (string $code) {
+    // The Slice 8b tightening. Prepaid Expenses and Property, Plant and
+    // Equipment are assets, so the old asset-only rule admitted both — and
+    // paying a supplier out of PPE is not a transaction that can happen.
+    $account = ChartOfAccount::query()->where('code', $code)->firstOrFail();
+
+    expect($account->type)->toBe(ChartOfAccount::TYPE_ASSET)
+        ->and($account->is_cash_equivalent)->toBeFalse();
+
+    $this->actingAs(paymentAuthAs('accountant'))
+        ->post(route('admin.payments.store'), paymentPayload(['cash_account_id' => $account->id]))
+        ->assertSessionHasErrors('cash_account_id');
+})->with(['1400', '1510']);
+
 it('refuses an account belonging to another school', function () {
     $otherSchool = School::factory()->create();
     $foreign = ChartOfAccount::factory()->asset()->create([
@@ -256,11 +270,16 @@ it('does not offer control accounts as somewhere money can move', function () {
             $codes = collect($page->toArray()['props']['cashAccountOptions'])->pluck('code');
 
             expect($codes)->toContain('1100')
+                ->toContain('1110')
                 // Accounts Receivable is an asset, but crediting it directly
                 // as if it were a bank account is what makes a receivable
                 // stop meaning anything.
                 ->not->toContain('1200')
-                ->not->toContain('1450');
+                ->not->toContain('1450')
+                // Assets that are not cash. Both were offered before Slice
+                // 8b, on the "any asset without a system_code" approximation.
+                ->not->toContain('1400')
+                ->not->toContain('1510');
         });
 });
 
@@ -287,8 +306,14 @@ it('refuses a platform admin the same edits, despite Gate::before', function () 
     $payment = storedPayment();
     $this->actingAs(paymentAuthAs('accountant'))->post(route('admin.payments.post', $payment));
 
-    $platformAdmin = User::factory()->create(['lms_user_id' => null]);
+    // withoutLmsMirror(), not create(['lms_user_id' => null]): the factory's
+    // own afterCreating hook backfills lms_user_id = id *after* the attribute
+    // override, so the plain form produces an LMS-derived user that never
+    // reaches the Gate::before short-circuit — and this test would then pass
+    // without ever exercising the bypass it exists to guard.
+    $platformAdmin = User::factory()->withoutLmsMirror()->create();
     $platformAdmin->syncRoles(['platform-admin']);
+    $platformAdmin = $platformAdmin->fresh();
 
     $this->actingAs($platformAdmin)
         ->put(route('admin.payments.update', $payment->refresh()), paymentPayload())

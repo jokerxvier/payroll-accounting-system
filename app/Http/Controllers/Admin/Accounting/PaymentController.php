@@ -438,9 +438,16 @@ final class PaymentController extends Controller
     /**
      * Accounts money can move through.
      *
-     * Assets only, and never a control account: crediting Accounts Receivable
-     * directly as if it were a bank account is exactly the mistake that makes
-     * a receivable stop meaning anything.
+     * Reads the `is_cash_equivalent` flag added in Slice 8b. This used to
+     * approximate cash as "any active asset with no `system_code`", which
+     * excluded the control accounts — crediting Accounts Receivable directly
+     * as if it were a bank account is exactly the mistake that makes a
+     * receivable stop meaning anything — but still admitted Prepaid Expenses
+     * and Property, Plant and Equipment. Neither is somewhere money sits.
+     *
+     * The `system_code` exclusion is kept as well as the flag, not replaced
+     * by it: no system account is marked cash today, and if one ever were,
+     * hand-posting to it would still be wrong.
      *
      * @return Collection<int, ChartOfAccount>
      */
@@ -448,7 +455,7 @@ final class PaymentController extends Controller
     {
         return ChartOfAccount::query()
             ->active()
-            ->where('type', ChartOfAccount::TYPE_ASSET)
+            ->cashEquivalent()
             ->whereNull('system_code')
             ->orderBy('code')
             ->get(['id', 'code', 'name', 'type', 'normal_balance']);
