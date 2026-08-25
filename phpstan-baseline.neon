@@ -1,16 +1,616 @@
 parameters:
 	ignoreErrors:
 		-
+			message: '#^Anonymous function should return App\\Models\\Pas\\AccountingPeriod but returns App\\Models\\Pas\\AccountingPeriod\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/Accounting/CloseAccountingPeriodAction.php
+
+		-
+			message: '#^Anonymous function should return App\\Models\\Pas\\JournalEntry but returns App\\Models\\Pas\\JournalEntry\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/Accounting/PostJournalEntry.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between string and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Actions/Accounting/PostJournalEntry.php
+
+		-
+			message: '#^Anonymous function should return App\\Models\\Pas\\AccountingPeriod but returns App\\Models\\Pas\\AccountingPeriod\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/Accounting/ReopenAccountingPeriodAction.php
+
+		-
+			message: '#^Parameter \#1 \$entry of method App\\Actions\\Accounting\\PostJournalEntry\:\:execute\(\) expects App\\Models\\Pas\\JournalEntry, App\\Models\\Pas\\JournalEntry\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/Accounting/ReverseJournalEntry.php
+
+		-
+			message: '#^Method App\\Actions\\Fortify\\CreateNewUser\:\:passwordRules\(\) should return array\<int, array\<mixed\>\|Illuminate\\Contracts\\Validation\\ValidationRule\|string\> but returns array\<int, Illuminate\\Validation\\Rules\\Password\|string\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/Fortify/CreateNewUser.php
+
+		-
 			message: '#^Method App\\Actions\\Fortify\\ResetUserPassword\:\:passwordRules\(\) should return array\<int, array\<mixed\>\|Illuminate\\Contracts\\Validation\\ValidationRule\|string\> but returns array\<int, Illuminate\\Validation\\Rules\\Password\|string\>\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Actions/Fortify/ResetUserPassword.php
 
 		-
+			message: '#^Cannot access property \$de_minimis_cap_centavos on App\\Models\\Pas\\Allowance\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: app/Actions/Payroll/ApplyAllowances.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\Pas\\Allowance\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/Payroll/ApplyAllowances.php
+
+		-
+			message: '#^Cannot access property \$is_de_minimis on App\\Models\\Pas\\Allowance\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/Payroll/ApplyAllowances.php
+
+		-
+			message: '#^Cannot access property \$is_taxable on App\\Models\\Pas\\Allowance\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/Payroll/ApplyAllowances.php
+
+		-
+			message: '#^Cannot access property \$name on App\\Models\\Pas\\Allowance\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/Payroll/ApplyAllowances.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\Pas\\DeductionType\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/Payroll/ApplyEmployeeDeductions.php
+
+		-
+			message: '#^Cannot access property \$is_taxable on App\\Models\\Pas\\DeductionType\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: app/Actions/Payroll/ApplyEmployeeDeductions.php
+
+		-
+			message: '#^Cannot access property \$name on App\\Models\\Pas\\DeductionType\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/Payroll/ApplyEmployeeDeductions.php
+
+		-
+			message: '#^Cannot access property \$source on App\\Models\\Pas\\DeductionType\|null\.$#'
+			identifier: property.nonObject
+			count: 5
+			path: app/Actions/Payroll/ApplyEmployeeDeductions.php
+
+		-
+			message: '#^Parameter \#2 \$type of method App\\Actions\\Payroll\\ApplyEmployeeDeductions\:\:computeAmount\(\) expects App\\Models\\Pas\\DeductionType, App\\Models\\Pas\\DeductionType\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Actions/Payroll/ApplyEmployeeDeductions.php
+
+		-
+			message: '#^Anonymous function should return App\\Models\\Pas\\PayrollRun but returns App\\Models\\Pas\\PayrollRun\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/Payroll/ApprovePayrollRunAction.php
+
+		-
+			message: '#^Cannot call method diffInDays\(\) on Carbon\\CarbonImmutable\|string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/Payroll/ComputeBasicPay.php
+
+		-
+			message: '#^Cannot call method greaterThan\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Actions/Payroll/ComputeBasicPay.php
+
+		-
+			message: '#^Cannot call method lessThan\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Actions/Payroll/ComputeBasicPay.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Pas\\Payslip\:\:\$ee\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/Payroll/GeneratePayrollRunAction.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Pas\\Payslip\:\:\$employee_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/Payroll/GeneratePayrollRunAction.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Pas\\Payslip\:\:\$er\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/Payroll/GeneratePayrollRunAction.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Pas\\Payslip\:\:\$net\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Actions/Payroll/GeneratePayrollRunAction.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>ee" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Actions/Payroll/GeneratePayrollRunAction.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>employee_count" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Actions/Payroll/GeneratePayrollRunAction.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>er" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Actions/Payroll/GeneratePayrollRunAction.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>net" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Actions/Payroll/GeneratePayrollRunAction.php
+
+		-
+			message: '#^Anonymous function should return App\\Models\\Pas\\PayrollRun but returns App\\Models\\Pas\\PayrollRun\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/Payroll/PostPayrollRunAction.php
+
+		-
+			message: '#^Method App\\Actions\\Payroll\\PostPayrollRunAction\:\:execute\(\) should return App\\Models\\Pas\\PayrollRun but returns App\\Models\\Pas\\PayrollRun\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/Payroll/PostPayrollRunAction.php
+
+		-
+			message: '#^Anonymous function should return App\\Models\\Pas\\PayrollRun but returns App\\Models\\Pas\\PayrollRun\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/Payroll/SubmitPayrollRunForApprovalAction.php
+
+		-
+			message: '#^Anonymous function should return App\\Models\\Pas\\PayrollRun but returns App\\Models\\Pas\\PayrollRun\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/Payroll/VoidPayrollRunAction.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Exports/AuditLogExport.php
+
+		-
+			message: '#^Method App\\Exports\\AuditLogExport\:\:collection\(\) return type with generic class Illuminate\\Support\\Collection does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Exports/AuditLogExport.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Support\\Collection\<int,App\\Models\\Pas\\AuditLog\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Exports/AuditLogExport.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Support\\Collection\<int,App\\Models\\Pas\\AuditLog\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Exports/AuditLogExport.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type string\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Exports/AuditLogExport.php
+
+		-
+			message: '#^Cannot call method toDateString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Exports/EmployeeBulkEditExport.php
+
+		-
+			message: '#^Method App\\Exports\\EmployeeBulkEditExport\:\:collection\(\) return type with generic class Illuminate\\Support\\Collection does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Exports/EmployeeBulkEditExport.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\Pas\\EmployeeProfile\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Exports/EmployeeBulkEditExport.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\Pas\\EmployeeProfile\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Exports/EmployeeBulkEditExport.php
+
+		-
+			message: '#^Method App\\Exports\\EmployeeHistoryReportExport\:\:collection\(\) return type with generic class Illuminate\\Support\\Collection does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Exports/EmployeeHistoryReportExport.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$values of method Illuminate\\Support\\Collection\<int,array\<int, mixed\>\>\:\:push\(\) expects array\{mixed, mixed, mixed, mixed, string, string, string, string, \.\.\.\}, array\{''YEAR\-TO\-DATE''\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Exports/EmployeeHistoryReportExport.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$values of method Illuminate\\Support\\Collection\<int,array\<int, mixed\>\>\:\:push\(\) expects array\{mixed, mixed, mixed, mixed, string, string, string, string, \.\.\.\}, array\{''Year'', ''Payslips'', ''Gross Pay'', ''Employee Deductions'', ''Employer…'', ''Net Pay''\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Exports/EmployeeHistoryReportExport.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$values of method Illuminate\\Support\\Collection\<int,array\<int, mixed\>\>\:\:push\(\) expects array\{mixed, mixed, mixed, mixed, string, string, string, string, \.\.\.\}, array\{int, int, numeric\-string, numeric\-string, numeric\-string, numeric\-string\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Exports/EmployeeHistoryReportExport.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$values of method Illuminate\\Support\\Collection\<int,array\<int, mixed\>\>\:\:push\(\) expects array\{mixed, mixed, mixed, mixed, string, string, string, string, \.\.\.\}, array\{\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Exports/EmployeeHistoryReportExport.php
+
+		-
+			message: '#^Method App\\Exports\\GeneralLedgerExport\:\:collection\(\) should return Illuminate\\Support\\Collection\<int, array\<int, string\>\> but returns Illuminate\\Support\\Collection\<int, array\{string, string, string, string, string, string, string, string\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Exports/GeneralLedgerExport.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>code" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Exports/JournalReportExport.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Exports/JournalReportExport.php
+
+		-
+			message: '#^Method App\\Exports\\PayrollSummaryReportExport\:\:collection\(\) return type with generic class Illuminate\\Support\\Collection does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Exports/PayrollSummaryReportExport.php
+
+		-
+			message: '#^Parameter \#1 \.\.\.\$values of method Illuminate\\Support\\Collection\<int,array\<int, mixed\>\>\:\:push\(\) expects array\{mixed, mixed, mixed, mixed, mixed, mixed, string, string, \.\.\.\}, array\{\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Exports/PayrollSummaryReportExport.php
+
+		-
+			message: '#^Method App\\Exports\\StatutoryContributionExport\:\:collection\(\) return type with generic class Illuminate\\Support\\Collection does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Exports/StatutoryContributionExport.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Carbon\\CarbonImmutable\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Exports/StatutoryContributionExport.php
+
+		-
+			message: '#^Method App\\Exports\\TrialBalanceExport\:\:collection\(\) should return Illuminate\\Support\\Collection\<int, array\<int, string\>\> but returns Illuminate\\Support\\Collection\<int, array\{string, string, string, string, string, string, string, string, \.\.\.\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Exports/TrialBalanceExport.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: app/Http/Controllers/Admin/Accounting/InvoiceController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Admin\\Accounting\\LedgerReportController\:\:accountOptions\(\) should return list\<array\<string, mixed\>\> but returns array\<int, array\{id\: mixed, code\: string, name\: string, type\: string, is_active\: bool\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Admin/Accounting/LedgerReportController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Admin\\Accounting\\LedgerReportController\:\:journalToArray\(\) should return list\<array\<string, mixed\>\> but returns array\<int, array\{id\: mixed, entry_number\: string, date\: string, reference\: string\|null, narration\: string\|null, source_type\: string\|null, is_reversal\: bool, total_debit_centavos\: int, \.\.\.\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Admin/Accounting/LedgerReportController.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Support\\Collection\<int,array\<string, mixed\>\>\:\:all\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Http/Controllers/Admin/Accounting/LedgerReportController.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Support\\Collection\<int,array\<string, mixed\>\>\:\:values\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Http/Controllers/Admin/Accounting/LedgerReportController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/AuditLogController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Admin\\AuditLogController\:\:buildQuery\(\) return type with generic class Illuminate\\Database\\Eloquent\\Builder does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Http/Controllers/Admin/AuditLogController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Admin\\AuditLogController\:\:distinctActions\(\) should return list\<string\> but returns array\<int, mixed\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Admin/AuditLogController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Admin\\AuditLogController\:\:distinctAuditableTypes\(\) should return list\<array\{value\: string, label\: string\}\> but returns array\<int, array\{value\: string, label\: string\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Admin/AuditLogController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Support\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\<string, mixed\>, Closure\(App\\Models\\Pas\\AuditLog\)\: array\<string, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Admin/AuditLogController.php
+
+		-
+			message: '#^Parameter \#1 \$entries of class App\\Exports\\AuditLogExport constructor expects Illuminate\\Support\\Collection\<int, App\\Models\\Pas\\AuditLog\>, Illuminate\\Database\\Eloquent\\Collection\<int, Illuminate\\Database\\Eloquent\\Model\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Admin/AuditLogController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type string\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Admin/AuditLogController.php
+
+		-
+			message: '#^Called ''Model\:\:make\(\)'' which performs unnecessary work, use ''new Model\(\)''\.$#'
+			identifier: larastan.noModelMake
+			count: 1
+			path: app/Http/Controllers/Admin/PayPeriodController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Admin/PayrollRunController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$full_name\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Admin/PayrollRunController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$staff_no\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Admin/PayrollRunController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 4
+			path: app/Http/Controllers/Admin/PayrollRunController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Pagination\\AbstractPaginator\<int,App\\Models\\Pas\\Payslip\>\:\:through\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/PayrollRunController.php
+
+		-
+			message: '#^Parameter \#1 \$period of method App\\Actions\\Payroll\\GeneratePayrollRunAction\:\:execute\(\) expects App\\Models\\Pas\\PayPeriod, App\\Models\\Pas\\PayPeriod\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Pas\\PayPeriod\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Admin/PayrollRunController.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Pagination\\AbstractPaginator\<int,App\\Models\\Pas\\Payslip\>\:\:through\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Http/Controllers/Admin/PayrollRunController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Carbon\\CarbonImmutable\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 3
+			path: app/Http/Controllers/Admin/PayrollRunController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>code" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Admin/PayrollRunController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$full_name\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$staff_no\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Admin\\ReportsController\:\:buildEmployeeHistoryRows\(\) should return array\{array\<string, mixed\>\|null, list\<array\<string, mixed\>\>, array\<string, int\>, list\<array\<string, int\>\>\} but returns array\{array\{lms_staff_id\: int, full_name\: mixed, staff_no\: mixed, email\: mixed\}\|null, array\<int, array\{payslip_id\: int, run_id\: int, pay_period_code\: string\|null, pay_period_start\: string\|null, pay_period_end\: string\|null, computed_at\: string, gross_pay_centavos\: int, total_employee_deductions_centavos\: int, \.\.\.\}\>, array\{payslip_count\: int\<0, max\>, gross_pay_centavos\: int, total_employee_deductions_centavos\: int, total_net_pay_centavos\: int\}, list\<non\-empty\-array\<string, int\>\>\}\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Admin\\ReportsController\:\:buildPayrollSummaryRows\(\) should return list\<array\<string, mixed\>\> but returns array\<int, array\{run_id\: int, status\: string, pay_period_code\: string\|null, pay_period_start\: string\|null, pay_period_end\: string\|null, employee_count\: int\<0, max\>, gross_pay_centavos\: int, total_employee_deductions_centavos\: int, \.\.\.\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Admin\\ReportsController\:\:employeePickerOptions\(\) should return list\<array\{lms_staff_id\: int, full_name\: string\|null\}\> but returns array\<int, array\{lms_staff_id\: int, full_name\: mixed\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Support\\Collection\<int,array\<string, mixed\>\>\:\:sortBy\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Support\\Collection\<int,mixed\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Support\\Collection\<int,array\<string, mixed\>\>\:\:all\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Support\\Collection\<int,array\<string, mixed\>\>\:\:values\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Support\\Collection\<int,mixed\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Carbon\\CarbonImmutable\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>year" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Admin/ReportsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Admin/StatutoryContributionController.php
+
+		-
+			message: '#^Access to an undefined property object\:\:\$full_name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/EmployeeController.php
+
+		-
+			message: '#^Access to an undefined property object\:\:\$lms_staff_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/EmployeeController.php
+
+		-
+			message: '#^Access to an undefined property object\:\:\$profile\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/EmployeeController.php
+
+		-
+			message: '#^Access to an undefined property object\:\:\$staff_no\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/EmployeeController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\EmployeeController\:\:availableContributions\(\) should return list\<array\{code\: string, label\: string\}\> but returns array\<int, array\{code\: string, label\: string\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/EmployeeController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\PayrollPreviewController\:\:loadEmployeeOptions\(\) should return list\<array\{lms_staff_id\: int, full_name\: string, employment_type\: string\|null, has_profile\: bool\}\> but returns array\<int, array\{lms_staff_id\: int\<0, max\>, full_name\: string, employment_type\: string, has_profile\: true\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/PayrollPreviewController.php
+
+		-
 			message: '#^Cannot call method update\(\) on App\\Models\\User\|null\.$#'
 			identifier: method.nonObject
 			count: 1
 			path: app/Http/Controllers/Settings/SecurityController.php
+
+		-
+			message: '#^Call to function method_exists\(\) with App\\Models\\User and ''hasRole'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Middleware/ApplyTenantOverride.php
+
+		-
+			message: '#^Call to function method_exists\(\) with App\\Models\\User and ''hasRole'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Middleware/HandleInertiaRequests.php
+
+		-
+			message: '#^Cannot import type alias PayrollPreviewPayload\: type alias does not exist in App\\ValueObjects\\PayPeriodInput\.$#'
+			identifier: typeAlias.notFound
+			count: 1
+			path: app/Http/Requests/PayrollPreviewComputeRequest.php
 
 		-
 			message: '#^Method App\\Http\\Requests\\Settings\\PasswordUpdateRequest\:\:passwordRules\(\) should return array\<int, array\<mixed\>\|Illuminate\\Contracts\\Validation\\ValidationRule\|string\> but returns array\<int, Illuminate\\Validation\\Rules\\Password\|string\>\.$#'
@@ -29,6 +629,60 @@ parameters:
 			identifier: property.nonObject
 			count: 1
 			path: app/Http/Requests/Settings/ProfileUpdateRequest.php
+
+		-
+			message: '#^Cannot call method toDateString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Imports/EmployeeBulkEditImport.php
+
+		-
+			message: '#^Method App\\Imports\\EmployeeBulkEditImport\:\:collection\(\) has parameter \$rows with generic class Illuminate\\Support\\Collection but does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Imports/EmployeeBulkEditImport.php
+
+		-
+			message: '#^Property App\\Imports\\EmployeeBulkEditImport\:\:\$parsed \(array\<int, array\{row_number\: int, lms_staff_id\: int\|null, profile_exists\: bool, full_name\: string\|null, changes\: array\<string, array\{from\: mixed, to\: mixed\}\>, errors\: array\<int, string\>\}\>\) does not accept non\-empty\-array\<int, array\<string, mixed\>\>\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Imports/EmployeeBulkEditImport.php
+
+		-
+			message: '#^Cannot call method toPayPeriodInput\(\) on App\\Models\\Pas\\PayPeriod\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Jobs/Payroll/ComputeEmployeePayslipJob.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{code\: string, label\: string, amount\: int, bucket\: string, meta\: array\<string, mixed\>\|null\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Jobs/Payroll/ComputeEmployeePayslipJob.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$email\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Jobs/Payroll/RenderPayslipPdfJob.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$full_name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Jobs/Payroll/RenderPayslipPdfJob.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$staff_no\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Jobs/Payroll/RenderPayslipPdfJob.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Carbon\\CarbonImmutable\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Jobs/Payroll/RenderPayslipPdfJob.php
 
 		-
 			message: '#^Method App\\Models\\Lms\\Department\:\:scopeActive\(\) has parameter \$query with generic class Illuminate\\Database\\Eloquent\\Builder but does not specify its types\: TModel$#'
@@ -121,8 +775,80 @@ parameters:
 			path: app/Models/Lms/User.php
 
 		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/AccountingPeriod.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/Allowance.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/ChartOfAccount.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/Contact.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/DeductionType.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/DocumentNumberSeries.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/EmployeeAllowance.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/EmployeeDeduction.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/EmployeeLoan.php
+
+		-
 			message: '#^Class App\\Models\\Pas\\EmployeeProfile uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
 			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/EmployeeProfile.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\EmployeeProfile\:\:newFactory\(\) return type with generic class Illuminate\\Database\\Eloquent\\Factories\\Factory does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/EmployeeProfile.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/EmployeeProfile.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of function in_array expects array, array\|string given\.$#'
+			identifier: argument.type
 			count: 1
 			path: app/Models/Pas/EmployeeProfile.php
 
@@ -133,10 +859,250 @@ parameters:
 			path: app/Models/Pas/EmployeeProfile.php
 
 		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/Invoice.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/InvoiceLine.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/JournalEntry.php
+
+		-
+			message: '#^Cannot call method movementCentavos\(\) on App\\Models\\Pas\\ChartOfAccount\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Models/Pas/JournalEntryLine.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/JournalEntryLine.php
+
+		-
+			message: '#^Class App\\Models\\Pas\\PayPeriod uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/PayPeriod.php
+
+		-
+			message: '#^Generic type Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\Pas\\PayrollRun\> in PHPDoc tag @return does not specify all template types of class Illuminate\\Database\\Eloquent\\Relations\\HasMany\: TRelatedModel, TDeclaringModel$#'
+			identifier: generics.lessTypes
+			count: 1
+			path: app/Models/Pas/PayPeriod.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayPeriod\:\:newFactory\(\) return type with generic class Illuminate\\Database\\Eloquent\\Factories\\Factory does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/PayPeriod.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayPeriod\:\:payrollRuns\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\Pas\\PayrollRun\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\Pas\\PayrollRun, \$this\(App\\Models\\Pas\\PayPeriod\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/Pas/PayPeriod.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayPeriod\:\:scopeForFrequency\(\) return type with generic class Illuminate\\Database\\Eloquent\\Builder does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/PayPeriod.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayPeriod\:\:scopeOpen\(\) return type with generic class Illuminate\\Database\\Eloquent\\Builder does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/PayPeriod.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/PayPeriod.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/Payment.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/PaymentAllocation.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/PayrollAdjustment.php
+
+		-
+			message: '#^Class App\\Models\\Pas\\PayrollRun uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Generic type Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\Pas\\Payslip\> in PHPDoc tag @return does not specify all template types of class Illuminate\\Database\\Eloquent\\Relations\\HasMany\: TRelatedModel, TDeclaringModel$#'
+			identifier: generics.lessTypes
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayrollRun\:\:approvedBy\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, App\\Models\\Pas\\PayrollRun\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, \$this\(App\\Models\\Pas\\PayrollRun\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayrollRun\:\:journalEntry\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\Pas\\JournalEntry, App\\Models\\Pas\\PayrollRun\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\Pas\\JournalEntry, \$this\(App\\Models\\Pas\\PayrollRun\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayrollRun\:\:newFactory\(\) return type with generic class Illuminate\\Database\\Eloquent\\Factories\\Factory does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayrollRun\:\:payPeriod\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\Pas\\PayPeriod, App\\Models\\Pas\\PayrollRun\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\Pas\\PayPeriod, \$this\(App\\Models\\Pas\\PayrollRun\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayrollRun\:\:payslips\(\) should return Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\Pas\\Payslip\> but returns Illuminate\\Database\\Eloquent\\Relations\\HasMany\<App\\Models\\Pas\\Payslip, \$this\(App\\Models\\Pas\\PayrollRun\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayrollRun\:\:postedBy\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, App\\Models\\Pas\\PayrollRun\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, \$this\(App\\Models\\Pas\\PayrollRun\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayrollRun\:\:submittedBy\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, App\\Models\\Pas\\PayrollRun\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, \$this\(App\\Models\\Pas\\PayrollRun\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\PayrollRun\:\:voidedBy\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, App\\Models\\Pas\\PayrollRun\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\User, \$this\(App\\Models\\Pas\\PayrollRun\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/PayrollRun.php
+
+		-
+			message: '#^Class App\\Models\\Pas\\Payslip uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/Payslip.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\Payslip\:\:employeeProfile\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\Pas\\EmployeeProfile, App\\Models\\Pas\\Payslip\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\Pas\\EmployeeProfile, \$this\(App\\Models\\Pas\\Payslip\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/Pas/Payslip.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\Payslip\:\:newFactory\(\) return type with generic class Illuminate\\Database\\Eloquent\\Factories\\Factory does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/Payslip.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\Payslip\:\:payrollRun\(\) should return Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\Pas\\PayrollRun, App\\Models\\Pas\\Payslip\> but returns Illuminate\\Database\\Eloquent\\Relations\\BelongsTo\<App\\Models\\Pas\\PayrollRun, \$this\(App\\Models\\Pas\\Payslip\)\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Models/Pas/Payslip.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/Payslip.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/School.php
+
+		-
+			message: '#^Method App\\Models\\Pas\\StatutoryContribution\:\:newFactory\(\) return type with generic class Illuminate\\Database\\Eloquent\\Factories\\Factory does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Pas/StatutoryContribution.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/StatutoryContribution.php
+
+		-
+			message: '#^Property ''is_editable'' does not exist in model\.$#'
+			identifier: rules.modelAppends
+			count: 1
+			path: app/Models/Pas/StatutoryContribution.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/TaxRate.php
+
+		-
 			message: '#^Property App\\Models\\User\:\:\$guard_name has no type specified\.$#'
 			identifier: missingType.property
 			count: 1
 			path: app/Models/User.php
+
+		-
+			message: '#^Method App\\Multitenancy\\Finders\\SchoolTenantFinder\:\:resolveSessionOverride\(\) never returns App\\Models\\Pas\\School so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Multitenancy/Finders/SchoolTenantFinder.php
+
+		-
+			message: '#^Cannot call method getAttribute\(\) on class\-string\|object\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Providers/AppServiceProvider.php
+
+		-
+			message: '#^Cannot call method hasRole\(\) on class\-string\|object\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Providers/AppServiceProvider.php
+
+		-
+			message: '#^Cannot call method hasRole\(\) on class\-string\|object\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Providers/HorizonServiceProvider.php
 
 		-
 			message: '#^Method App\\Repositories\\Contracts\\EmployeeRepositoryInterface\:\:paginate\(\) return type with generic interface Illuminate\\Contracts\\Pagination\\LengthAwarePaginator does not specify its types\: TKey, TValue$#'
@@ -159,13 +1125,13 @@ parameters:
 		-
 			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$email\.$#'
 			identifier: property.notFound
-			count: 1
+			count: 2
 			path: app/Repositories/Eloquent/EloquentEmployeeRepository.php
 
 		-
 			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$full_name\.$#'
 			identifier: property.notFound
-			count: 1
+			count: 2
 			path: app/Repositories/Eloquent/EloquentEmployeeRepository.php
 
 		-
@@ -176,6 +1142,24 @@ parameters:
 
 		-
 			message: '#^Access to an undefined property App\\Models\\Lms\\Staff\:\:\$staff_no\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Repositories/Eloquent/EloquentEmployeeRepository.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Repositories/Eloquent/EloquentEmployeeRepository.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Repositories/Eloquent/EloquentEmployeeRepository.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Repositories/Eloquent/EloquentEmployeeRepository.php
@@ -235,343 +1219,163 @@ parameters:
 			path: app/Repositories/Eloquent/EloquentEmployeeRepository.php
 
 		-
+			message: '#^Parameter \#1 \$entry of method App\\Actions\\Accounting\\PostJournalEntry\:\:execute\(\) expects App\\Models\\Pas\\JournalEntry, App\\Models\\Pas\\JournalEntry\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Accounting/InvoicePostingService.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/Accounting/InvoicePostingService.php
+
+		-
+			message: '#^Method App\\Services\\Accounting\\LedgerPostingService\:\:aggregate\(\) should return array\<string, array\{debit\: int, credit\: int\}\> but returns array\<string, non\-empty\-array\<string, int\>\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/Accounting/LedgerPostingService.php
+
+		-
+			message: '#^Offset ''expense'' on array\{expense\: string, liability\: string\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: app/Services/Accounting/LedgerPostingService.php
+
+		-
+			message: '#^Offset ''liability'' on array\{expense\: string, liability\: string\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: app/Services/Accounting/LedgerPostingService.php
+
+		-
+			message: '#^Parameter \#1 \$entry of method App\\Actions\\Accounting\\PostJournalEntry\:\:execute\(\) expects App\\Models\\Pas\\JournalEntry, App\\Models\\Pas\\JournalEntry\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Accounting/LedgerPostingService.php
+
+		-
+			message: '#^Parameter \#1 \$entry of method App\\Actions\\Accounting\\PostJournalEntry\:\:execute\(\) expects App\\Models\\Pas\\JournalEntry, App\\Models\\Pas\\JournalEntry\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Accounting/PaymentPostingService.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/Accounting/PaymentPostingService.php
+
+		-
+			message: '#^Cannot access property \$date on App\\Models\\Pas\\JournalEntry\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Services/Accounting/Reports/LedgerReportService.php
+
+		-
+			message: '#^Cannot access property \$entry_number on App\\Models\\Pas\\JournalEntry\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Services/Accounting/Reports/LedgerReportService.php
+
+		-
+			message: '#^Cannot access property \$narration on App\\Models\\Pas\\JournalEntry\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Services/Accounting/Reports/LedgerReportService.php
+
+		-
+			message: '#^Cannot access property \$reference on App\\Models\\Pas\\JournalEntry\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Services/Accounting/Reports/LedgerReportService.php
+
+		-
+			message: '#^Cannot access property \$reversal_of_entry_id on App\\Models\\Pas\\JournalEntry\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Services/Accounting/Reports/LedgerReportService.php
+
+		-
+			message: '#^Method App\\Services\\Accounting\\Reports\\LedgerReportService\:\:accountSums\(\) should return Illuminate\\Support\\Collection\<int, object\> but returns Illuminate\\Support\\Collection\<\(int\|string\), stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/Accounting/Reports/LedgerReportService.php
+
+		-
+			message: '#^Parameter \#1 \$date of static method App\\Services\\Accounting\\Reports\\LedgerReportService\:\:dayStart\(\) expects Carbon\\CarbonImmutable, Carbon\\CarbonImmutable\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Accounting/Reports/LedgerReportService.php
+
+		-
+			message: '#^Parameter \#1 \$entryIds of method App\\Services\\Accounting\\Reports\\LedgerReportService\:\:contraAccountsFor\(\) expects list\<int\>, array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Accounting/Reports/LedgerReportService.php
+
+		-
 			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: config/filesystems.php
 
 		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:actingAs\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/AuthenticationTest.php
-
-		-
-			message: '#^Cannot access property \$lms_user_id on stdClass\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/Auth/AuthenticationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:assertAuthenticated\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/AuthenticationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:assertGuest\(\)\.$#'
-			identifier: method.notFound
-			count: 3
-			path: tests/Feature/Auth/AuthenticationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:get\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/AuthenticationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:post\(\)\.$#'
-			identifier: method.notFound
-			count: 4
-			path: tests/Feature/Auth/AuthenticationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:skipUnlessFortifyHas\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/AuthenticationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:actingAs\(\)\.$#'
-			identifier: method.notFound
-			count: 6
-			path: tests/Feature/Auth/EmailVerificationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:skipUnlessFortifyHas\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/EmailVerificationTest.php
-
-		-
-			message: '#^Cannot call method hasVerifiedEmail\(\) on App\\Models\\User\|null\.$#'
-			identifier: method.nonObject
-			count: 4
-			path: tests/Feature/Auth/EmailVerificationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:assertAuthenticated\(\)\.$#'
-			identifier: method.notFound
-			count: 3
-			path: tests/Feature/Auth/PasUserUpsertOnLoginTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:assertGuest\(\)\.$#'
-			identifier: method.notFound
-			count: 4
-			path: tests/Feature/Auth/PasUserUpsertOnLoginTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:post\(\)\.$#'
-			identifier: method.notFound
-			count: 8
-			path: tests/Feature/Auth/PasUserUpsertOnLoginTest.php
-
-		-
-			message: '#^Cannot access property \$id on stdClass\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/Auth/PasUserUpsertOnLoginTest.php
-
-		-
-			message: '#^Cannot access property \$lms_user_id on stdClass\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/Auth/PasUserUpsertOnLoginTest.php
-
-		-
-			message: '#^Cannot access property \$email on stdClass\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/Auth/PasUserUpsertOnLoginTest.php
-
-		-
-			message: '#^Cannot access property \$name on stdClass\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/Auth/PasUserUpsertOnLoginTest.php
-
-		-
-			message: '#^Cannot access property \$password on App\\Models\\Lms\\User\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/Auth/PasUserUpsertOnLoginTest.php
-
-		-
-			message: '#^Cannot access property \$password on stdClass\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/Auth/PasUserUpsertOnLoginTest.php
-
-		-
-			message: '#^Parameter \#1 \$lmsUser of callable App\\Services\\Auth\\UpsertPasUserFromLms expects App\\Models\\Lms\\User, App\\Models\\Lms\\User\|null given\.$#'
+			message: '#^Parameter \#1 \$title of static method Illuminate\\Support\\Str\:\:slug\(\) expects string, bool\|string given\.$#'
 			identifier: argument.type
+			count: 1
+			path: config/horizon.php
+
+		-
+			message: '#^Method Illuminate\\Database\\Migrations\\Migration@anonymous/database/migrations/2026_05_08_000002_add_school_id_to_pas_tables\.php\:43\:\:convertUniqueToComposite\(\) has parameter \$columns with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: database/migrations/2026_05_08_000002_add_school_id_to_pas_tables.php
+
+		-
+			message: '#^Method Illuminate\\Database\\Migrations\\Migration@anonymous/database/migrations/2026_05_08_000002_add_school_id_to_pas_tables\.php\:43\:\:revertCompositeToSingleUnique\(\) has parameter \$columns with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: database/migrations/2026_05_08_000002_add_school_id_to_pas_tables.php
+
+		-
+			message: '#^Method Illuminate\\Database\\Migrations\\Migration@anonymous/database/migrations/2026_05_10_000001_add_school_id_to_pas_catalog_tables\.php\:57\:\:convertUniqueToComposite\(\) has parameter \$columns with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: database/migrations/2026_05_10_000001_add_school_id_to_pas_catalog_tables.php
+
+		-
+			message: '#^Method Illuminate\\Database\\Migrations\\Migration@anonymous/database/migrations/2026_05_10_000001_add_school_id_to_pas_catalog_tables\.php\:57\:\:revertCompositeToSingleUnique\(\) has parameter \$columns with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: database/migrations/2026_05_10_000001_add_school_id_to_pas_catalog_tables.php
+
+		-
+			message: '#^Method Database\\Seeders\\DemoJournalSeeder\:\:buildDraft\(\) should return App\\Models\\Pas\\JournalEntry but returns App\\Models\\Pas\\JournalEntry\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: database/seeders/DemoJournalSeeder.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{account\: string, debit\?\: int, credit\?\: int, memo\?\: string\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: database/seeders/DemoJournalSeeder.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Illuminate\\Console\\Command\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 9
+			path: database/seeders/DemoJournalSeeder.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{code\: string, label\: string, amount\: int, bucket\: string, meta\: array\<string, mixed\>\|null\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: database/seeders/DemoPayrollSeeder.php
+
+		-
+			message: '#^Property Illuminate\\Database\\Seeder\:\:\$command \(Illuminate\\Console\\Command\) in isset\(\) is not nullable\.$#'
+			identifier: isset.property
 			count: 2
-			path: tests/Feature/Auth/PasUserUpsertOnLoginTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:actingAs\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/PasswordConfirmationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:get\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/PasswordConfirmationTest.php
-
-		-
-			message: '#^Cannot access property \$roles on App\\Models\\User\|null\.$#'
-			identifier: property.nonObject
-			count: 2
-			path: tests/Feature/Auth/SliceCAuthTest.php
-
-		-
-			message: '#^Cannot call method hasRole\(\) on App\\Models\\User\|null\.$#'
-			identifier: method.nonObject
-			count: 3
-			path: tests/Feature/Auth/SliceCAuthTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:get\(\)\.$#'
-			identifier: method.notFound
-			count: 2
-			path: tests/Feature/Auth/TwoFactorChallengeTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:post\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/TwoFactorChallengeTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:skipUnlessFortifyHas\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/TwoFactorChallengeTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:actingAs\(\)\.$#'
-			identifier: method.notFound
-			count: 2
-			path: tests/Feature/Auth/VerificationNotificationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:skipUnlessFortifyHas\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/Auth/VerificationNotificationTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:actingAs\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/DashboardTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:get\(\)\.$#'
-			identifier: method.notFound
-			count: 2
-			path: tests/Feature/DashboardTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:actingAs\(\)\.$#'
-			identifier: method.notFound
-			count: 6
-			path: tests/Feature/EmployeeIndexTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:get\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/EmployeeIndexTest.php
-
-		-
-			message: '#^Cannot access property \$full_name on App\\Models\\Lms\\Staff\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/EmployeeIndexTest.php
-
-		-
-			message: '#^Cannot access property \$id on App\\Models\\Lms\\Staff\|null\.$#'
-			identifier: property.nonObject
-			count: 2
-			path: tests/Feature/EmployeeIndexTest.php
-
-		-
-			message: '#^Unable to resolve the template type TKey in call to function collect$#'
-			identifier: argument.templateType
-			count: 3
-			path: tests/Feature/EmployeeIndexTest.php
-
-		-
-			message: '#^Unable to resolve the template type TValue in call to function collect$#'
-			identifier: argument.templateType
-			count: 3
-			path: tests/Feature/EmployeeIndexTest.php
-
-		-
-			message: '#^Cannot access property \$bank_account_number on stdClass\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/EmployeeRepositoryTest.php
-
-		-
-			message: '#^Cannot access property \$basic_salary_centavos on stdClass\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/EmployeeRepositoryTest.php
-
-		-
-			message: '#^Cannot access property \$sss_number on stdClass\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/EmployeeRepositoryTest.php
-
-		-
-			message: '#^Cannot access property \$tin on stdClass\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/EmployeeRepositoryTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:get\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: tests/Feature/ExampleTest.php
-
-		-
-			message: '#^Cannot access property \$designation_name on App\\Models\\Lms\\Designation\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/LmsReadOnlyTest.php
-
-		-
-			message: '#^Cannot access property \$full_name on App\\Models\\Lms\\Staff\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/LmsReadOnlyTest.php
-
-		-
-			message: '#^Cannot call method delete\(\) on App\\Models\\Lms\\Designation\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Feature/LmsReadOnlyTest.php
-
-		-
-			message: '#^Cannot call method delete\(\) on App\\Models\\Lms\\Staff\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Feature/LmsReadOnlyTest.php
-
-		-
-			message: '#^Cannot call method forceDelete\(\) on App\\Models\\Lms\\Staff\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Feature/LmsReadOnlyTest.php
-
-		-
-			message: '#^Cannot call method save\(\) on App\\Models\\Lms\\Designation\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Feature/LmsReadOnlyTest.php
-
-		-
-			message: '#^Cannot call method save\(\) on App\\Models\\Lms\\Staff\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Feature/LmsReadOnlyTest.php
-
-		-
-			message: '#^Cannot call method update\(\) on App\\Models\\Lms\\Designation\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Feature/LmsReadOnlyTest.php
-
-		-
-			message: '#^Cannot call method update\(\) on App\\Models\\Lms\\Staff\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Feature/LmsReadOnlyTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:actingAs\(\)\.$#'
-			identifier: method.notFound
-			count: 3
-			path: tests/Feature/Settings/ProfileUpdateTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:actingAs\(\)\.$#'
-			identifier: method.notFound
-			count: 6
-			path: tests/Feature/Settings/SecurityTest.php
-
-		-
-			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\:\:skipUnlessFortifyHas\(\)\.$#'
-			identifier: method.notFound
-			count: 4
-			path: tests/Feature/Settings/SecurityTest.php
-
-		-
-			message: '#^Function something\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Pest.php
-
-		-
-			message: '#^Undefined variable\: \$this$#'
-			identifier: variable.undefined
-			count: 2
-			path: tests/Pest.php
+			path: database/seeders/DemoPayrollSeeder.php

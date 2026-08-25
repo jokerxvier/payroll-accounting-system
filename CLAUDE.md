@@ -26,9 +26,10 @@ vendor/bin/pint --dirty --format agent   # Format modified PHP files (run before
 npm run lint                             # ESLint fix
 npm run format                           # Prettier fix
 npm run types:check                      # TypeScript type checking
-vendor/bin/phpstan analyse               # Larastan v3, level 8 + baseline — absent from ci:check but GATES CI
-composer ci:check                        # Local gate: lint, format, types, tests (run before pushing)
-#                                        # .github/workflows/ci.yml ALSO runs phpstan — run it too
+composer stan                            # Larastan v3, level 8 + baseline. Analyses app/config/database/routes,
+#                                        # NOT tests/ (Pest closures give ~1,400 false positives there)
+composer ci:check                        # Full gate: lint, format, types, phpstan, tests (run before pushing).
+#                                        # Mirrors .github/workflows/ci.yml — if this passes, CI should too
 
 # Frontend tests (Vitest)
 npm test                                 # Run all Vitest tests
