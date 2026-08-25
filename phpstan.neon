@@ -5,12 +5,24 @@ includes:
     - phpstan-baseline.neon
 
 parameters:
+    # `tests/` is deliberately NOT analysed.
+    #
+    # Larastan cannot resolve `$this` inside a Pest `it()` closure, so it reads
+    # every `$this->actingAs(...)->post(...)` as a call on
+    # Pest\PendingCalls\TestCall and reports a method that does not exist.
+    # That accounted for ~1,400 of the 2,160 errors found when this config was
+    # first made runnable again, and a correct new test file produces nine more
+    # the day it is written.
+    #
+    # A baseline cannot fix that: baselines freeze today's errors, and these are
+    # generated fresh by every test added afterwards. Analysing `tests/` would
+    # mean every PR that adds a test fails CI for writing ordinary Pest, which
+    # is how a gate stops being read at all.
     paths:
         - app/
         - config/
         - database/
         - routes/
-        - tests/
 
     level: 8
 
