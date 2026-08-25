@@ -29,7 +29,12 @@ npm run types:check                      # TypeScript type checking
 composer stan                            # Larastan v3, level 8 + baseline. Analyses app/config/database/routes,
 #                                        # NOT tests/ (Pest closures give ~1,400 false positives there)
 composer ci:check                        # Full gate: lint, format, types, phpstan, tests (run before pushing).
-#                                        # Mirrors .github/workflows/ci.yml — if this passes, CI should too
+#                                        # A GREEN ci:check DOES NOT MEAN GREEN CI — two known divergences:
+#                                        #  1. resources/js/{routes,actions,wayfinder} are gitignored. They exist
+#                                        #     locally (Vite generates them) but not on a fresh CI checkout, so
+#                                        #     `@/routes/...` is unresolvable there and import/order + tsc fail.
+#                                        #  2. tests/Browser/ needs Playwright, which the CI workflow never installs,
+#                                        #     so Pest aborts on CI where it skips locally.
 
 # Frontend tests (Vitest)
 npm test                                 # Run all Vitest tests
