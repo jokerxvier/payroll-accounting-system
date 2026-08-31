@@ -7,13 +7,17 @@ import {
     Building2,
     Calculator,
     CalendarDays,
+    CalendarClock,
+    ChartNoAxesCombined,
+    ReceiptText,
     CalendarRange,
     Check,
     ChevronsUpDown,
     FileInput,
     FileSearch,
     FileText,
-    Hash,
+    CreditCard,
+    FileUp,
     LayoutGrid,
     MinusCircle,
     Percent,
@@ -58,14 +62,19 @@ import { index as adminChartOfAccountsIndex } from '@/routes/admin/chart-of-acco
 import { index as adminContactsIndex } from '@/routes/admin/contacts';
 import { index as adminContributionTablesIndex } from '@/routes/admin/contribution-tables';
 import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-types';
-import { index as adminDocumentSeriesIndex } from '@/routes/admin/document-series';
 import { index as adminInvoicesIndex } from '@/routes/admin/invoices';
 import { index as adminJournalEntriesIndex } from '@/routes/admin/journal-entries';
+import { index as adminOpeningBalancesIndex } from '@/routes/admin/opening-balances';
+import { edit as adminOrganisationEdit } from '@/routes/admin/organisation';
 import { index as adminPayPeriodsIndex } from '@/routes/admin/pay-periods';
+import { index as adminPaymentGatewaysIndex } from '@/routes/admin/payment-gateways';
 import { index as adminPaymentsIndex } from '@/routes/admin/payments';
 import { index as adminPayrollRunsIndex } from '@/routes/admin/payroll-runs';
+import { index as adminRecurringInvoicesIndex } from '@/routes/admin/recurring-invoices';
 import {
+    accountingDashboard as adminAccountingDashboard,
     generalLedger as adminGeneralLedgerReport,
+    invoiceDashboard as adminInvoiceDashboard,
     journalReport as adminJournalReport,
     trialBalance as adminTrialBalanceReport,
 } from '@/routes/admin/reports';
@@ -77,7 +86,8 @@ import { clear as adminSchoolsSwitchClear } from '@/routes/admin/schools/switch'
 import { index as adminTaxRatesIndex } from '@/routes/admin/tax-rates';
 import { index as employeesIndex } from '@/routes/employees';
 import { show as payrollPreviewShow } from '@/routes/payroll/preview';
-import type { NavItem } from '@/types';
+import type { NavItem, NavSubGroup } from '@/types';
+import type { CurrentTenant } from '@/types/global';
 
 /**
  * Sidebar visibility constants — each one mirrors the role list in a
@@ -133,6 +143,23 @@ const ACCOUNTING_ROLES = [
     'accountant',
     'payroll-officer',
     'auditor',
+] as const;
+
+// Mirrors App\Policies\Pas\PaymentGatewaySettingPolicy, which reuses
+// AccountingRoles::PAYMENT_GATEWAY — the narrowest list in the module. A
+// leaked secret key moves money, so this sits with super-admin alone.
+const PAYMENT_GATEWAY_ROLES = ['platform-admin', 'super-admin'] as const;
+
+// Mirrors App\Policies\Pas\JournalEntryPolicy::postOpeningBalance, which
+// reuses AccountingRoles::POST_LEDGER — narrower than ACCOUNTING_ROLES above,
+// which is why Backlog Recording is its own group rather than items inside
+// Accounting. Showing it to the wider accounting set would be a dead link:
+// `payroll-officer` and `auditor` can read the ledger but cannot post the
+// books open.
+const LEDGER_POSTING_ROLES = [
+    'platform-admin',
+    'super-admin',
+    'accountant',
 ] as const;
 
 // Mirrors AuditLogController::ALLOWED_ROLES.
@@ -207,82 +234,160 @@ const catalogNavItems: NavItem[] = [
     },
 ];
 
-const accountingNavItems: NavItem[] = [
+/**
+ * Accounting, in four runs rather than eleven flat links.
+ *
+ * The grouping is the module's own shape made visible: what you do daily,
+ * what those postings land in, what you read back, and what is configured
+ * once. A flat list gave no clue which was which.
+ *
+ * Two items carry their own `roles` because their pages are gated far more
+ * narrowly than the rest of Accounting. They used to be separate top-level
+ * groups for exactly that reason; folding them in here is only safe because
+ * `NavItem.roles` now enforces the same narrowing per item.
+ */
+const accountingNavGroups: NavSubGroup[] = [
     {
-        title: 'Chart of accounts',
-        href: adminChartOfAccountsIndex(),
-        icon: BookOpen,
+        label: 'Transactions',
+        items: [
+            // Invoices, bills, payments and contacts all answer to
+            // AccountingRoles::VIEW, the same set as the group gate, so none
+            // needs its own `roles`.
+            {
+                title: 'Invoices',
+                hideKey: 'accounting.invoices',
+                href: adminInvoicesIndex(),
+                icon: FileText,
+            },
+            // Bills share the invoice controller and policy — the `type`
+            // filter is what separates them. Its own entry because a screen
+            // reachable only by hand-editing a query string is not reachable.
+            // Same gate as the group: whoever may see invoices may see the
+            // standing instructions that raise them.
+            {
+                title: 'Recurring invoices',
+                hideKey: 'accounting.recurring-invoices',
+                href: adminRecurringInvoicesIndex(),
+                icon: CalendarClock,
+            },
+            {
+                title: 'Bills',
+                hideKey: 'accounting.bills',
+                href: adminInvoicesIndex({ query: { type: 'purchase' } }),
+                icon: FileInput,
+            },
+            {
+                title: 'Payments',
+                hideKey: 'accounting.payments',
+                href: adminPaymentsIndex(),
+                icon: Wallet,
+            },
+            {
+                title: 'Contacts',
+                hideKey: 'accounting.contacts',
+                href: adminContactsIndex(),
+                icon: ContactIcon,
+            },
+        ],
     },
     {
-        title: 'Journal',
-        href: adminJournalEntriesIndex(),
-        icon: BookText,
-    },
-    // Mirrors App\Policies\Pas\InvoicePolicy::viewAny, which reuses
-    // AccountingRoles::VIEW — same set as the group gate above, so no
-    // per-item gating is needed.
-    {
-        title: 'Invoices',
-        href: adminInvoicesIndex(),
-        icon: FileText,
-    },
-    // Bills share the invoice controller and policy — the `type` filter is
-    // what separates them. Its own entry because a screen reachable only by
-    // hand-editing a query string is not reachable.
-    {
-        title: 'Bills',
-        href: adminInvoicesIndex({ query: { type: 'purchase' } }),
-        icon: FileInput,
-    },
-    // Mirrors App\Policies\Pas\PaymentPolicy::viewAny, which reuses
-    // AccountingRoles::VIEW — same set as the group gate above.
-    {
-        title: 'Payments',
-        href: adminPaymentsIndex(),
-        icon: Wallet,
-    },
-    // Mirrors App\Policies\Pas\ContactPolicy, which reuses AccountingRoles.
-    {
-        title: 'Contacts',
-        href: adminContactsIndex(),
-        icon: ContactIcon,
+        label: 'Books',
+        items: [
+            {
+                title: 'Chart of accounts',
+                hideKey: 'accounting.chart-of-accounts',
+                href: adminChartOfAccountsIndex(),
+                icon: BookOpen,
+            },
+            {
+                title: 'Journal',
+                hideKey: 'accounting.journal',
+                href: adminJournalEntriesIndex(),
+                icon: BookText,
+            },
+        ],
     },
     {
-        title: 'Tax rates',
-        href: adminTaxRatesIndex(),
-        icon: Percent,
+        label: 'Reports',
+        items: [
+            // LedgerReportController and FinancialDashboardController both
+            // authorize through JournalEntryPolicy::viewAny — reading a report
+            // is reading the ledger — which is AccountingRoles::VIEW again.
+            {
+                title: 'Dashboard',
+                hideKey: 'accounting.dashboard',
+                href: adminAccountingDashboard(),
+                icon: ChartNoAxesCombined,
+            },
+            {
+                title: 'Invoices',
+                hideKey: 'accounting.invoice-dashboard',
+                href: adminInvoiceDashboard(),
+                icon: ReceiptText,
+            },
+            {
+                title: 'Trial balance',
+                hideKey: 'accounting.trial-balance',
+                href: adminTrialBalanceReport(),
+                icon: Scale,
+            },
+            {
+                title: 'General ledger',
+                hideKey: 'accounting.general-ledger',
+                href: adminGeneralLedgerReport(),
+                icon: ScrollText,
+            },
+            {
+                title: 'Journal report',
+                hideKey: 'accounting.journal-report',
+                href: adminJournalReport(),
+                icon: Sigma,
+            },
+        ],
     },
     {
-        title: 'Periods',
-        href: adminAccountingPeriodsIndex(),
-        icon: CalendarRange,
-    },
-    // The three ledger reports. LedgerReportController authorizes all of them
-    // through JournalEntryPolicy::viewAny — reading a report is reading the
-    // ledger — which is AccountingRoles::VIEW, the same set as the group gate
-    // above, so no per-item gating is needed.
-    {
-        title: 'Trial balance',
-        href: adminTrialBalanceReport(),
-        icon: Scale,
-    },
-    {
-        title: 'General ledger',
-        href: adminGeneralLedgerReport(),
-        icon: ScrollText,
-    },
-    {
-        title: 'Journal report',
-        href: adminJournalReport(),
-        icon: Sigma,
-    },
-    // Mirrors App\Policies\Pas\DocumentNumberSeriesPolicy::viewAny, which
-    // reuses AccountingRoles::VIEW. Editing is narrower (POST_LEDGER), and
-    // that is gated per-row by the `can.update` flag the controller sends.
-    {
-        title: 'Document numbering',
-        href: adminDocumentSeriesIndex(),
-        icon: Hash,
+        label: 'Settings',
+        items: [
+            // The school's own letterhead. Same gate as payment gateways —
+            // both are things a school presents to the outside world.
+            {
+                title: 'Organisation',
+                hideKey: 'accounting.organisation',
+                href: adminOrganisationEdit(),
+                icon: Building2,
+                roles: PAYMENT_GATEWAY_ROLES,
+            },
+            {
+                title: 'Tax rates',
+                hideKey: 'accounting.tax-rates',
+                href: adminTaxRatesIndex(),
+                icon: Percent,
+            },
+            {
+                title: 'Accounting periods',
+                hideKey: 'accounting.periods',
+                href: adminAccountingPeriodsIndex(),
+                icon: CalendarRange,
+            },
+            // Mirrors JournalEntryPolicy::postOpeningBalance — POST_LEDGER,
+            // narrower than the Accounting group gate.
+            {
+                title: 'Opening balances',
+                hideKey: 'accounting.opening-balances',
+                href: adminOpeningBalancesIndex(),
+                icon: FileUp,
+                roles: LEDGER_POSTING_ROLES,
+            },
+            // Mirrors PaymentGatewaySettingPolicy — the narrowest list in the
+            // module, because a leaked secret key moves money.
+            {
+                title: 'Payment gateways',
+                hideKey: 'accounting.payment-gateways',
+                href: adminPaymentGatewaysIndex(),
+                icon: CreditCard,
+                roles: PAYMENT_GATEWAY_ROLES,
+            },
+        ],
     },
 ];
 
@@ -378,10 +483,7 @@ export function AppSidebar() {
                                 title={`Active tenant: ${currentTenant.name} (${currentTenant.slug}). Click to switch.`}
                             >
                                 <span className="flex min-w-0 items-center gap-1.5">
-                                    <Building2
-                                        className="h-3 w-3 flex-shrink-0 text-muted-foreground"
-                                        aria-hidden="true"
-                                    />
+                                    <TenantMark tenant={currentTenant} />
                                     <span className="truncate font-medium text-sidebar-foreground">
                                         {currentTenant.name}
                                     </span>
@@ -447,10 +549,7 @@ export function AppSidebar() {
                             className="mx-2 mt-1 flex items-center gap-1.5 rounded-md border border-sidebar-border/60 bg-sidebar-accent/40 px-2 py-1 text-xs group-data-[collapsible=icon]:hidden"
                             title={`Active tenant: ${currentTenant.name} (${currentTenant.slug})`}
                         >
-                            <Building2
-                                className="h-3 w-3 flex-shrink-0 text-muted-foreground"
-                                aria-hidden="true"
-                            />
+                            <TenantMark tenant={currentTenant} />
                             <span className="truncate font-medium text-sidebar-foreground">
                                 {currentTenant.name}
                             </span>
@@ -465,27 +564,48 @@ export function AppSidebar() {
                     <SidebarSection
                         label="Directory"
                         items={employeeNavItems}
+                        isHidden={isHidden}
+                        userRoles={userRoles}
                     />
                 )}
                 {canViewPayroll && (
-                    <SidebarSection label="Payroll" items={payrollNavItems} />
+                    <SidebarSection
+                        label="Payroll"
+                        items={payrollNavItems}
+                        isHidden={isHidden}
+                        userRoles={userRoles}
+                    />
                 )}
                 {canViewCatalog && (
-                    <SidebarSection label="Catalog" items={catalogNavItems} />
+                    <SidebarSection
+                        label="Catalog"
+                        items={catalogNavItems}
+                        isHidden={isHidden}
+                        userRoles={userRoles}
+                    />
                 )}
                 {canViewAccounting && (
-                    <SidebarSection
+                    <SidebarGroupedSection
                         label="Accounting"
-                        items={accountingNavItems}
+                        groups={accountingNavGroups}
+                        isHidden={isHidden}
+                        userRoles={userRoles}
                     />
                 )}
                 {canViewAudit && (
-                    <SidebarSection label="Audit" items={auditNavItems} />
+                    <SidebarSection
+                        label="Audit"
+                        items={auditNavItems}
+                        isHidden={isHidden}
+                        userRoles={userRoles}
+                    />
                 )}
                 {canManageSchools && (
                     <SidebarSection
                         label="Tenants"
                         items={schoolsAdminNavItems}
+                        isHidden={isHidden}
+                        userRoles={userRoles}
                     />
                 )}
             </SidebarContent>
@@ -498,28 +618,147 @@ export function AppSidebar() {
     );
 }
 
-function SidebarSection({ label, items }: { label: string; items: NavItem[] }) {
+/**
+ * Items this user may see, minus anything the config hides.
+ *
+ * Two independent filters, and they answer different questions: `roles` is
+ * authorization — showing a link the page will 403 is a dead link — while
+ * `hideKey` is presentational, for scoping a demo to a sprint. An item needs
+ * `roles` only when its page is gated more narrowly than the group it sits in.
+ */
+/**
+ * The school's own mark, or the generic one.
+ *
+ * Falls back rather than reserving an empty box: a school with no logo — or an
+ * environment where `storage:link` was never run — should look deliberate, not
+ * broken.
+ */
+function TenantMark({ tenant }: { tenant: CurrentTenant }) {
+    if (tenant.logo_url) {
+        return (
+            <img
+                src={tenant.logo_url}
+                alt=""
+                className="h-3.5 w-3.5 flex-shrink-0 rounded-[2px] object-contain"
+            />
+        );
+    }
+
+    return (
+        <Building2
+            className="h-3 w-3 flex-shrink-0 text-muted-foreground"
+            aria-hidden="true"
+        />
+    );
+}
+
+function visibleItems(
+    items: NavItem[],
+    isHidden: (key: string) => boolean,
+    userRoles: string[],
+): NavItem[] {
+    return items.filter(
+        (item) =>
+            (item.hideKey === undefined || !isHidden(item.hideKey)) &&
+            (item.roles === undefined || hasAnyRole(userRoles, item.roles)),
+    );
+}
+
+function NavLinks({ items }: { items: NavItem[] }) {
     const { isCurrentUrl } = useCurrentUrl();
+
+    return (
+        <SidebarMenu>
+            {items.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                        asChild
+                        isActive={isCurrentUrl(item.href)}
+                        tooltip={{ children: item.title }}
+                    >
+                        <Link href={item.href} prefetch>
+                            {item.icon && <item.icon />}
+                            <span>{item.title}</span>
+                        </Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+            ))}
+        </SidebarMenu>
+    );
+}
+
+/**
+ * A flat nav group.
+ *
+ * Renders nothing at all when every item is filtered out — a group label with
+ * no links under it reads as a broken menu rather than a deliberate one.
+ */
+function SidebarSection({
+    label,
+    items,
+    isHidden,
+    userRoles,
+}: {
+    label: string;
+    items: NavItem[];
+    isHidden: (key: string) => boolean;
+    userRoles: string[];
+}) {
+    const visible = visibleItems(items, isHidden, userRoles);
+
+    if (visible.length === 0) {
+        return null;
+    }
 
     return (
         <SidebarGroup className="px-2 py-0">
             <SidebarGroupLabel>{label}</SidebarGroupLabel>
-            <SidebarMenu>
-                {items.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton
-                            asChild
-                            isActive={isCurrentUrl(item.href)}
-                            tooltip={{ children: item.title }}
-                        >
-                            <Link href={item.href} prefetch>
-                                {item.icon && <item.icon />}
-                                <span>{item.title}</span>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                ))}
-            </SidebarMenu>
+            <NavLinks items={visible} />
+        </SidebarGroup>
+    );
+}
+
+/**
+ * A nav group with labelled runs inside it.
+ *
+ * The subheadings are deliberately quieter than the group's own label —
+ * subordinate, not competing. An empty run disappears, and so does the whole
+ * group when every run is empty, so a narrowly-gated user never meets a
+ * heading with nothing beneath it.
+ */
+function SidebarGroupedSection({
+    label,
+    groups,
+    isHidden,
+    userRoles,
+}: {
+    label: string;
+    groups: NavSubGroup[];
+    isHidden: (key: string) => boolean;
+    userRoles: string[];
+}) {
+    const populated = groups
+        .map((group) => ({
+            label: group.label,
+            items: visibleItems(group.items, isHidden, userRoles),
+        }))
+        .filter((group) => group.items.length > 0);
+
+    if (populated.length === 0) {
+        return null;
+    }
+
+    return (
+        <SidebarGroup className="px-2 py-0">
+            <SidebarGroupLabel>{label}</SidebarGroupLabel>
+            {populated.map((group) => (
+                <div key={group.label}>
+                    <SidebarGroupLabel className="h-6 px-2 text-[0.6875rem] text-sidebar-foreground/50">
+                        {group.label}
+                    </SidebarGroupLabel>
+                    <NavLinks items={group.items} />
+                </div>
+            ))}
         </SidebarGroup>
     );
 }

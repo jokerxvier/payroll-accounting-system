@@ -118,6 +118,21 @@ final class ChartOfAccount extends Model
     /** The mirror on the buying side: money paid ahead of any bill. */
     public const SYSTEM_SUPPLIER_ADVANCES = 'SUPPLIER_ADVANCES';
 
+    /**
+     * What a payment gateway keeps out of a settlement.
+     *
+     * Its own account rather than `5900 Miscellaneous Expense`, because the
+     * cost of collecting money is a real operating line a school should be
+     * able to see and question — and because a figure posted automatically on
+     * every online payment does not belong in the account people use as a
+     * dumping ground.
+     *
+     * Not `5240 Professional Fees` (a gateway cut is not a professional
+     * service) and not `5400 Interest Expense` (categorised `financing`, while
+     * a merchant fee is `operating`).
+     */
+    public const SYSTEM_MERCHANT_FEES = 'MERCHANT_FEES';
+
     /** @var list<string> */
     public const SYSTEM_CODES = [
         self::SYSTEM_AR_CONTROL,
@@ -128,6 +143,7 @@ final class ChartOfAccount extends Model
         self::SYSTEM_PAYROLL_CLEARING,
         self::SYSTEM_CUSTOMER_ADVANCES,
         self::SYSTEM_SUPPLIER_ADVANCES,
+        self::SYSTEM_MERCHANT_FEES,
     ];
 
     protected $table = 'pas_chart_of_accounts';

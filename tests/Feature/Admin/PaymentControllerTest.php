@@ -410,3 +410,33 @@ it('loads the outstanding documents for the payment\'s contact', function () {
             ->where('outstandingInvoices.0.balance_due_centavos', 300_000)
             ->where('payment.allocations.0.amount_centavos', 100_000));
 });
+
+/* ── The demo-fill affordance ────────────────────────────────────────── */
+
+it('offers demo fill to a super admin outside production', function () {
+    // A development affordance, not a product feature. The `dev.demo-fill`
+    // gate is deliberately document-agnostic — the invoice form has had this
+    // button since Phase 5, and the payment form answers the same gate rather
+    // than inventing a second one.
+    $this->actingAs(paymentAuthAs('super-admin'))
+        ->get(route('admin.payments.create', ['type' => 'receipt']))
+        ->assertInertia(fn ($page) => $page->where('canDemoFill', true));
+});
+
+it('withholds demo fill from an accountant', function () {
+    // Fabricating a payment is not something an ordinary operator should be
+    // one click away from, however convenient it is in development.
+    $this->actingAs(paymentAuthAs('accountant'))
+        ->get(route('admin.payments.create', ['type' => 'receipt']))
+        ->assertInertia(fn ($page) => $page->where('canDemoFill', false));
+});
+
+it('withholds demo fill in production, whoever is asking', function () {
+    // Defence in depth: the gate checks the environment as well as the role,
+    // so a super-admin on a live school still cannot fabricate a receipt.
+    app()['env'] = 'production';
+
+    $this->actingAs(paymentAuthAs('super-admin'))
+        ->get(route('admin.payments.create', ['type' => 'receipt']))
+        ->assertInertia(fn ($page) => $page->where('canDemoFill', false));
+});

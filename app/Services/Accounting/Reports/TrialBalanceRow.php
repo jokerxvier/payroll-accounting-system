@@ -58,17 +58,44 @@ final readonly class TrialBalanceRow
      */
     public function closingNaturalCentavos(): int
     {
-        return $this->normalBalance === ChartOfAccount::BALANCE_DEBIT
-            ? $this->closingRawCentavos()
-            : -$this->closingRawCentavos();
+        return $this->naturalise($this->closingRawCentavos());
     }
 
     /** The opening balance stated in the account's own direction. */
     public function openingNaturalCentavos(): int
     {
+        return $this->naturalise($this->openingRawCentavos());
+    }
+
+    /**
+     * The movement inside the range, in the account's own direction.
+     *
+     * What an Income Statement consumes, and the distinction that matters
+     * most to anything reporting a period: revenue earned *in these dates*,
+     * not since the books opened. Reading `closingNaturalCentavos()` for an
+     * income account under a one-month filter reports every peso the school
+     * has ever earned, and reports it as this month's.
+     */
+    public function periodNaturalCentavos(): int
+    {
+        return $this->naturalise(
+            $this->periodDebitCentavos - $this->periodCreditCentavos,
+        );
+    }
+
+    /**
+     * Raw (`debits − credits`) restated in the account's own direction.
+     *
+     * The rule lives here once rather than in each caller. It restates
+     * {@see ChartOfAccount::movementCentavos()} rather than calling it: this
+     * DTO holds the `normal_balance` string, not the model, so that a report
+     * can be built without re-hydrating the chart.
+     */
+    private function naturalise(int $rawCentavos): int
+    {
         return $this->normalBalance === ChartOfAccount::BALANCE_DEBIT
-            ? $this->openingRawCentavos()
-            : -$this->openingRawCentavos();
+            ? $rawCentavos
+            : -$rawCentavos;
     }
 
     /**

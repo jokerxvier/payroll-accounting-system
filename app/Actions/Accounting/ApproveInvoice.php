@@ -5,10 +5,7 @@ declare(strict_types=1);
 namespace App\Actions\Accounting;
 
 use App\Exceptions\ClosedAccountingPeriodException;
-use App\Exceptions\DocumentNumberUnavailableException;
-use App\Models\Pas\DocumentNumberSeries;
 use App\Models\Pas\Invoice;
-use App\Services\Accounting\DocumentNumberAllocator;
 use App\Services\Accounting\InvoicePostingService;
 use App\Services\Accounting\InvoiceTotalsCalculator;
 use DomainException;
@@ -17,33 +14,36 @@ use Illuminate\Support\Facades\DB;
 /**
  * `draft → approved`. The moment an invoice becomes a real document.
  *
- * Three things happen together or not at all:
+ * Two things happen together or not at all:
  *
  *   1. The totals are recomputed from the lines, so an invoice cannot be
  *      issued carrying figures that no longer match what it says.
- *   2. A BIR-controlled serial is allocated.
- *   3. The document posts to the ledger.
+ *   2. The document posts to the ledger.
  *
- * All three inside one transaction, which is the whole point. Payroll
- * posting deliberately swallows a ledger failure — staff still have to be
- * paid, and the books can be reconciled afterwards. An invoice is the
- * opposite: it is a numbered document handed to a third party, so issuing
- * one the books rejected would put a serial into the world with nothing
- * behind it. A posting failure here fails the approval, and the rollback
- * returns the serial rather than burning it — which is exactly what
- * {@see DocumentNumberAllocator} refuses to run outside a transaction for.
+ * Both inside one transaction. Payroll posting deliberately swallows a
+ * ledger failure — staff still have to be paid, and the books can be
+ * reconciled afterwards. An invoice is the opposite: it is a document handed
+ * to a third party, so issuing one the books rejected would put a claim into
+ * the world with nothing behind it. A posting failure here fails the
+ * approval.
+ *
+ * There was a third step here until document numbering was removed: a
+ * BIR-controlled serial was allocated from a per-school series, inside this
+ * same transaction so a rollback returned the number rather than burning it.
+ * `pas_invoices.number` still exists and still holds the serials issued
+ * before the removal, but nothing writes it now — an approved invoice is
+ * identified by its id. Reinstating BIR numbering means restoring the
+ * allocator and adding step 2 back here, ahead of the posting call.
  */
 final class ApproveInvoice
 {
     public function __construct(
         private readonly InvoiceTotalsCalculator $calculator,
-        private readonly DocumentNumberAllocator $numbers,
         private readonly InvoicePostingService $poster,
     ) {}
 
     /**
      * @throws DomainException Illegal status, or an invoice with no lines.
-     * @throws DocumentNumberUnavailableException No series, inactive, or range exhausted.
      * @throws ClosedAccountingPeriodException The issue date falls in a closed period.
      */
     public function execute(Invoice $invoice, int $actorUserId): Invoice
@@ -84,7 +84,6 @@ final class ApproveInvoice
             }
 
             $invoice->forceFill([
-                'number' => $this->numbers->allocate($this->seriesTypeFor($invoice)),
                 'status' => Invoice::STATUS_APPROVED,
                 'approved_at' => now(),
                 'approved_by_user_id' => $actorUserId,
@@ -95,20 +94,5 @@ final class ApproveInvoice
 
             return $invoice->refresh();
         });
-    }
-
-    /**
-     * Which numbering series this document draws from.
-     *
-     * A sales invoice takes a BIR-controlled serial. A purchase bill is
-     * someone else's document, so the number we assign it is internal
-     * reference only — it still comes from a series so bills are traceable,
-     * but no Authority To Print applies to it.
-     */
-    private function seriesTypeFor(Invoice $invoice): string
-    {
-        return $invoice->isSales()
-            ? DocumentNumberSeries::TYPE_SALES_INVOICE
-            : DocumentNumberSeries::TYPE_BILL;
     }
 }

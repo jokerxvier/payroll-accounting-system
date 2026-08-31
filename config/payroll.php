@@ -68,22 +68,54 @@ return [
     | Sidebar hidden sections
     |--------------------------------------------------------------------------
     |
-    | Comma-separated list of sidebar group labels (lowercased) to hide from
-    | the nav for the current environment. Presentational only — authorisation
-    | is unchanged; direct URLs still resolve for authorised users.
+    | Comma-separated list of things to hide from the nav. Presentational only
+    | — authorisation is unchanged; direct URLs still resolve for authorised
+    | users, and nothing here removes a feature.
     |
-    | Valid section names: directory, payroll, catalog, accounting, audit,
-    | tenants
+    | Two granularities:
     |
-    | Use case: client demos / screenshots where a section isn't yet ready or
-    | shouldn't be shown. Flip without redeploying via .env + config:clear.
+    |   - a whole GROUP, by its lowercased label:
+    |       directory, payroll, catalog, accounting, audit, tenants
+    |
+    |   - a single ITEM, by its `hideKey` (see `NavItem` in
+    |     resources/js/types/navigation.ts):
+    |       accounting.chart-of-accounts, accounting.journal,
+    |       accounting.invoices, accounting.bills, accounting.payments,
+    |       accounting.contacts, accounting.tax-rates, accounting.periods,
+    |       accounting.trial-balance, accounting.general-ledger,
+    |       accounting.journal-report, accounting.opening-balances,
+    |       accounting.payment-gateways
+    |
+    | A group whose every item is hidden disappears along with its label.
+    |
+    | THE DEFAULT BELOW IS THIS SPRINT'S SCOPE, not a permanent decision.
+    |
+    | Presenting: Chart of Accounts, Backlog Recording, and Invoicing — plus
+    | everything payroll and employees, which stays. Contacts and Periods are
+    | deliberately NOT hidden even though they are not on the list: an invoice
+    | cannot be raised without a customer, nor approved without an open
+    | period, so hiding them would dead-end the very flow being demonstrated.
+    | The three ledger reports stay for the same reason — "adjust reports
+    | accordingly" needs something to point at.
+    |
+    | To re-enable a feature: delete its entry here, or override the whole
+    | list from .env and `php artisan config:clear`.
     |
     | Override via env: PAYROLL_SIDEBAR_HIDDEN_SECTIONS="payroll,audit"
     */
 
     'sidebar_hidden_sections' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('PAYROLL_SIDEBAR_HIDDEN_SECTIONS', '')),
+        explode(',', (string) env('PAYROLL_SIDEBAR_HIDDEN_SECTIONS', implode(',', [
+            // Not this sprint. Each is a working feature, only hidden.
+            'audit',
+            'tenants',
+            'accounting.payment-gateways',
+            'accounting.journal',
+            'accounting.bills',
+            'accounting.payments',
+            'accounting.tax-rates',
+        ]))),
     ))),
 
 ];

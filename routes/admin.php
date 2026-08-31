@@ -5,18 +5,24 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\Accounting\AccountingPeriodController;
 use App\Http\Controllers\Admin\Accounting\ChartOfAccountController;
 use App\Http\Controllers\Admin\Accounting\ContactController;
-use App\Http\Controllers\Admin\Accounting\DocumentNumberSeriesController;
+use App\Http\Controllers\Admin\Accounting\FinancialDashboardController;
+use App\Http\Controllers\Admin\Accounting\GuardianImportController;
 use App\Http\Controllers\Admin\Accounting\InvoiceController;
 use App\Http\Controllers\Admin\Accounting\InvoicePrintController;
 use App\Http\Controllers\Admin\Accounting\JournalEntryController;
 use App\Http\Controllers\Admin\Accounting\LedgerReportController;
+use App\Http\Controllers\Admin\Accounting\OpeningBalanceController;
 use App\Http\Controllers\Admin\Accounting\PaymentController;
+use App\Http\Controllers\Admin\Accounting\PaymentGatewaySettingController;
+use App\Http\Controllers\Admin\Accounting\ReceivablesDashboardController;
+use App\Http\Controllers\Admin\Accounting\RecurringInvoiceController;
 use App\Http\Controllers\Admin\Accounting\TaxRateController;
 use App\Http\Controllers\Admin\AllowanceController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DeductionTypeController;
 use App\Http\Controllers\Admin\DevSeedController;
 use App\Http\Controllers\Admin\EmployeeBulkImportController;
+use App\Http\Controllers\Admin\OrganisationController;
 use App\Http\Controllers\Admin\PayPeriodController;
 use App\Http\Controllers\Admin\PayrollRunController;
 use App\Http\Controllers\Admin\ReportsController;
@@ -191,6 +197,15 @@ Route::middleware(['auth', 'verified'])
         // Contacts. Create and edit happen in a sheet on the index, so no
         // create/edit pages; `show` is excluded for the same reason as the
         // other accounting resources — the index is the listing surface.
+        // Bring the school's parents in as billing contacts. Static segments
+        // registered before the resource so they win against
+        // `contacts/{contact}`.
+        Route::get('contacts/import-guardians', [GuardianImportController::class, 'index'])
+            ->name('contacts.import-guardians.index');
+        Route::post('contacts/import-guardians/preview', [GuardianImportController::class, 'preview'])
+            ->name('contacts.import-guardians.preview');
+        Route::post('contacts/import-guardians/confirm/{token}', [GuardianImportController::class, 'confirm'])
+            ->name('contacts.import-guardians.confirm');
         Route::resource('contacts', ContactController::class)
             ->except(['show', 'create', 'edit']);
 
@@ -238,7 +253,29 @@ Route::middleware(['auth', 'verified'])
             ->name('invoices.void');
         Route::get('invoices/{invoice}/print', [InvoicePrintController::class, 'show'])
             ->name('invoices.print');
+        // Mints the customer-facing pay link on first use. Registered before
+        // the resource, like the other invoice transitions.
+        Route::post('invoices/{invoice}/pay-link', [InvoiceController::class, 'payLink'])
+            ->name('invoices.pay-link');
+        // Emails the invoice to its payer, at an address the operator can
+        // change first. Before the resource, like the other transitions.
+        Route::post('invoices/{invoice}/send', [InvoiceController::class, 'send'])
+            ->name('invoices.send');
         Route::resource('invoices', InvoiceController::class);
+
+        // Recurring schedules. Pause/resume are registered before the resource
+        // so their static segments win against `recurring-invoices/{id}`, the
+        // same ordering constraint as the invoice transitions above.
+        Route::post('recurring-invoices/{recurringInvoice}/pause', [RecurringInvoiceController::class, 'pause'])
+            ->name('recurring-invoices.pause');
+        Route::post('recurring-invoices/{recurringInvoice}/resume', [RecurringInvoiceController::class, 'resume'])
+            ->name('recurring-invoices.resume');
+        // No `create` or `store`: a schedule is set up on the invoice form,
+        // while the first invoice is being raised. What is left here manages
+        // schedules that already exist.
+        Route::resource('recurring-invoices', RecurringInvoiceController::class)
+            ->parameters(['recurring-invoices' => 'recurringInvoice'])
+            ->except(['show', 'create', 'store']);
 
         // Phase 5 Slice 7 — payments and allocation.
         //
@@ -251,12 +288,53 @@ Route::middleware(['auth', 'verified'])
             ->name('payments.void');
         Route::resource('payments', PaymentController::class);
 
+        // The school's own identity — logo, registered name, TIN, address.
+        // No school id in the URL: it always edits whichever tenant the
+        // request resolved to, so there is nothing to tamper with.
+        Route::get('organisation', [OrganisationController::class, 'edit'])
+            ->name('organisation.edit');
+        Route::patch('organisation', [OrganisationController::class, 'update'])
+            ->name('organisation.update');
+
+        // Payment gateway credentials. No `destroy` — a row nobody wants is
+        // deactivated, which stops it being used while keeping the record of
+        // which gateway a historical payment was taken through.
+        Route::get('payment-gateways', [PaymentGatewaySettingController::class, 'index'])
+            ->name('payment-gateways.index');
+        Route::post('payment-gateways', [PaymentGatewaySettingController::class, 'store'])
+            ->name('payment-gateways.store');
+
+        // Phase 5 Slice 9 — the cutover snapshot.
+        //
+        // Static segments throughout, so no ordering constraint against a
+        // wildcard — but `confirm/{token}` carries a session-issued uuid
+        // rather than a model, so there is deliberately no route-model
+        // binding here to substitute.
+        Route::get('opening-balances', [OpeningBalanceController::class, 'index'])
+            ->name('opening-balances.index');
+        Route::get('opening-balances/template', [OpeningBalanceController::class, 'template'])
+            ->name('opening-balances.template');
+        Route::post('opening-balances/preview', [OpeningBalanceController::class, 'preview'])
+            ->name('opening-balances.preview');
+        Route::post('opening-balances/confirm/{token}', [OpeningBalanceController::class, 'confirm'])
+            ->name('opening-balances.confirm');
+
         // Phase 5 Slice 8a — ledger reports.
         //
         // GET-only and read-only, so no resource controller: each report is a
         // page plus its export sibling. Registered before nothing in
         // particular — `reports/` collides with no wildcard segment — but kept
         // together so the three stay discoverable as a group.
+        // The accounting dashboard sits with the ledger reports because it is
+        // one: the same posted entries, subtotalled rather than listed, and
+        // authorised through the same `viewAny` on JournalEntry.
+        Route::get('reports/accounting-dashboard', FinancialDashboardController::class)
+            ->name('reports.accounting-dashboard');
+        // The invoice dashboard is the operational counterpart, gated on
+        // Invoice rather than JournalEntry: chasing payments should not
+        // require being handed the school's profit.
+        Route::get('reports/invoice-dashboard', ReceivablesDashboardController::class)
+            ->name('reports.invoice-dashboard');
         Route::get('reports/trial-balance', [LedgerReportController::class, 'trialBalance'])
             ->name('reports.trial-balance');
         Route::get('reports/trial-balance/export', [LedgerReportController::class, 'trialBalanceExport'])
@@ -269,13 +347,6 @@ Route::middleware(['auth', 'verified'])
             ->name('reports.journal-report');
         Route::get('reports/journal-report/export', [LedgerReportController::class, 'journalExport'])
             ->name('reports.journal-report.export');
-
-        // Document numbering series. No `destroy` — a series that has issued
-        // numbers is the record of which serials went out, so it is
-        // deactivated rather than removed.
-        Route::resource('document-series', DocumentNumberSeriesController::class)
-            ->parameters(['document-series' => 'documentSeries'])
-            ->only(['index', 'store', 'update']);
 
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-

@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Someone the school transacts with — a parent billed for tuition, a supplier
@@ -66,6 +67,7 @@ final class Contact extends Model
         'receivable_account_id',
         'payable_account_id',
         'lms_student_id',
+        'lms_parent_id',
         'is_active',
         'notes',
     ];
@@ -86,6 +88,7 @@ final class Contact extends Model
             'receivable_account_id' => 'integer',
             'payable_account_id' => 'integer',
             'lms_student_id' => 'integer',
+            'lms_parent_id' => 'integer',
             'is_active' => 'boolean',
         ];
     }
@@ -163,11 +166,23 @@ final class Contact extends Model
      *
      * @return BelongsTo<ChartOfAccount, $this>
      */
+    /**
+     * The students this contact pays for.
+     *
+     * @return HasMany<ContactStudent, $this>
+     */
+    public function students(): HasMany
+    {
+        return $this->hasMany(ContactStudent::class);
+    }
+
+    /** @return BelongsTo<ChartOfAccount, $this> */
     public function receivableAccount(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class, 'receivable_account_id');
     }
 
+    /** @return BelongsTo<ChartOfAccount, $this> */
     /** @return BelongsTo<ChartOfAccount, $this> */
     public function payableAccount(): BelongsTo
     {

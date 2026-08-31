@@ -40,8 +40,14 @@ interface ContactEditSheetProps {
     onOpenChange: (open: boolean) => void;
     /** Omitted when creating. */
     contact?: ContactRow;
-    receivableAccountOptions: ContactAccountOption[];
-    payableAccountOptions: ContactAccountOption[];
+    receivableAccountOptions?: ContactAccountOption[];
+    payableAccountOptions?: ContactAccountOption[];
+    /**
+     * Which role a new contact starts with. The register creates customers;
+     * the invoice form opens this sheet from a bill and wants a supplier.
+     * Ignored when editing — an existing contact carries its own flags.
+     */
+    defaultRole?: 'customer' | 'supplier';
 }
 
 interface FormShape {
@@ -62,13 +68,16 @@ interface FormShape {
 
 const USE_DEFAULT = 'default';
 
-function buildDefaults(contact?: ContactRow): FormShape {
+function buildDefaults(
+    contact?: ContactRow,
+    defaultRole: 'customer' | 'supplier' = 'customer',
+): FormShape {
     if (contact === undefined) {
         return {
             code: '',
             name: '',
-            is_customer: true,
-            is_supplier: false,
+            is_customer: defaultRole === 'customer',
+            is_supplier: defaultRole === 'supplier',
             tin: '',
             email: '',
             phone: '',
@@ -100,18 +109,19 @@ export function ContactEditSheet({
     open,
     onOpenChange,
     contact,
-    receivableAccountOptions,
-    payableAccountOptions,
+    receivableAccountOptions = [],
+    payableAccountOptions = [],
+    defaultRole = 'customer',
 }: ContactEditSheetProps) {
     const isEdit = contact !== undefined;
-    const form = useForm<FormShape>(buildDefaults(contact));
+    const form = useForm<FormShape>(buildDefaults(contact, defaultRole));
 
     // Re-seed when the sheet switches rows without unmounting. Keyed so
     // reopening the same row does not clobber in-progress edits.
-    const rowKey = contact ? `edit:${contact.id}` : 'create';
+    const rowKey = contact ? `edit:${contact.id}` : `create:${defaultRole}`;
 
     useEffect(() => {
-        const next = buildDefaults(contact);
+        const next = buildDefaults(contact, defaultRole);
         form.setDefaults(next);
         form.setData(next);
         form.clearErrors();

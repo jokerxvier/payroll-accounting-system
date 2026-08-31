@@ -7,6 +7,7 @@ namespace App\Actions\Accounting;
 use App\Exceptions\ClosedAccountingPeriodException;
 use App\Models\Pas\JournalEntry;
 use App\Models\Pas\JournalEntryLine;
+use App\Models\Pas\School;
 use App\Services\Accounting\AccountingPeriodGuard;
 use App\Services\Accounting\JournalEntryNumberAllocator;
 use Carbon\CarbonImmutable;
@@ -122,6 +123,18 @@ final class ReverseJournalEntry
                 'reversed_at' => now(),
                 'reversed_by_user_id' => $actorUserId,
             ])->save();
+
+            // Unwinding the cutover snapshot unwinds the date derived from
+            // it. Left standing, `books_opened_on` would keep every report
+            // captioned "opening balances as at ..." for a snapshot that no
+            // longer contributes a centavo. This is the only source_type the
+            // reversal has to know about, because it is the only one whose
+            // effect reaches outside `pas_journal_entries`.
+            if ($entry->isOpeningBalance()) {
+                School::query()
+                    ->whereKey($entry->school_id)
+                    ->update(['books_opened_on' => null]);
+            }
 
             return $posted;
         });

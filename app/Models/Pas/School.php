@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Concerns\Auditable;
+use Carbon\CarbonImmutable;
 use Database\Factories\Pas\SchoolFactory;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -42,7 +43,10 @@ use Spatie\Multitenancy\Models\Tenant;
  * @property string $lms_db_username
  * @property string $lms_db_password
  * @property string $lms_db_charset
+ * @property ?string $email
+ * @property ?string $logo_path
  * @property bool $is_active
+ * @property ?CarbonImmutable $books_opened_on
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
@@ -61,6 +65,9 @@ class School extends Tenant
         'registered_name',
         'tin',
         'business_address',
+        'email',
+        'logo_path',
+        'books_opened_on',
         'slug',
         'domain',
         'lms_db_host',
@@ -77,6 +84,7 @@ class School extends Tenant
     {
         return [
             'lms_db_password' => 'encrypted',
+            'books_opened_on' => 'immutable_date',
             'is_active' => 'boolean',
             'lms_db_port' => 'integer',
         ];

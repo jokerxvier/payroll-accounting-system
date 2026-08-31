@@ -785,6 +785,78 @@ Use `<Input inputMode="decimal">`, NEVER `<Input type="number">`. (See `RULES.md
 
 The backend converts decimal pesos → integer cents in `FormRequest::passedValidation()` (see `CODING_STANDARDS.md` Section 6). The frontend just passes the string through.
 
+Gate and format through `@/lib/money-input` rather than hand-rolling the maths per form:
+
+```tsx
+const [raw, setRaw] = useState(centavosToAmountInput(data.amount_centavos));
+
+<Input
+  inputMode="decimal"
+  className="text-right tabular-nums"
+  value={raw}
+  onChange={(e) => {
+      if (!isAmountInput(e.target.value)) return;   // refuse the keystroke
+      setRaw(e.target.value);
+      setData('amount_centavos', amountInputToCentavos(e.target.value));
+  }}
+  onBlur={() => setRaw(formatAmountInput(raw))}      // '100000' → '100,000.00'
+/>
+```
+
+Two rules the helpers exist to enforce:
+
+- **The box is driven by its own raw text, never by the parsed centavos.** Re-deriving the displayed value on every keystroke reformats mid-entry — typing `5` becomes `5.00` and the next character lands after the decimals, so a multi-digit figure cannot be typed at all.
+- **Group on blur, never while typing.** Regrouping per keystroke moves the caret to the end of the box. Grouping matters because the same figure is shown by `<Money>` two columns away as `₱100,000.00`, and an ungrouped `100000` beside it reads as a different number at a glance.
+
+### Date inputs
+
+Use `<DatePicker>` from `@/components/ui/date-picker`, NEVER `<Input type="date">`.
+
+```tsx
+<DatePicker
+  id="issue_date"
+  value={data.issue_date}            // 'YYYY-MM-DD' or ''
+  onChange={(value) => setData('issue_date', value)}
+  placeholder="Pick a date"
+  ariaInvalid={!!errors.issue_date}
+/>
+```
+
+**This applies to every date field, and to date filters especially.** A native
+`type="date"` renders differently in every browser, ignores the app's theme,
+and gives no way to clear itself once set — which matters most on a filter,
+where "show me everything again" has to be one obvious click. `DatePicker`
+carries its own Clear in the popover.
+
+Its `value` contract is deliberately the same as a native input — `'YYYY-MM-DD'`
+or `''` when empty — so it drops into an Inertia `useForm` string field with no
+conversion at either end.
+
+**Layout note.** The trigger is a `Button`, which is `inline-flex`, unlike a
+`SelectTrigger` which is `flex`. A `<Label>` beside it will sit on the same
+line. Put the width on the wrapper and let the picker keep its own `w-full`:
+
+```tsx
+<div className="w-[11rem] space-y-1">
+  <Label htmlFor="from">From</Label>
+  <DatePicker id="from" … />
+</div>
+```
+
+### Filters that narrow a list
+
+Every navigation carries every filter. Build one `navigate(patch)` per page
+rather than a handler per control — with three or more filters, separate
+handlers start dropping each other's state, and the symptom (an operator
+silently thrown back to an unfiltered list) is easy to miss in review.
+
+Offer a **Clear filters** control, and only render it when something is
+actually filtered: a permanent Clear on an unfiltered list is a control that
+does nothing and reads as though a filter is on.
+
+"Which list am I looking at" (a type or direction toggle) is **not** a filter
+and is not reset by Clear.
+
 ### Dynamic field arrays
 
 For repeating sections (e.g., journal entry lines):

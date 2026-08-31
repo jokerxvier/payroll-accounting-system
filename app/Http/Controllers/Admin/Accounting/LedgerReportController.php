@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Controller;
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\JournalEntry;
+use App\Models\Pas\School;
 use App\Policies\Pas\JournalEntryPolicy;
 use App\Services\Accounting\Reports\LedgerReportService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -23,6 +24,7 @@ use Inertia\Inertia;
 use Inertia\Response;
 use Maatwebsite\Excel\Excel as ExcelWriter;
 use Maatwebsite\Excel\Facades\Excel;
+use Spatie\Multitenancy\Models\Tenant;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
@@ -64,6 +66,7 @@ final class LedgerReportController extends Controller
             ],
             'rows' => $trialBalance->rowsToArray(),
             'totals' => $trialBalance->totalsToArray(),
+            'booksOpenedOn' => $this->booksOpenedOn(),
         ]);
     }
 
@@ -107,6 +110,7 @@ final class LedgerReportController extends Controller
             'ledger' => $account === null
                 ? null
                 : $this->reports->accountLedger($account, $from, $to)->toArray(),
+            'booksOpenedOn' => $this->booksOpenedOn(),
         ]);
     }
 
@@ -191,6 +195,26 @@ final class LedgerReportController extends Controller
             $filename,
             $this->writerTypeFor($format),
         );
+    }
+
+    /**
+     * The date this school's books were opened, if a cutover snapshot stands.
+     *
+     * Sent to the two balance-bearing reports so a reader can tell an opening
+     * column that was brought in from one that was traded. The figures
+     * themselves need no adjustment — `LedgerReportService` sweeps a
+     * backdated entry into the opening balance the same as any other posting
+     * — but "opening balance" and "opening balance carried in from the
+     * client's previous books" are different claims, and only the page can
+     * make the second one.
+     */
+    private function booksOpenedOn(): ?string
+    {
+        $school = Tenant::current();
+
+        return $school instanceof School
+            ? $school->books_opened_on?->toDateString()
+            : null;
     }
 
     /**

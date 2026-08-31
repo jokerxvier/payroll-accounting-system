@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 use App\Actions\Accounting\ApproveInvoice;
 use App\Exceptions\ClosedAccountingPeriodException;
-use App\Exceptions\DocumentNumberUnavailableException;
 use App\Models\Pas\AccountingPeriod;
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\Contact;
-use App\Models\Pas\DocumentNumberSeries;
 use App\Models\Pas\Invoice;
 use App\Models\Pas\InvoiceLine;
 use App\Models\Pas\JournalEntry;
@@ -35,7 +33,6 @@ beforeEach(function (): void {
     JournalEntryLine::query()->withoutGlobalScopes()->delete();
     JournalEntry::query()->withoutGlobalScopes()->delete();
     AccountingPeriod::query()->withoutGlobalScopes()->delete();
-    DocumentNumberSeries::query()->withoutGlobalScopes()->delete();
     Contact::query()->withoutGlobalScopes()->delete();
     TaxRate::query()->withoutGlobalScopes()->delete();
     ChartOfAccount::query()->withoutGlobalScopes()->delete();
@@ -49,8 +46,6 @@ beforeEach(function (): void {
         'start_date' => '2026-08-01',
         'end_date' => '2026-08-31',
     ]);
-
-    DocumentNumberSeries::factory()->create(['next_number' => 1]);
 
     $this->actor = User::factory()->create();
 });
@@ -325,13 +320,12 @@ it('never posts the same invoice twice', function () {
         ->and(JournalEntry::query()->count())->toBe(1);
 });
 
-/* ── Approval ties numbering, totals, and posting together ──────────── */
+/* ── Approval ties totals and posting together ──────────────────────── */
 
-it('numbers, posts, and approves in one step', function () {
+it('posts and approves in one step', function () {
     $invoice = approver()->execute(draftInvoice(), $this->actor->id);
 
     expect($invoice->status)->toBe(Invoice::STATUS_APPROVED)
-        ->and($invoice->number)->toBe('SI-000001')
         ->and($invoice->approved_by_user_id)->toBe($this->actor->id)
         ->and($invoice->journal_entry_id)->not->toBeNull();
 });
@@ -339,7 +333,7 @@ it('numbers, posts, and approves in one step', function () {
 it('recalculates the totals rather than trusting what the draft stored', function () {
     // A draft saved with figures that no longer match its lines — the case
     // an edited tax rate creates. Issuing it as-is would put a wrong VAT
-    // figure on a numbered document.
+    // figure on an issued document.
     $invoice = draftInvoice(['vatable_sales_centavos' => 1, 'vat_centavos' => 1, 'total_centavos' => 2]);
 
     $approved = approver()->execute($invoice, $this->actor->id);
@@ -360,28 +354,7 @@ it('fails the approval when the ledger refuses the document', function () {
         ->toThrow(ClosedAccountingPeriodException::class);
 
     expect($invoice->refresh()->status)->toBe(Invoice::STATUS_DRAFT)
-        ->and($invoice->number)->toBeNull()
         ->and($invoice->journal_entry_id)->toBeNull();
-});
-
-it('returns the serial when the approval rolls back', function () {
-    // The gapless guarantee, end to end: a failed approval must not burn a
-    // BIR-controlled number.
-    AccountingPeriod::query()->update(['status' => AccountingPeriod::STATUS_CLOSED]);
-
-    try {
-        approver()->execute(draftInvoice(), $this->actor->id);
-    } catch (ClosedAccountingPeriodException) {
-        // expected
-    }
-
-    expect(DocumentNumberSeries::query()->first()->next_number)->toBe(1);
-
-    AccountingPeriod::query()->update(['status' => AccountingPeriod::STATUS_OPEN]);
-    $approved = approver()->execute(draftInvoice(), $this->actor->id);
-
-    // The number the failed attempt almost used.
-    expect($approved->number)->toBe('SI-000001');
 });
 
 it('refuses to approve anything that is not a draft', function () {
@@ -396,39 +369,4 @@ it('refuses to approve an invoice with no lines', function () {
 
     expect(fn () => approver()->execute($invoice, $this->actor->id))
         ->toThrow(DomainException::class, 'Add at least one charge');
-});
-
-it('refuses to approve when no numbering series exists', function () {
-    DocumentNumberSeries::query()->withoutGlobalScopes()->delete();
-
-    expect(fn () => approver()->execute(draftInvoice(), $this->actor->id))
-        ->toThrow(DocumentNumberUnavailableException::class);
-});
-
-it('draws a purchase bill from the bill series, not the invoice series', function () {
-    // A supplier's document is not a BIR-controlled sales serial. It still
-    // gets a number so bills are traceable, from its own counter.
-    DocumentNumberSeries::factory()
-        ->ofType(DocumentNumberSeries::TYPE_BILL, 'BILL-')
-        ->create(['next_number' => 50]);
-
-    $supplier = Contact::factory()->supplier()->create();
-    $invoice = Invoice::factory()->create([
-        'type' => Invoice::TYPE_PURCHASE,
-        'contact_id' => $supplier->id,
-        'issue_date' => '2026-08-15',
-    ]);
-    InvoiceLine::factory()->forInvoice($invoice)->create([
-        'account_id' => accountCode('5300')->id,
-        'tax_rate_id' => rateCode('VAT_12_PURCHASE')->id,
-        'unit_price_centavos' => 1_000_000,
-    ]);
-
-    $approved = approver()->execute($invoice->refresh(), $this->actor->id);
-
-    expect($approved->number)->toBe('BILL-000050')
-        // The sales series is untouched.
-        ->and(DocumentNumberSeries::query()
-            ->where('document_type', DocumentNumberSeries::TYPE_SALES_INVOICE)
-            ->value('next_number'))->toBe(1);
 });

@@ -38,7 +38,7 @@ final class PostPayment
      * @throws DomainException Illegal status, or a payment of nothing.
      * @throws ClosedAccountingPeriodException The payment date falls in a closed period.
      */
-    public function execute(Payment $payment, int $actorUserId): Payment
+    public function execute(Payment $payment, ?int $actorUserId): Payment
     {
         if (! $payment->isDraft()) {
             throw new DomainException(sprintf(

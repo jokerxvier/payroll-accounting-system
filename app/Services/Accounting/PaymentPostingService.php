@@ -46,7 +46,7 @@ final class PaymentPostingService
      * @throws DomainException Nothing to post, or the figures disagree.
      * @throws RuntimeException A required system account is missing.
      */
-    public function post(Payment $payment, int $actorUserId): JournalEntry
+    public function post(Payment $payment, ?int $actorUserId): JournalEntry
     {
         if ($payment->journal_entry_id !== null) {
             $existing = JournalEntry::query()->find($payment->journal_entry_id);
@@ -78,6 +78,13 @@ final class PaymentPostingService
         $isReceipt = $payment->isReceipt();
         $allocated = $payment->allocated_centavos;
         $advance = $payment->amount_centavos - $allocated;
+        $fee = $payment->fee_centavos ?? 0;
+
+        if ($fee > 0 && $payment->fee_account_id === null) {
+            throw new DomainException(
+                'This payment carries a gateway fee but no account to expense it to.'
+            );
+        }
 
         return DB::transaction(function () use (
             $payment,
@@ -85,6 +92,7 @@ final class PaymentPostingService
             $isReceipt,
             $allocated,
             $advance,
+            $fee,
         ): JournalEntry {
             $entry = JournalEntry::create([
                 'date' => $payment->payment_date,
@@ -100,15 +108,43 @@ final class PaymentPostingService
             $lineNumber = 1;
             $description = $this->narration($payment);
 
-            // Cash moves by the full amount, in or out.
+            // Cash moves by what actually reached (or left) the bank.
+            //
+            // A gateway settles net: a customer pays ₱1,000 and ₱975 arrives,
+            // the gateway keeping ₱25. `amount_centavos` stays the GROSS —
+            // that is what the customer paid and what settles the receivable
+            // — so the fee is split out as its own expense rather than
+            // quietly shrinking the receipt. Recording the net instead would
+            // leave the invoice `partially_paid` forever, ₱25 short, and fill
+            // Aged Receivables with residue nobody can collect.
+            //
+            // A disbursement works the other way: the fee is money leaving on
+            // top of what the supplier received, so cash moves by amount+fee.
+            $cashCentavos = $isReceipt
+                ? $payment->amount_centavos - $fee
+                : $payment->amount_centavos + $fee;
+
             JournalEntryLine::create([
                 'journal_entry_id' => $entry->getKey(),
                 'line_number' => $lineNumber++,
                 'account_id' => $payment->cash_account_id,
-                'debit_centavos' => $isReceipt ? $payment->amount_centavos : 0,
-                'credit_centavos' => $isReceipt ? 0 : $payment->amount_centavos,
+                'debit_centavos' => $isReceipt ? $cashCentavos : 0,
+                'credit_centavos' => $isReceipt ? 0 : $cashCentavos,
                 'description' => $description,
             ]);
+
+            // The fee is an expense either way — a cost of collecting, not a
+            // reduction of what the customer owed.
+            if ($fee > 0) {
+                JournalEntryLine::create([
+                    'journal_entry_id' => $entry->getKey(),
+                    'line_number' => $lineNumber++,
+                    'account_id' => $payment->fee_account_id,
+                    'debit_centavos' => $fee,
+                    'credit_centavos' => 0,
+                    'description' => sprintf('%s — gateway fee', $description),
+                ]);
+            }
 
             if ($allocated > 0) {
                 $control = $this->controlAccounts->resolve($payment->contact, $isReceipt);

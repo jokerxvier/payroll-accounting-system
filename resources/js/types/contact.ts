@@ -8,6 +8,21 @@
 
 import type { Paginator } from './pagination';
 
+/**
+ * A contact as the counterparty picker sees it.
+ *
+ * Lives here rather than in `invoice.ts` because three forms choose a contact
+ * — an invoice, a payment and a recurring schedule — and a payments component
+ * should not have to name the invoice module to describe its own payer. The
+ * TIN travels with the name: an operator holding a BIR document has the TIN,
+ * not the spelling.
+ */
+export interface ContactPickerOption {
+    id: number;
+    name: string;
+    tin: string | null;
+}
+
 /** Lean account shape for the control-account pickers. */
 export interface ContactAccountOption {
     id: number;

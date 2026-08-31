@@ -331,12 +331,6 @@ parameters:
 			path: app/Exports/TrialBalanceExport.php
 
 		-
-			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 2
-			path: app/Http/Controllers/Admin/Accounting/InvoiceController.php
-
-		-
 			message: '#^Method App\\Http\\Controllers\\Admin\\Accounting\\LedgerReportController\:\:accountOptions\(\) should return list\<array\<string, mixed\>\> but returns array\<int, array\{id\: mixed, code\: string, name\: string, type\: string, is_active\: bool\}\>\.$#'
 			identifier: return.type
 			count: 1
@@ -808,7 +802,37 @@ parameters:
 			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
 			identifier: argument.type
 			count: 1
-			path: app/Models/Pas/DocumentNumberSeries.php
+			path: app/Models/Pas/GatewayWebhookEvent.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/RecurringInvoice.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/RecurringInvoiceLine.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/RecurringInvoicePeriod.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/ContactStudent.php
+
+		-
+			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/Pas/PaymentGatewaySetting.php
 
 		-
 			message: '#^Parameter \#2 \$callback of static method Illuminate\\Database\\Eloquent\\Model\:\:registerModelEvent\(\) expects array\|\(callable\(\)\: mixed\)\|class\-string\|Illuminate\\Events\\QueuedClosure, ''App\\\\Observers…'' given\.$#'

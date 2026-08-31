@@ -6,6 +6,8 @@ namespace App\Http\Requests\Admin\Accounting;
 
 use App\Models\Pas\Contact;
 use App\Models\Pas\Invoice;
+use App\Models\Pas\RecurringInvoice;
+use App\Services\Accounting\InvoiceBillingRules;
 use App\Services\Accounting\InvoiceTotalsCalculator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -49,6 +51,9 @@ final class InvoiceRequest extends FormRequest
             // Scoped: a document must never be raised against another
             // tenant's contact.
             'contact_id' => ['required', 'integer', $scoped('pas_contacts')],
+            // Nullable: not every sales invoice is for a student. A school
+            // also bills organisations for facility hire.
+            'lms_student_id' => ['nullable', 'integer'],
             'reference' => ['nullable', 'string', 'max:64'],
             'issue_date' => ['required', 'date'],
             // after_or_equal rather than after: terms of "due on receipt"
@@ -71,6 +76,21 @@ final class InvoiceRequest extends FormRequest
             'lines.*.unit_price_centavos' => ['required', 'integer'],
             'lines.*.account_id' => ['required', 'integer', $scoped('pas_chart_of_accounts')],
             'lines.*.tax_rate_id' => ['nullable', 'integer', $scoped('pas_tax_rates')],
+
+            // Setting this invoice to repeat. Optional, and absent entirely on
+            // an edit — turning a draft into a schedule after the fact is a
+            // different question from the one the create form asks.
+            //
+            // The cadence is the ONLY thing taken from the client. The day of
+            // the month, the payment terms and the start date are derived from
+            // this invoice's own dates by `StartInvoiceSchedule`, so a schedule
+            // cannot disagree with the document it came from — and a day of the
+            // 32nd stops being expressible rather than being validated away.
+            'repeat' => ['sometimes', 'boolean'],
+            'recurrence' => ['nullable', 'array', 'required_if:repeat,true'],
+            'recurrence.frequency' => ['required_with:recurrence', Rule::in(RecurringInvoice::FREQUENCIES)],
+            'recurrence.name' => ['nullable', 'string', 'max:120'],
+            'recurrence.ends_on' => ['nullable', 'date', 'after_or_equal:issue_date'],
         ];
     }
 
@@ -82,6 +102,7 @@ final class InvoiceRequest extends FormRequest
             }
 
             $this->assertContactCanBeBilled($v);
+            $this->assertPayerIsLinkedToStudent($v);
         });
     }
 
@@ -93,28 +114,46 @@ final class InvoiceRequest extends FormRequest
      * of counterparty this document is for, and the operator picked the
      * wrong one from a list.
      */
+    /**
+     * Resolved rather than constructor-injected: a FormRequest is rebuilt by
+     * Symfony through `duplicate()`, which does not go through the container,
+     * so a promoted constructor property would be null on the copy.
+     */
+    private function billingRules(): InvoiceBillingRules
+    {
+        return app(InvoiceBillingRules::class);
+    }
+
+    /**
+     * Both live in `InvoiceBillingRules` now — a recurring schedule generates
+     * invoices with no request in sight, and a rule enforced only here is a
+     * rule the generator does not have.
+     */
     private function assertContactCanBeBilled(Validator $v): void
     {
         $contact = Contact::query()->find((int) $this->input('contact_id'));
+        $reason = $this->billingRules()->contactCannotBeBilled(
+            $contact,
+            (string) $this->input('type'),
+        );
 
-        if ($contact === null) {
-            return;
+        if ($reason !== null) {
+            $v->errors()->add('contact_id', $reason);
         }
+    }
 
-        $isSales = $this->input('type') === Invoice::TYPE_SALES;
+    private function assertPayerIsLinkedToStudent(Validator $v): void
+    {
+        $studentId = $this->input('lms_student_id');
+        $contactId = $this->input('contact_id');
 
-        if ($isSales && ! $contact->is_customer) {
-            $v->errors()->add(
-                'contact_id',
-                "{$contact->name} is not marked as a customer, so a sales invoice cannot be raised against them.",
-            );
-        }
+        $reason = $this->billingRules()->payerIsNotLinkedToStudent(
+            $studentId === null ? null : (int) $studentId,
+            $contactId === null ? null : (int) $contactId,
+        );
 
-        if (! $isSales && ! $contact->is_supplier) {
-            $v->errors()->add(
-                'contact_id',
-                "{$contact->name} is not marked as a supplier, so a bill cannot be recorded against them.",
-            );
+        if ($reason !== null) {
+            $v->errors()->add('contact_id', $reason);
         }
     }
 
@@ -131,6 +170,9 @@ final class InvoiceRequest extends FormRequest
             'lines.*.tax_rate_id.exists' => 'The selected tax rate does not exist in this school.',
             'contact_id.exists' => 'The selected contact does not exist in this school.',
             'due_date.after_or_equal' => 'The due date cannot fall before the issue date.',
+            'recurrence.required_if' => 'Choose how often this invoice should repeat.',
+            'recurrence.frequency.required_with' => 'Choose how often this invoice should repeat.',
+            'recurrence.ends_on.after_or_equal' => 'A schedule cannot stop before the invoice it starts from.',
         ];
     }
 }

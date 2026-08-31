@@ -78,7 +78,7 @@ function renderIndex(
     return render(
         <JournalIndex
             entries={entries}
-            filters={{ status }}
+            filters={{ status, from: null, to: null }}
             can={{ create: true }}
         />,
     );
@@ -221,5 +221,24 @@ describe('JournalIndex — pagination', () => {
             page: 2,
             status: 'draft',
         });
+    });
+});
+
+describe('filter clearing', () => {
+    it('offers no Clear on an unfiltered list', () => {
+        // A control that does nothing reads as though a filter is on.
+        renderIndex(paginator([]));
+
+        expect(
+            screen.queryByRole('button', { name: /clear filters/i }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('offers Clear once a status is applied', () => {
+        renderIndex(paginator([]), 'draft');
+
+        expect(
+            screen.getByRole('button', { name: /clear filters/i }),
+        ).toBeInTheDocument();
     });
 });

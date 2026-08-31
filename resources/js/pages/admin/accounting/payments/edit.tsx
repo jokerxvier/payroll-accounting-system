@@ -18,7 +18,7 @@ export default function PaymentEdit({ payment, ...options }: Props) {
         <>
             <Head title={`Edit draft payment #${payment.id}`} />
 
-            <div className="space-y-6 p-4">
+            <div className="mx-auto max-w-5xl space-y-6 p-4">
                 <PageHeader
                     eyebrow="ACCOUNTING"
                     title={`Edit draft payment #${payment.id}`}

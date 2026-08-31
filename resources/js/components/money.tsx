@@ -1,3 +1,4 @@
+import { formatMoney } from '@/lib/format-money';
 import { cn } from '@/lib/utils';
 
 interface MoneyProps {
@@ -17,12 +18,9 @@ export function Money({
 }: MoneyProps) {
     const value = typeof amount === 'string' ? Number(amount) : amount;
 
-    const formatted = new Intl.NumberFormat('en-PH', {
-        style: showSymbol ? 'currency' : 'decimal',
-        currency,
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).format(Math.abs(value));
+    // Through the shared formatter, so a figure in a card and the same figure
+    // in a chart tooltip cannot be spelled differently.
+    const formatted = formatMoney(value, { showSymbol, currency });
 
     const isNegative = value < 0;
     const isPositive = value > 0;
@@ -30,7 +28,10 @@ export function Money({
     return (
         <span
             className={cn(
-                'tabular-nums',
+                // Never wrapped: a figure broken across two lines is always
+                // wrong, and a signed one breaks after the minus, which reads
+                // as a stray dash above a positive number.
+                'whitespace-nowrap tabular-nums',
                 signed && isNegative && 'text-destructive',
                 signed && isPositive && 'text-success',
                 className,

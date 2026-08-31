@@ -40,6 +40,51 @@ it('renders the standalone payslip page for super-admin', function () {
         );
 });
 
+it('hands the screen the same figures the PDF renders from', function () {
+    // The screen and the PDF are one document in two media. The page used to
+    // receive only run/payslip/employee and split `audit_lines` itself, which
+    // is how the two drifted into showing different things.
+    $user = authPayslipShowAs('super-admin');
+    $run = PayrollRun::factory()->computed()->create();
+    $payslip = Payslip::factory()->for($run, 'payrollRun')->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id.'/payslips/'.$payslip->id)
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->has('earnings', 1)
+                ->has('deductions', 1)
+                ->has('employerLines')
+                ->has('contributions')
+                ->has('school')
+                // Labels arrive humanised, so the screen cannot print
+                // "(employee)" where the printout does not.
+                ->where('deductions.0.label', 'SSS contribution')
+                // A URL for the browser, never the PDF's base64 data URI:
+                // that would put ~300 KB of image in every page payload.
+                ->where('school.logo_url', fn ($url) => $url === null || ! str_starts_with((string) $url, 'data:')),
+        );
+});
+
+it('sends a contribution ledger the screen does not have to compute', function () {
+    $user = authPayslipShowAs('super-admin');
+    $run = PayrollRun::factory()->computed()->create();
+    $payslip = Payslip::factory()->for($run, 'payrollRun')->create();
+
+    $this->actingAs($user)
+        ->get('/admin/payroll-runs/'.$run->id.'/payslips/'.$payslip->id)
+        ->assertOk()
+        ->assertInertia(
+            fn ($page) => $page
+                ->has('contributions', 1)
+                ->where('contributions.0.label', 'SSS')
+                ->where('contributions.0.yours', 90_000)
+                ->where('contributions.0.school', 0)
+                ->where('contributions.0.credited', 90_000),
+        );
+});
+
 it('returns 404 when the payslip belongs to a different run', function () {
     $user = authPayslipShowAs('super-admin');
     $runA = PayrollRun::factory()->computed()->create();

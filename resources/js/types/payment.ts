@@ -9,6 +9,7 @@
  * differ. The `type` discriminator says which.
  */
 
+import type { ContactPickerOption } from './contact';
 import type { Paginator } from './pagination';
 
 export type PaymentType = 'receipt' | 'disbursement';
@@ -22,11 +23,8 @@ export type PaymentMethod =
     | 'online'
     | 'other';
 
-export interface PaymentContactOption {
-    id: number;
-    name: string;
-    tin: string | null;
-}
+/** Lean contact shape for the counterparty picker. Shared — see `contact.ts`. */
+export type PaymentContactOption = ContactPickerOption;
 
 /** Asset accounts money can actually move through. Control accounts excluded. */
 export interface CashAccountOption {
@@ -132,10 +130,22 @@ export interface PaymentFormOptions {
      * nobody looks at.
      */
     outstandingInvoices: OutstandingInvoice[];
+    /**
+     * Whether to offer the demo-fill button. Super-admin outside production
+     * only, via the `dev.demo-fill` gate — a development affordance, not a
+     * product feature.
+     */
+    canDemoFill?: boolean;
 }
 
 export interface PaymentIndexProps {
     payments: Paginator<PaymentRow>;
-    filters: { type: PaymentType; status: PaymentStatus | null };
+    filters: {
+        type: PaymentType;
+        status: PaymentStatus | null;
+        /** Inclusive payment-date bounds, 'YYYY-MM-DD' or null. */
+        from: string | null;
+        to: string | null;
+    };
     can: { create: boolean };
 }

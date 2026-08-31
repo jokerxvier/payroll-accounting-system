@@ -17,7 +17,11 @@ The client operates an existing Learning Management System (LMS) with employee r
 - Computes Philippine statutory contributions (BIR, SSS, PhilHealth, Pag-IBIG) for employee and employer shares
 - Generates payslips, batch payroll runs, and exportable reports
 - Maintains a complete audit trail for every financial mutation
-- Never reads, writes, or migrates any LMS table outside of the read-only identity surface (`users`, `sm_staffs`, `sm_designations`, `sm_human_departments`, `roles`). The LMS's legacy payroll and accounting tables (`sm_hr_*`, `sm_chart_of_accounts`, `sm_add_incomes`, `sm_add_expenses`, `sm_fees_*`, etc.) are explicitly ignored — the new system replaces them with its own implementation.
+- Never reads, writes, or migrates any LMS table outside of the read-only surface below. The LMS's legacy payroll and accounting tables (`sm_hr_*`, `sm_chart_of_accounts`, `sm_add_incomes`, `sm_add_expenses`, `sm_fees_*`, etc.) are explicitly ignored — the new system replaces them with its own implementation.
+
+  **The permitted read surface** is `users`, `sm_staffs`, `sm_designations`, `sm_human_departments`, `roles` — and, since 2026-08-30, **`sm_students` and `sm_parents`**.
+
+  *Amended 2026-08-30, answering Open Question 2.* A school invoices families, and a family is a parent paying for one or more students. Keeping student and parent records out of reach meant the contact register had to be typed in by hand and kept in step by hand — which is how one family becomes two contacts with half a receivable each. Reading is strictly one-way through `App\Models\Lms\{Student,Guardian}` on `ReadOnlyModel`, guarded by `tests/Feature/LmsReadOnlyTest.php`, and the amendment is deliberately narrow: **`sm_fees_*` stays out**, because this system owns the fee schedule and reading theirs would contradict the sentence above.
 
 The system is logically decoupled from the LMS (separate `lms` connection, read-only models, prefixed tables) so payroll can evolve, be audited, and be reasoned about independently — even while sharing the same physical MySQL database during v1.
 
@@ -366,6 +370,35 @@ Ordering is load-bearing: the journal must be trustworthy before any document po
       `lms_student_id` exists as a nullable pointer but nothing populates it —
       reading LMS student tables is outside §2 (Open Question 2).
 - [x] Sales invoices: gapless BIR numbering, VAT-aware lines, PDF.
+      **Numbering was removed on 2026-08-30 at the client's instruction.**
+      `DocumentNumberAllocator`, `pas_document_number_series` and its model,
+      controller, policy, request, factory, page and tests are gone;
+      `ApproveInvoice` no longer allocates. An approved invoice is now
+      identified by its id and carries no serial. Everything below about
+      gaplessness, Authority To Print and serial ranges describes what the
+      slice shipped, not what is in the tree — kept because it records the
+      reasoning a reinstatement would need.
+
+      Numbers came back the same day in a much smaller form:
+      `InvoiceNumberAllocator` derives `INV-{year}-{00001}` /
+      `BILL-{year}-{00001}` from the highest already issued for that school,
+      type and issue-date year — no series row, no permit, no setup, and
+      nothing that can run out. It allocates at DRAFT CREATION rather than at
+      approval, since a number that is only an internal reference has nothing
+      to protect by being withheld, and a draft people discuss is easier to
+      name. Gaps are tolerated, which is exactly the property that made this
+      approach unavailable while the numbers were BIR-controlled.
+
+      Two things were deliberately NOT destroyed: `pas_invoices.number`
+      (which still holds SI-000001 and SI-000002, issued before the removal)
+      and the `pas_document_number_series` table itself. Dropping either
+      would destroy issued-document history to save a column nobody reads.
+      The table is orphaned, not dropped; removing it is a separate decision.
+
+      Consequences to weigh before this reaches production: a BIR sales
+      invoice must legally carry a serial from an authorised range, the
+      printed face no longer has a number or an ATP footer, and Slice 8c's
+      Invoice Register has nothing to register.
       `DocumentNumberAllocator` refuses to run outside a transaction, so a
       document that fails to save returns its serial instead of burning it —
       a gap in an authorised range is an audit finding, unlike a gap in the
@@ -483,15 +516,575 @@ subtotals what 8a returns; 8c reads invoices and payments rather than the ledger
       chart-of-accounts requests. A bank overdraft is arguably a cash
       equivalent under PAS 7, but it is a liability account and admitting
       liabilities to serve that one case opens the door to every payable.
+- [x] **8b's first consumer shipped ahead of the statements themselves**: the
+      accounting dashboard (`/admin/reports/accounting-dashboard`), which is
+      the Income Statement's figures without the statement's face. Three new
+      pieces, all in the place 8b's own framing put them — classifying and
+      subtotalling what 8a returns rather than writing a second set of SQL:
+
+      `AccountingSummaryService` derives all six tiles from ONE
+      `trialBalance()` call, so the tiles cannot disagree with the chart under
+      them. `LedgerSeriesService` is the only genuinely new aggregate — income
+      and expense per month in one grouped query, because twelve
+      `trialBalance()` calls would be twelve scans to draw one picture.
+      `FiscalYear` reads `pas_accounting_periods.fiscal_year`, which nothing
+      had read since the column was added; a school whose year runs July to
+      March was the case a calendar default would have got wrong.
+
+      **The distinction the whole thing turns on**: income and expenses are
+      PERIOD movements, cash/AR/AP are CLOSING balances. Reading closing for an
+      income account under a one-month filter reports every peso the school has
+      ever earned and calls it this month's. `TrialBalanceRow` gained
+      `periodNaturalCentavos()` for it, and the signing rule it duplicated
+      three times is now one private method.
+
+      Receivables sums the AR control account **and** every
+      `pas_contacts.receivable_account_id` override — the system code alone
+      understates what a school is owed, in the school's favour.
+
+      Verified by reconciliation, not just by unit tests: the dashboard, the
+      trial balance and the summed monthly series agree to the centavo on the
+      dev ledger (₱406,001.00 income, ₱858,770.00 expenses).
 - [ ] Income Statement, Balance Sheet, Cash Flow Statement, Statement of
-      Changes in Equity.
+      Changes in Equity — the faces, exports and PDFs. The figures now exist;
+      what is missing is the presentation and the subtotal hierarchy.
+
+      Note for whoever takes this: the Statement of Changes in Equity's
+      "Beginning Retained Earnings" now has a real source. Slice 9's cutover
+      snapshot is the first thing in the project to post to
+      `SYSTEM_RETAINED_EARNINGS`, so a school that opened its books carries an
+      opening figure there rather than the zero this line was written against.
 
 **8c — Receivables and document reports**
+- [x] **8c's figures shipped ahead of its reports**: the invoice dashboard
+      (`/admin/reports/invoice-dashboard`) on a new `ReceivablesService` — the
+      ageing buckets, outstanding balances and collections the Aged Receivables
+      and Outstanding Invoices reports will consume rather than re-derive.
+
+      Nothing had ever compared `due_date` to today before this; there was no
+      overdue concept in the codebase at all. Four decisions worth keeping:
+      ageing uses the **remainder, never the original total** (a ₱10,000
+      invoice with ₱9,000 paid owes ₱1,000); **a null due date is Current, not
+      overdue**, because the field is optional and its absence means no
+      deadline was set; collections range on `payment_date` and are **gross**,
+      so Collected + Outstanding reconciles to Invoiced; and **overdue is a cut
+      across unpaid and part-paid**, reported beside them rather than as a
+      fourth slice that would double-count the same peso.
+
+      Aggregates read `pas_invoices.amount_paid_centavos` rather than
+      re-summing allocations: `InvoiceBalanceService` is its only writer and
+      every mutation goes through it, so the header is guaranteed in step and
+      re-deriving would be a correlated subquery per invoice.
+
+      **The two dashboards differ by design, and on the dev data by exactly
+      ₱180,000** — Slice 9's cutover snapshot, posted straight to the AR
+      control account with no invoice behind it. Accounting Receivables reads
+      the ledger; this reads documents an officer can open and chase. Pinned by
+      a test so the divergence is not rediscovered as a bug.
 - [ ] Aged Receivables (summary + detail), Customer Statement, Invoice Register,
       Outstanding Invoices, Receipts Report, Credit Notes Report.
 
+      Invoice Register needs rethinking after the 2026-08-30 numbering
+      removal: a register is a list of issued serials, and there are no
+      serials now. It becomes a list of approved documents keyed by id, or it
+      waits for numbering to come back.
+
       Credit Notes Report stays blocked behind Open Question 1, same as the
       credit-note document itself.
+
+#### Slice 9 — Backlog recording (opening balances)
+Split from Slice 8 rather than folded into it: the statements read the ledger,
+and this is the first slice that changes what the ledger *starts* with. Scope is
+the cutover snapshot only — historical invoices, payments and open items are a
+later slice, and the decision they turn on is recorded below.
+
+- [x] `pas_schools.books_opened_on` — nullable, the date a school's books were
+      opened here. Stamped by `PostOpeningBalances` inside the posting
+      transaction and cleared by `ReverseJournalEntry`, never set by hand: the
+      date belongs to the entry that justifies it, and a stamp that outlived
+      its snapshot would keep every report captioned for figures that no longer
+      contribute a centavo. Null — a school that genuinely started from zero —
+      is the honest default and the state every existing row is in.
+- [x] `JournalEntry::SOURCE_OPENING_BALANCE`, a `source_type` sentinel with a
+      null `source_id`. Every other value in that column is a model FQCN with a
+      row behind it; an opening balance describes what the books already said
+      before this system existed, so there is nothing to point at. A sentinel
+      rather than a new boolean column because "where did this entry come
+      from?" is the question `source_type` already exists to answer, and
+      nothing morphs the column into a class.
+- [x] `PostOpeningBalances` — one entry, built as a draft and handed to
+      `PostJournalEntry` like everything else, which is what earns it the
+      balance assertion, the period lock and the number without restating any
+      of them.
+
+      **Balance-sheet accounts only.** Assets, liabilities and equity carry
+      across a year boundary; income and expenses close out to retained
+      earnings. Admitting an opening balance on an income account would report
+      prior-year trading as current-period earnings and overstate every Income
+      Statement from then on — so prior trading compresses into `3200 Retained
+      Earnings` as one figure, which is also what makes the snapshot balance.
+      This slice is the first code that ever posts to `SYSTEM_RETAINED_EARNINGS`,
+      seeded since Slice 1 and until now untouched.
+
+      **One standing snapshot per school.** A second would double every balance
+      it touched. The guard discounts both a reversed original and the reversal
+      itself, because `ReverseJournalEntry` copies `source_type` onto the
+      reversal — so the sentinel alone matches three rows for what is one
+      unwound snapshot.
+
+      **The difference is never plugged silently.** An unbalanced sheet means
+      the source figures are wrong, and routing the gap to Retained Earnings
+      unasked would hide that. The preview states the difference and the user
+      ticks the plug, having seen the number.
+- [x] Bulk import at `/admin/opening-balances`, reusing
+      `EmployeeBulkEditImport`'s four-step shape: template → upload → validated
+      preview → confirm. It copies that flow and NOT its authorization —
+      employee import gates on inline `hasAnyRole`, which bypasses the
+      `Gate::before` platform-admin short-circuit; this goes through
+      `JournalEntryPolicy::postOpeningBalance`, which is `POST_LEDGER` and so
+      narrower than the rest of the accounting sidebar. The nav item is gated
+      separately for that reason, since showing it to the wider group would be
+      a dead link for `payroll-officer` and `auditor`.
+
+      Amounts in the worksheet are decimal pesos, not centavos — unlike the
+      employee template, which round-trips its own stored integers. Someone
+      reading a trial balance off their old system types 1,234.56, and asking
+      them to convert invites the error the import exists to prevent. The
+      template also omits income, expense and inactive accounts outright: a
+      sheet that never offers the wrong row cannot collect the wrong figure.
+
+      A file with any bad row is refused whole rather than part-applied,
+      because a partial opening balance is an unbalanced one and the plug would
+      then silently cover rows the user believed were included.
+- [x] `AccountingPeriodGuard::isOpenOn()` gets its first consumer. It has
+      existed since Slice 2 and was called from nowhere: every write path uses
+      `resolveOpenPeriodFor()` and finds out on submit. The preview asks ahead
+      and blocks confirm with a link to create the covering period, because a
+      new school has **no** periods at all — `SchoolObserver` clones catalogs
+      but not periods — so "nothing can post yet" is the normal state on day
+      one, not an error worth a stack trace.
+- [x] Reports adjusted. Less than the phrasing implies, and that is the
+      finding: `LedgerReportService` needed **no arithmetic change at all**.
+      Because ranges filter the entry's own `date` and `rawBalanceBefore()` /
+      `accountSums()` already sweep in everything posted before a range, a
+      snapshot dated at cutover lands in the Trial Balance's opening columns
+      and the General Ledger's brought-forward row the day it exists. Pinned by
+      a test asserting exactly that, rather than built.
+
+      What the reports could not do on their own is say *where* an opening
+      figure came from. "Opened at ₱700,000 because of everything posted
+      before the range" and "…because ₱700,000 was carried in from the client's
+      previous books" read identically in a column of figures and mean
+      different things to anyone reconciling them — so `CutoverNote` states it
+      on both balance-bearing reports, and the Journal Report badges the
+      snapshot so a thirty-line entry is not an unexplained bulk posting.
+- [ ] Open items — the unpaid invoices and bills behind the AR/AP control
+      balances. Deferred with Slice 8c's ageing reports, which are what would
+      consume them: until then the control account is right in total and has no
+      sub-ledger to reconcile against. The numbering decision is already taken
+      and is the reason this is a slice of its own rather than an extension of
+      the one above: a historical document carries **the number it was actually
+      issued under**, recorded as given, with `DocumentNumberAllocator` never
+      called. Drawing from the live counter would hand a historical document a
+      serial higher than invoices with later issue dates already issued from
+      that BIR-authorised range, which is an audit finding — and the allocator
+      cannot help, because it takes only a document type and has never seen a
+      date.
+
+#### Slice 10 — Online payments (PayMongo and Stripe)
+The app's first integration of any kind. Before this there were zero outbound
+HTTP calls, no `routes/api.php`, no CSRF exclusion, no mail, no signed URLs and
+no URL an outside party could reach — so every convention here is established
+rather than followed.
+
+- [x] `app/Services/Payments/` — a `PaymentGateway` contract with PayMongo and
+      Stripe drivers behind it, and a `GatewayEvent` DTO both normalise to.
+      Two gateways, one posting path: nothing downstream can tell which paid.
+      Laravel's `Http` client rather than two SDKs, because the surface used is
+      a handful of endpoints and that would have been the largest dependency
+      addition in the project. Credentials are scrubbed from error messages,
+      following `SchoolController::testConnection()` — the only
+      integration-hygiene precedent that existed.
+- [x] `pas_payment_gateway_settings` — per-school credentials, because each
+      school is its own registered entity with its own merchant account and the
+      money settles into its own bank. `encrypted` cast plus `auditExclude()`,
+      lifted wholesale from `School::lms_db_password`; the reasoning is sharper
+      here, since a leaked secret key moves money. Test and live are **separate
+      rows**, not one row with a toggle — a mode switch beside a single
+      credential field is how a real card gets charged from a sandbox.
+
+      The secret never reaches the browser. Inertia props are serialised into
+      the page, so the screen gets `••••4242` and a boolean; the field is
+      write-only and a blank submission keeps what is stored. Gated by
+      `AccountingRoles::PAYMENT_GATEWAY` — `super-admin` only, the narrowest
+      list in the module.
+- [x] Public pay page at `/schools/{slug}/pay/{token}` — the first guest-
+      reachable route. `pas_invoices.pay_token` is minted **on demand**, so the
+      number of live public URLs equals the number someone deliberately asked
+      for, and is stable once minted because re-issuing would break a link
+      already in a parent's hands.
+
+      **The token is the credential, not the slug.** A guest bypasses
+      `ApplyTenantOverride`'s LMS-pinning, so a crafted slug resolves whatever
+      it names; and `BelongsToTenant` **fails open** when no tenant is current,
+      returning every school's rows. Every query names `school_id` explicitly
+      and matches the token alongside it. Every refusal is the same 404 —
+      distinguishing "no such token" from "that one is voided" confirms a guess.
+- [x] Webhook at `/schools/{slug}/webhooks/{provider}` — first unauthenticated
+      POST, first CSRF carve-out in `bootstrap/app.php`. The slug is in the URL
+      because `SchoolTenantFinder` resolves only by host, path prefix or
+      header, and a gateway sends none of them: a fixed URL would 404 at
+      `NeedsTenant` before any controller ran.
+
+      The signature is the only authentication, checked before the payload is
+      read. Idempotency is the unique on `pas_gateway_events
+      (provider, external_event_id)` — both gateways retry until they get a
+      2xx and can redeliver after one, so without it a retry books a second
+      payment. A failure *after* acceptance still returns 200: the row exists,
+      so retrying changes nothing, and the error is stored for a human.
+- [x] `RecordGatewayPayment` **composes** `ApplyPaymentAllocations` and
+      `PostPayment` rather than writing `pas_payments` itself. There is one way
+      to settle an invoice; this is a different way of starting it, not a
+      different way of doing it. It allocates what is still outstanding rather
+      than what it was handed, so paying a link twice becomes an advance rather
+      than a negative receivable — and posts with a **null actor**, which is
+      why `PostJournalEntry`/`PostPayment` now take `?int $actorUserId`.
+- [x] The gateway's two account questions removed from the setup screen.
+      `5250 Bank and Merchant Fees` added to the catalog carrying
+      `SYSTEM_MERCHANT_FEES`, seeded and backfilled onto existing charts the
+      same way the advances accounts were. Nothing in the 5xxx range fitted:
+      `5900 Miscellaneous Expense` is a dumping ground, `5240 Professional
+      Fees` is not what a gateway cut is, and `5400 Interest Expense` is
+      categorised `financing` when a merchant fee is `operating`.
+
+      **The two sides resolve by different mechanisms, and the asymmetry is
+      load-bearing.** The fee comes from the system code; the cash comes from a
+      chart CODE in config, because giving `1110 Cash in Bank` a `system_code`
+      would silently drop it from the manual payment picker —
+      `PaymentController::cashAccountOptions()` excludes system accounts on
+      purpose, and its comment predicted exactly this change. Breaking
+      hand-keyed receipts to tidy a gateway form would have been a bad trade.
+
+      Both fields moved into a collapsed **Advanced** section (the first
+      disclosure in the admin UI) with a "Use the school default — 1110 · Cash
+      in Bank" sentinel, matching the override shape
+      `contact-edit-sheet.tsx` already uses. `isUsable()` now asks whether the
+      accounts *resolve* rather than whether the columns are set, which is what
+      keeps a broken chart failing in front of an operator instead of in front
+      of a customer who has already paid.
+- [x] Gateway fees split gross from net. `pas_payments.fee_centavos` and
+      `fee_account_id` (pinned on the payment, not read back from settings,
+      so a posted entry stays reproducible after the settings change).
+      `PaymentPostingService` debits cash `amount − fee` and the fee to its own
+      expense account: ₱1,120 invoice, ₱28 fee → `Dr Cash 1,092 · Dr Fees 28 ·
+      Cr AR 1,120`. Recording the net instead would strand every online invoice
+      at `partially_paid` and fill Aged Receivables with residue nobody can
+      collect. Manual payments keep `fee = 0` and post exactly as before.
+- [x] Emailing the link. Slice 13 built `SendInvoiceEmail` + `InvoiceIssuedMail`
+      but wired them to one caller only — `approve()`, and only when
+      `recurring_invoice_id !== null` — so a hand-typed invoice still never
+      left the building. `POST invoices/{invoice}/send` closes that: a **Send
+      by email** button on the invoice, showing the recipient before it goes,
+      pre-filled from the payer's address and editable, because the address is
+      the thing most likely to be wrong and a school often wants this term's
+      bill at a different one. A typed address is used for that send only and
+      is deliberately **not** written back to the contact.
+
+      Three things this forced into the open. `SendInvoiceEmail::execute()`
+      now takes an optional recipient, and an explicit one **also overrides
+      the already-sent guard** — that guard exists so a retried approval
+      cannot mail a family twice, not to answer "they never got it" with a
+      shrug. The status write had to be conditioned on `approved`: re-sending
+      a `partially_paid` invoice would otherwise walk its status back to
+      `sent`, and every receivable report follows the status rather than the
+      allocations. And `sent_to` (new column) records **where** it went —
+      `sent_at` alone answers the wrong half of a delivery dispute.
+
+      `InvoiceStatusBadge` gained its missing `sent` branch at the same time;
+      the status was reserved in Slice 5 and, until invoices could be sent by
+      hand, was rare enough that a sent invoice reading as merely "Approved"
+      had gone unnoticed.
+- [ ] A second Horizon queue. There is one supervisor on `default`
+      (`config/horizon.php:212-230`), and the webhook currently records
+      synchronously rather than queueing behind a payroll batch. Worth
+      revisiting if deliveries start timing out.
+
+#### Slice 11 — Parents as billing contacts, linked to their students
+- [x] `App\Models\Lms\{Student,Guardian}` on `ReadOnlyModel`. Named `Guardian`
+      rather than `Parent` because `parent` is a PHP reserved word and the
+      class would not compile. `LmsReadOnlyTest` was extended to prove the
+      write-refusal is inherited rather than special-cased — these are the
+      tables a bug would corrupt a school's enrolment through.
+- [x] `pas_contact_students` — the link, and the reason this is a table rather
+      than a column. **One payer, one contact, however many children.** A
+      column on `pas_contacts` holds one student, so a parent with two would
+      need two contact rows, scattering one family's receivable across two
+      counterparties, breaking their statement and counting them twice in
+      Aged Receivables.
+
+      Many-to-many in both directions on purpose: a contact has several
+      children, and a student has a primary payer who may be joined by a
+      sponsor or a second guardian. **The LMS models none of that** — one
+      `sm_parents` row holds father, mother and guardian as *text columns*,
+      with no payer designation and no second slot — so the whole billing
+      relationship lives here. `is_primary_payer` is enforced in the action,
+      not the schema: "exactly one of a filtered set" is not something a
+      unique index can express, and a partial index does not port to sqlite.
+
+      `student_name` is a snapshot, because the LMS is another connection and
+      listing a contact's children should not need a cross-database join.
+- [x] `pas_contacts.lms_parent_id`, unique per school — the import's only
+      certain de-duplication key. **Never globally unique**: each school has
+      its own LMS database and the ids repeat, so parent 29 exists in every
+      tenant. `lms_student_id` was deliberately NOT reused; a singular student
+      pointer cannot express a parent paying for two children.
+- [x] `ImportLmsGuardians` — preview then confirm, no file, following
+      `OpeningBalanceController`'s shape minus the upload. De-duplication runs
+      in confidence order: the source row's id, then email, then phone.
+
+      The heuristics exist because **the LMS does not guarantee siblings share
+      a parent row** — the demo data has `sm_students.id == sm_parents.id`
+      with consecutive user ids, the signature of a record created per
+      admission. A match merges; **ambiguity is refused, never guessed**,
+      because merging two different people into one payer is far harder to
+      unpick than importing nothing and saying why.
+- [x] `pas_invoices.lms_student_id` + `student_name`. `contact_id` says who
+      owes the money and cannot say who was taught; until now the only place a
+      student could be named was the free-text `reference`, whose placeholder
+      literally read "Student or PO reference". Nullable, because a school also
+      bills organisations. `InvoiceRequest` refuses a payer not linked to the
+      chosen student — the payer Select stays editable after a student is
+      picked, so a stale selection can survive a change of student.
+- [ ] Charges from a fee schedule. Deferred with nothing lost: **all 23
+      transactional LMS fee tables are empty** in both tenant databases, and
+      reading them would contradict §2 above. Invoice lines are still typed by
+      hand. This is the largest remaining gap between here and "raise a term's
+      invoices for a class", and it needs a decision about which system owns a
+      fee schedule before it can be built.
+
+#### Slice 12 — A school's logo on its documents
+- [x] `pas_schools.logo_path` + `App\Services\SchoolLogo`, the app's **first
+      stored upload**. Everything here is a precedent rather than a convention
+      being followed, so anything that later accepts a file should copy it:
+      the `public` disk, `schools/{id}/logo-{content-hash}.{ext}` (an immutable
+      URL, so a replacement can never serve a stale image), and an extension
+      derived from the **validated** mime, never from the client filename.
+      **PNG and JPEG only, never SVG** — an SVG is a script-bearing document,
+      and serving one back that a form accepted is stored XSS.
+- [x] The logo enters both PDFs as a base64 `data:` URI, not a URL. There is no
+      `config/dompdf.php`, so `enable_remote` is the vendor default **false**
+      and dompdf refuses any `http(s)` `<img src>` *silently* — `Storage::url()`
+      would have rendered nothing with no error anywhere. An absolute path
+      would work for the invoice, which renders in-request, but the payslip
+      renders in a queued job that cannot assume it shares a filesystem with
+      the web node. One code path that cannot break either way, at ~33% on a
+      file measured in tens of kilobytes.
+
+      Sized with an explicit `height` and `width: auto`, because dompdf honours
+      `max-height` unreliably: the first render came out at three times the
+      intended size from the image's intrinsic pixels.
+- [x] `dataUri()` returns **null** when the file is missing rather than
+      throwing. A logo deleted off the disk must not take payroll's PDF
+      generation down, and both templates already guard absent seller facts
+      with `@if`.
+- [x] `/admin/organisation` — the school's own settings, gated on a
+      school-scoped role rather than platform-admin. It carries the logo plus
+      `registered_name`, `tin` and `business_address`, which were **printed on
+      the invoice face and the public pay page while being settable only by
+      seeder or tinker**: they appear in no request class and no form, and
+      `/admin/schools` is platform-admin only by design because those rows hold
+      other schools' LMS credentials. A school could not correct its own
+      letterhead. A blank file input means "keep the current logo", matching
+      the blank-password and blank-secret rules already in the module.
+- [x] The payslip **names the employer for the first time**. It carried neither
+      name nor mark before — an employee keeping one had nothing on it saying
+      who paid them. The field had to be added to **both** view models:
+      `PayrollRunController::payslipViewModel()` and the deliberately duplicated
+      `RenderPayslipPdfJob::buildViewModel()`, where missing one throws an
+      undefined variable on the queued path only.
+- [x] Which turned into a redesign, because dropping a logo onto the old layout
+      only sharpened what was already wrong with it. The old payslip rendered
+      the three money flows as three identical lists, which is why staff read
+      employer contributions as a second set of deductions; it printed machine
+      codes (`BASIC_PAY`, `SSS_EMPLOYEE`) at an audience that never types them;
+      and it ran one 100%-wide column down an A4 sheet, leaving a canyon
+      between every label and its figure.
+
+      Now a narrow identity rail beside a money column, and the **direction of
+      the money is the structural device**: `+ What you earned`, `− What was
+      withheld from your pay`, `→ Paid for you, on top of your pay` — the last
+      carrying the sentence that makes the employer block legible at all.
+
+      The one new figure is `App\Support\ContributionLedger`: your share plus
+      the school's share, per agency. Both halves are on every payslip in the
+      country and the sum is on none of them, so the number that decides a
+      salary loan or a benefit claim is the one staff have to work out by hand.
+      Withholding tax is excluded — it is remitted but buys no entitlement.
+      `tests/Feature/Payslips/PayslipDocumentTest.php` renders the Blade and
+      reads it; the route tests only ever asserted the bytes start `%PDF-`.
+- [x] **The invoice PDF now shares the payslip's design**, through
+      `documents/partials/styles.blade.php` — masthead, identity rail, filled
+      band for the figure the document exists to state, colophon at the page
+      foot. What it deliberately does not borrow is the `+ − →` direction
+      marks: money moves three ways on a payslip and one way on an invoice,
+      and a structural device that encodes nothing is decoration.
+
+      Reports keep their own `reports/partials/pdf-styles.blade.php`. They are
+      worksheets read at a desk by someone reconciling figures and want
+      density where these want a document that can be read once and trusted.
+
+      It also fixed a display bug on the face of every invoice: dompdf sized
+      the columns from their content and ran the unit price into the VAT rate,
+      so "₱2,500.00" and "0%" printed as **"₱2,500.000%"**. Every column now
+      carries an explicit width. `tests/Feature/Invoices/InvoiceDocumentTest.php`
+      renders the Blade and reads it, as the payslip's does — the route tests
+      only ever asserted the bytes were a PDF.
+- [ ] **A payslip PDF is ~1.6 MB, and ~1.35 MB of that is fonts**, not content
+      — dompdf embeds DejaVu Sans, Serif and Mono whole. At 100 payslips a run
+      that is 160 MB of stored output. The logo accounts for 231 KB of it: a
+      1024×1024 seal embedded to render at 52px, which a cached downscale in
+      `SchoolLogo::dataUri()` would cut to near nothing. Neither is urgent;
+      both are worth knowing before a school with 500 staff arrives.
+- [x] **The on-screen payslip now carries the same document as the PDF** —
+      same masthead, rail, direction marks, net band, ledger and colophon.
+
+      The two drifted because `payslipViewModel()` promised to be the "single
+      source of truth so the two surfaces never drift" while the page was
+      handed only `run`, `payslip` and `employee`, and split `audit_lines`
+      itself. It now receives the same `earnings` / `deductions` /
+      `employerLines` / `contributions`, and `App\Support\PayslipLabel` is
+      called by both so a line cannot be named one way on screen and another
+      on the printout. Pinned by props assertions in
+      `PayrollRunPayslipShowTest`.
+
+      Two differences are the medium's, not a drift: the screen gets a
+      cacheable logo **URL** where dompdf needs a base64 data URI (~300 KB
+      that has no business in a page payload), and the date order is pinned
+      to `en-GB` because `en-PH` formats a long date month-first and would
+      disagree with the PDF's `j F Y`.
+- [ ] `php artisan storage:link` is now a **real deploy step**, per environment.
+      Without it the sidebar image 404s on every page while both PDFs still
+      render, because they read bytes off the disk rather than fetching a URL —
+      a failure that looks like a CSS bug. See §6 Deployment.
+
+      The invoice email raises the cost of missing it: the logo there is a
+      link, so an unlinked `storage/` gives every parent a broken image in a
+      document about money. `APP_URL` matters for the same reason — the mail's
+      logo URL is built from it, and an inbox cannot resolve a relative one.
+
+#### Slice 13 — Recurring invoices
+- [x] **A schedule is set up on the invoice form, not on its own page.**
+      `/admin/recurring-invoices/create` and its `store` are gone, along with
+      the create half of `recurring-invoice-form.tsx` — 711 lines of which ~62%
+      was a copy of `invoice-form.tsx`, and the copy had already cost
+      something: no student picker, no searchable payer combobox, no Notes or
+      Terms, so `lms_student_id`, `notes` and `terms` sat in its form state and
+      were silently always null on a schedule. Ticking **Repeat this invoice**
+      now raises the draft AND the standing instruction from one typing.
+
+      The cadence is the only thing the client sends. `day_of_month`,
+      `starts_on` and `due_days` are derived by `StartInvoiceSchedule` from the
+      invoice's own dates, so a schedule cannot disagree with the document it
+      came from — and `day_of_month` between 1 and 31 stops being a rule to
+      enforce because a 32nd is no longer expressible.
+
+      **The first period is claimed at creation**, which is what stops the
+      family being billed twice. `GenerateDueInvoices` derives where a schedule
+      has got to from `periods()->count()` and never looks for an existing
+      invoice, so a schedule starting on its own cadence day would otherwise
+      have August raised again by the next catch-up run — three invoices for
+      two months. Verified by removing the claim and watching the test go to 3.
+      The seeded `next_run_on` keeps it out of `scopeDueOn` the same night;
+      the claim is the guarantee, the cursor only keeps the run summary honest.
+- [x] `pas_recurring_invoices` + template lines, a nightly
+      `invoices:generate-recurring` (03:00 Manila), and an email that reaches
+      the payer when a person approves what it raised. **Drafts only** — an
+      unattended job never touches the ledger, never meets
+      `AccountingPeriodGuard`, and never issues a claim against a parent.
+- [x] The extraction that had to come first. Drafting an invoice lived in two
+      *private* methods on `InvoiceController`, so a generator would have been
+      a second way to build one. Now `CreateInvoiceDraft`, `InvoiceLineWriter`,
+      `InvoiceHeaderAttributes` and `InvoiceBillingRules`, all shared with the
+      controller. The billing rules mattered most: they lived only in the
+      FormRequest, and a headless run has no form.
+- [x] **`pas_recurring_invoice_periods` holds the never-bill-twice guarantee**,
+      not a column on the invoice. The invoice's lifecycle is the wrong one:
+      on the invoice, deleting a wrong draft releases the period and the job
+      re-raises it that night, while voiding consumes it for good. A claim that
+      outlives the document makes deletion safe and re-billing deliberate.
+- [x] Four traps, each of which shipped a wrong invoice or none at all until a
+      test caught it:
+      **the run date** — the command resolves "today" in Manila, which is
+      16:00 the previous day in UTC where the date casts live, so every
+      schedule looked "not due" and the generator silently raised nothing;
+      **`addMonth()` sticking** — 31 Jan → 28 Feb → 28 *Mar*, so `next_run_on`
+      is recomputed from `starts_on` plus a period count;
+      **period zero** — a schedule created on the 30th to bill on the 1st
+      computed its first invoice as the 1st of that same month, in the past;
+      **a stale tenant** — Spatie's `makeCurrent()` is a no-op when the same
+      tenant is already bound, so the action read a stale `books_opened_on` and
+      would happily backdate drafts nobody could approve.
+- [x] `Schedule::useCache('redis')` and `withoutOverlapping(120)`. The
+      scheduler resolves the *default* cache store, which `config/cache.php`
+      sets to `database` — there is no `cache_locks` table and
+      `MigrationSafetyTest` forbids adding one — and the default mutex is 24
+      hours, so one OOM kill would skip a full day of billing.
+- [ ] **Real SMTP is now a deploy prerequisite.** `MAIL_FROM_ADDRESS` is still
+      `hello@example.com` and `MAIL_HOST` is `127.0.0.1`. The first send goes
+      to actual parents; SPF/DKIM for the sending domain belongs on the same
+      checklist.
+
+      Note what that checklist does **not** have to cover, because of how the
+      From line was settled: the school's *name* is the display name and the
+      configured sender stays the address, so authentication is needed for one
+      domain — this platform's — not for each school's. Sending as
+      `office@stmarys.edu.ph` would need an SPF record in every tenant's DNS
+      naming this host, a task no school will reliably do, and Gmail and Yahoo
+      have binned unauthenticated bulk mail since 2024. `pas_schools.email`
+      (new) carries `Reply-To` instead, so a parent's reply reaches the office
+      without any of that. It is editable at `/admin/organisation`, beside the
+      registered name and the logo, and empty simply means no `Reply-To`.
+- [x] The invoice PDF attached, reversing Slice 13's "a link, not an
+      attachment". The link still carries the paying and still dies when the
+      document is voided; the PDF travels beside it because a parent asked to
+      be sent an invoice expects one. **The trade is one-way per message**: the
+      PDF holds the payer's name, address and TIN, and once it is in an inbox
+      and on a relay, voiding withdraws the link and nothing else.
+
+      `InvoicePdf` now builds the document for both the download and the mail —
+      two call sites rendering the same view with their own paper size, logo
+      rule and filename is two documents that drift, and the one nobody looks
+      at is the one a customer receives. It also turns font subsetting back on
+      per render: `barryvdh/laravel-dompdf` ships `enable_font_subsetting =>
+      false`, overriding dompdf's own default, so every invoice was **1.38 MB
+      against 32 KB** — invisible on a download, and the difference between an
+      attachment that arrives and one a mail server refuses. Set per render
+      rather than by publishing `config/dompdf.php`, whose other default
+      (`enable_remote = false`) is what stops dompdf fetching remote images.
+
+      The bytes are rendered in-request and carried on the mailable rather than
+      built inside `attachments()` from an id: the attachment is then the
+      document as it stood when the send was ordered, and a template failure is
+      an error the operator sees rather than a queue job that dies having told
+      nobody the invoice never went.
+- [x] The school's logo in the email, linked rather than embedded — no
+      attachment weight per message, and it resolves the same whether the send
+      runs in-request or on a worker sharing no filesystem with the web node.
+      `SchoolLogo` gained a third answer, `absoluteUrl()`: an inbox has no
+      origin to resolve `/storage/...` against, and the disk's `url` config is
+      absolute in every shipped environment but silently is not under
+      `Storage::fake()` — a difference invisible until a parent opens the mail.
+
+      `resources/views/vendor/mail/html/header.blade.php` is published **alone**
+      so every other mail component stays on Laravel's upgrade path. The slot
+      stays plain text: the markdown mailable renders a text half too, through
+      `text/header.blade.php`, and an `<img>` in the slot would arrive as
+      literal markup for anyone reading mail as text. Sizing is height-fixed
+      with automatic width rather than the theme's hard 75x75 `.logo` square,
+      which squashes a wordmark.
+- [ ] **`schedule:run` must actually be wired up on the server.** Nothing
+      depended on it before; from now on a school stops being billed if it is
+      not, silently.
 
 **Explicit non-goals for Phase 5:** bank feeds and reconciliation, multi-currency, budgeting,
 fixed-asset depreciation schedules.
@@ -523,6 +1116,13 @@ These don't belong to a single phase — they are present throughout.
 - Batch payroll for 100 employees: < 2 minutes
 - Bulk PDF for 100 payslips: < 5 minutes
 - Report export (CSV) for one period of 100 employees: < 30 seconds
+
+### Deployment steps that are not `migrate`
+- **`php artisan storage:link`, once per environment.** Uploaded school logos
+  live on the `public` disk and are served as static files. Without the symlink
+  the sidebar image 404s on every page while the invoice and payslip PDFs still
+  show the logo — they read the bytes off disk — so the symptom looks like a
+  front-end bug rather than a missing deploy step.
 
 ### Observability
 - Application logs to Laravel's stack driver; production also writes to a long-term store (Papertrail / CloudWatch)

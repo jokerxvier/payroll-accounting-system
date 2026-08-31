@@ -60,10 +60,9 @@ function balances(): InvoiceBalanceService
 }
 
 /**
- * Named for payments rather than just `allocator()`:
- * DocumentNumberAllocatorTest already declares one, and Pest helpers in test
- * files are plain global functions — two files declaring the same name fatals
- * the whole Feature suite at load time.
+ * Named for payments rather than just `allocator()`: Pest helpers in test
+ * files are plain global functions, so a name generic enough to collide with
+ * another file's helper fatals the whole Feature suite at load time.
  */
 function paymentAllocator(): ApplyPaymentAllocations
 {

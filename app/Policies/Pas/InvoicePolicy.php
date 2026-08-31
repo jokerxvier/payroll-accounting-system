@@ -97,6 +97,26 @@ final class InvoicePolicy
     }
 
     /**
+     * Email the document to the person who has to pay it.
+     *
+     * `MANAGE` rather than `POST_LEDGER`: this is customer correspondence, not
+     * a posting, and the officer who typed the invoice is usually the one
+     * chasing it. Auditors are read-only and stay out.
+     *
+     * Sales only — a purchase bill is the supplier's own document, there is
+     * nobody to send it to, and `MintInvoicePayToken` refuses to build a pay
+     * link for one. Issued only, which `isIssued()` already reads as
+     * "approved or later, and not voided": a draft is not yet a claim on
+     * anybody, and it can still change after it lands in an inbox.
+     */
+    public function send(User $user, Invoice $invoice): bool
+    {
+        return $invoice->isSales()
+            && $invoice->isIssued()
+            && $user->hasAnyRole(AccountingRoles::MANAGE);
+    }
+
+    /**
      * Print the document face.
      *
      * VIEW rather than MANAGE: an auditor asked to check what a customer was

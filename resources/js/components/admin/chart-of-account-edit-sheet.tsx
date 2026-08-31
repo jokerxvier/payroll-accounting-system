@@ -65,7 +65,9 @@ const TYPE_OPTIONS: { value: AccountType; label: string }[] = [
     { value: 'asset', label: 'Asset' },
     { value: 'liability', label: 'Liability' },
     { value: 'equity', label: 'Equity' },
-    { value: 'income', label: 'Income' },
+    // Stored as `income`; the interface calls it Revenue everywhere, so the
+    // picker and the chart-of-accounts tabs use one word for one thing.
+    { value: 'income', label: 'Revenue' },
     { value: 'expense', label: 'Expense' },
 ];
 

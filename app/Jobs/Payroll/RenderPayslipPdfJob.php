@@ -9,6 +9,8 @@ use App\Models\Lms\Staff;
 use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\Payslip;
+use App\Models\Pas\School;
+use App\Services\SchoolLogo;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
@@ -18,6 +20,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Spatie\Multitenancy\Models\Tenant;
 
 /**
  * Renders one payslip's PDF and writes it to a per-run temp directory.
@@ -146,6 +149,26 @@ final class RenderPayslipPdfJob implements ShouldQueue
                 $auditLines,
                 fn (array $l): bool => ($l['bucket'] ?? null) === 'employer_contribution',
             )),
+            // The employer, which this document did not name at all before.
+            // Resolved in BOTH view models on purpose — they are deliberately
+            // duplicated, and a field the template reads that appears in only
+            // one of them throws an undefined variable on the other path.
+            'school' => (function (): array {
+                $tenant = Tenant::current();
+                $school = $tenant instanceof School ? $tenant : null;
+
+                return [
+                    'name' => $school === null
+                        ? null
+                        : ($school->registered_name ?? $school->name),
+                    // A payslip is routinely handed to a bank or a landlord as
+                    // proof of employment, so the employer has to be
+                    // identifiable on it and not merely named.
+                    'tin' => $school?->tin,
+                    'address' => $school?->business_address,
+                    'logo' => app(SchoolLogo::class)->dataUri($school),
+                ];
+            })(),
         ];
     }
 }

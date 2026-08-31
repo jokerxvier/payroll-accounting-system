@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Label } from '@/components/ui/label';
 import {
     Table,
@@ -73,26 +73,26 @@ export default function JournalReport({ filters, entries, totals }: Props) {
                             onSubmit={submit}
                             className="flex flex-wrap items-end gap-3"
                         >
-                            <div className="space-y-1">
+                            <div className="w-[11rem] space-y-1">
                                 <Label htmlFor="from">From</Label>
-                                <Input
+                                <DatePicker
                                     id="from"
-                                    type="date"
                                     value={form.data.from}
-                                    onChange={(event) =>
-                                        form.setData('from', event.target.value)
+                                    onChange={(value) =>
+                                        form.setData('from', value)
                                     }
+                                    placeholder="From"
                                 />
                             </div>
-                            <div className="space-y-1">
+                            <div className="w-[11rem] space-y-1">
                                 <Label htmlFor="to">To</Label>
-                                <Input
+                                <DatePicker
                                     id="to"
-                                    type="date"
                                     value={form.data.to}
-                                    onChange={(event) =>
-                                        form.setData('to', event.target.value)
+                                    onChange={(value) =>
+                                        form.setData('to', value)
                                     }
+                                    placeholder="To"
                                 />
                             </div>
                             <Button
@@ -185,6 +185,23 @@ export default function JournalReport({ filters, entries, totals }: Props) {
                                                                         className="ml-2"
                                                                     >
                                                                         reversal
+                                                                    </Badge>
+                                                                )}
+                                                                {/*
+                                                                  A cutover snapshot touches
+                                                                  every balance-sheet account at
+                                                                  once. Unlabelled it reads as an
+                                                                  unexplained bulk posting on a
+                                                                  date nothing else happened.
+                                                                */}
+                                                                {entry.source_type ===
+                                                                    'opening-balance' && (
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className="ml-2"
+                                                                    >
+                                                                        opening
+                                                                        balance
                                                                     </Badge>
                                                                 )}
                                                             </>

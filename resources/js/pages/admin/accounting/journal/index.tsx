@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { BookText, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { BookText, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
@@ -18,6 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
     Select,
     SelectContent,
@@ -54,23 +55,44 @@ export default function JournalIndex({
     );
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const onStatusChange = (value: string): void => {
-        router.get(journalIndex().url, value === ALL ? {} : { status: value }, {
-            preserveScroll: true,
-            preserveState: true,
-        });
-    };
-
     /**
-     * Carry the active status filter across a page change. Passing only
-     * `{ page }` would silently drop it and drop the operator back into an
-     * unfiltered list.
+     * Every navigation carries every filter.
+     *
+     * Previously the status change and the page change each built their own
+     * query, and the page one had a comment warning that dropping a filter
+     * lands the operator back in an unfiltered list. With three filters that
+     * shape has to be one function or they start dropping each other.
      */
-    const goPage = (page: number): void => {
-        const query: Record<string, string | number> = { page };
+    const hasFilters =
+        filters.status !== null || filters.from !== null || filters.to !== null;
 
-        if (filters.status) {
-            query.status = filters.status;
+    const navigate = (patch: {
+        status?: string | null;
+        from?: string | null;
+        to?: string | null;
+        page?: number;
+    }): void => {
+        const query: Record<string, string | number> = {};
+
+        const status =
+            patch.status === undefined ? filters.status : patch.status;
+        const from = patch.from === undefined ? filters.from : patch.from;
+        const to = patch.to === undefined ? filters.to : patch.to;
+
+        if (status) {
+            query.status = status;
+        }
+
+        if (from) {
+            query.from = from;
+        }
+
+        if (to) {
+            query.to = to;
+        }
+
+        if (patch.page) {
+            query.page = patch.page;
         }
 
         router.get(journalIndex().url, query, {
@@ -78,6 +100,11 @@ export default function JournalIndex({
             preserveState: true,
         });
     };
+
+    const onStatusChange = (value: string): void =>
+        navigate({ status: value === ALL ? null : value, page: undefined });
+
+    const goPage = (page: number): void => navigate({ page });
 
     const handleConfirmDelete = (): void => {
         if (pendingDelete === null) {
@@ -140,6 +167,61 @@ export default function JournalIndex({
                             <SelectItem value="voided">Voided</SelectItem>
                         </SelectContent>
                     </Select>
+                    {/*
+                      Bounds are inclusive at both ends, and either can stand
+                      alone — "everything since March" is as common a question
+                      as a closed range, so neither picker requires the other.
+                    */}
+                    <div className="flex items-center gap-2">
+                        <DatePicker
+                            id="filter-from"
+                            value={filters.from ?? ''}
+                            onChange={(value) =>
+                                navigate({ from: value === '' ? null : value })
+                            }
+                            placeholder="From"
+                            className="w-[10.5rem]"
+                        />
+                        <span className="text-xs text-muted-foreground">
+                            to
+                        </span>
+                        <DatePicker
+                            id="filter-to"
+                            value={filters.to ?? ''}
+                            onChange={(value) =>
+                                navigate({ to: value === '' ? null : value })
+                            }
+                            placeholder="To"
+                            className="w-[10.5rem]"
+                        />
+                    </div>
+
+                    {/*
+                      Only when something is actually filtered. A permanent
+                      Clear on an unfiltered list is a control that does
+                      nothing, and it reads as though a filter is on.
+                      `type` is deliberately not reset — it selects which list
+                      you are looking at, not how it is narrowed.
+                    */}
+                    {hasFilters && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground"
+                            onClick={() =>
+                                navigate({
+                                    status: null,
+                                    from: null,
+                                    to: null,
+                                })
+                            }
+                        >
+                            <X className="mr-1 h-3.5 w-3.5" />
+                            Clear filters
+                        </Button>
+                    )}
+
                     <span className="text-xs text-muted-foreground tabular-nums">
                         {entries.total}{' '}
                         {entries.total === 1 ? 'entry' : 'entries'}

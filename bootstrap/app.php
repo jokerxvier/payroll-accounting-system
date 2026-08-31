@@ -30,6 +30,20 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
+        /*
+         * The first CSRF exclusion in this application.
+         *
+         * A gateway webhook is a server-to-server POST with no session and no
+         * token to present; CSRF protection defends a browser session, which
+         * there isn't one of here. The request is authenticated instead by an
+         * HMAC signature over the raw body, checked in
+         * GatewayWebhookController before the payload is read. Narrowed to
+         * the webhook path only — nothing else in the app is exempt.
+         */
+        $middleware->validateCsrfTokens(except: [
+            'schools/*/webhooks/*',
+        ]);
+
         $middleware->web(append: [
             HandleAppearance::class,
             // Phase E preview — re-pivots the tenant from the super-admin's

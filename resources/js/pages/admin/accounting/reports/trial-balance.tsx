@@ -1,12 +1,13 @@
 import { Head, useForm } from '@inertiajs/react';
 import { CheckCircle2, TriangleAlert } from 'lucide-react';
+import { CutoverNote } from '@/components/admin/cutover-note';
 import { ReportExportMenu } from '@/components/admin/report-export-menu';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Label } from '@/components/ui/label';
 import {
     Table,
@@ -27,6 +28,7 @@ interface Props {
     filters: { from: string; to: string; include_empty: boolean };
     rows: TrialBalanceRow[];
     totals: TrialBalanceTotals;
+    booksOpenedOn?: string | null;
 }
 
 /**
@@ -42,7 +44,12 @@ function Amount({ centavos }: { centavos: number }) {
     return <Money amount={centavos / 100} showSymbol={false} />;
 }
 
-export default function TrialBalanceReport({ filters, rows, totals }: Props) {
+export default function TrialBalanceReport({
+    filters,
+    rows,
+    totals,
+    booksOpenedOn,
+}: Props) {
     const form = useForm({
         from: filters.from,
         to: filters.to,
@@ -69,6 +76,12 @@ export default function TrialBalanceReport({ filters, rows, totals }: Props) {
                     title="Trial balance"
                     description="Every account's opening balance, movement across the range, and closing balance — taken from posted journal entries only."
                     actions={<ReportExportMenu baseUrl={exportUrl} />}
+                />
+
+                <CutoverNote
+                    booksOpenedOn={booksOpenedOn}
+                    from={filters.from}
+                    to={filters.to}
                 />
 
                 {/* The verdict sits above the table because it is the report's
@@ -147,26 +160,26 @@ export default function TrialBalanceReport({ filters, rows, totals }: Props) {
                             onSubmit={submit}
                             className="flex flex-wrap items-end gap-3"
                         >
-                            <div className="space-y-1">
+                            <div className="w-[11rem] space-y-1">
                                 <Label htmlFor="from">From</Label>
-                                <Input
+                                <DatePicker
                                     id="from"
-                                    type="date"
                                     value={form.data.from}
-                                    onChange={(event) =>
-                                        form.setData('from', event.target.value)
+                                    onChange={(value) =>
+                                        form.setData('from', value)
                                     }
+                                    placeholder="From"
                                 />
                             </div>
-                            <div className="space-y-1">
+                            <div className="w-[11rem] space-y-1">
                                 <Label htmlFor="to">To</Label>
-                                <Input
+                                <DatePicker
                                     id="to"
-                                    type="date"
                                     value={form.data.to}
-                                    onChange={(event) =>
-                                        form.setData('to', event.target.value)
+                                    onChange={(value) =>
+                                        form.setData('to', value)
                                     }
+                                    placeholder="To"
                                 />
                             </div>
                             <div className="flex items-center gap-2 pb-2">

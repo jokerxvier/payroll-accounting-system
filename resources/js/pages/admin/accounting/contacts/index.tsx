@@ -1,5 +1,5 @@
-import { Head, router } from '@inertiajs/react';
-import { Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { Head, Link, router } from '@inertiajs/react';
+import { Download, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ContactEditSheet } from '@/components/admin/contact-edit-sheet';
@@ -131,10 +131,25 @@ export default function ContactsIndex({
                     description="Who an invoice or bill is addressed to. A contact can be a customer, a supplier, or both."
                     actions={
                         can.create ? (
-                            <Button type="button" onClick={openCreate}>
-                                <Plus className="mr-1 h-4 w-4" />
-                                New contact
-                            </Button>
+                            <div className="flex items-center gap-2">
+                                {/*
+                                  Parents live in the school records, not here.
+                                  Typing them in by hand is how a family ends
+                                  up as two contacts with half a receivable
+                                  each, so the import is offered beside the
+                                  manual button rather than buried.
+                                */}
+                                <Button asChild variant="outline">
+                                    <Link href="/admin/contacts/import-guardians">
+                                        <Download className="mr-1 h-4 w-4" />
+                                        Import guardians
+                                    </Link>
+                                </Button>
+                                <Button type="button" onClick={openCreate}>
+                                    <Plus className="mr-1 h-4 w-4" />
+                                    New contact
+                                </Button>
+                            </div>
                         ) : undefined
                     }
                 />

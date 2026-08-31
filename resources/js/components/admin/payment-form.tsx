@@ -1,7 +1,9 @@
 import { Link, router, useForm } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import { format } from 'date-fns';
+import { useImperativeHandle, useMemo, useState } from 'react';
+import type { FormEvent, Ref } from 'react';
 import { toast } from 'sonner';
+import { CounterpartyPicker } from '@/components/admin/counterparty-picker';
 import InputError from '@/components/input-error';
 import { Money } from '@/components/money';
 import { Button } from '@/components/ui/button';
@@ -12,6 +14,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -29,6 +32,12 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    amountInputToCentavos,
+    centavosToAmountInput,
+    formatAmountInput,
+    isAmountInput,
+} from '@/lib/money-input';
 import { cn } from '@/lib/utils';
 import {
     create as paymentCreate,
@@ -38,6 +47,8 @@ import {
     update as paymentUpdate,
 } from '@/routes/admin/payments';
 import type {
+    CashAccountOption,
+    PaymentContactOption,
     PaymentEditable,
     PaymentFormOptions,
     PaymentMethod,
@@ -75,8 +86,20 @@ type Mode =
     | { kind: 'create'; type: PaymentType }
     | { kind: 'edit'; payment: PaymentEditable };
 
+/**
+ * What the create page can ask of the form.
+ *
+ * The demo-fill button sits in the page header beside Back, but the state it
+ * fills lives in here. A handle is the smallest seam that keeps both where
+ * they belong — the same seam `InvoiceFormHandle` opens.
+ */
+export interface PaymentFormHandle {
+    fillWithDemoData: () => void;
+}
+
 interface PaymentFormProps extends PaymentFormOptions {
     mode: Mode;
+    ref?: Ref<PaymentFormHandle>;
 }
 
 interface FormShape {
@@ -97,32 +120,77 @@ interface FormShape {
 }
 
 /**
- * Digits, at most one decimal point, at most two places after it.
+ * Today, where the operator is.
  *
- * A gate on each keystroke rather than sanitising afterwards, so a rejected
- * character never appears. A trailing point ("1234.") passes — it is a
- * legitimate half-finished entry.
+ * NOT `toISOString().slice(0, 10)`: that converts to UTC, so any Manila
+ * morning before 08:00 resolves to yesterday and a receipt defaults to the
+ * wrong day (RULES.md §Date inputs). Same fix the invoice form carries.
  */
-const AMOUNT_PATTERN = /^\d*\.?\d{0,2}$/;
-
-function centavosToPesos(centavos: number): string {
-    return centavos === 0 ? '' : (centavos / 100).toFixed(2);
+function today(): string {
+    return format(new Date(), 'yyyy-MM-dd');
 }
 
-function pesosToCentavos(input: string): number {
-    const cleaned = input.trim();
+/**
+ * References a demo receipt draws from. Plausible enough to show someone
+ * without explaining it first, in the shape a school actually writes.
+ */
+const DEMO_REFERENCES: Record<PaymentType, string[]> = {
+    receipt: ['OR-', 'CR-', 'AR-'],
+    disbursement: ['CV-', 'DV-', 'PV-'],
+};
 
-    if (cleaned === '' || cleaned === '.') {
-        return 0;
+function pick<T>(options: T[]): T {
+    return options[Math.floor(Math.random() * options.length)] as T;
+}
+
+/**
+ * A different plausible payment each time, composed from this tenant's own
+ * rows rather than from a fixture.
+ *
+ * Returns null when there is no contact or nowhere for the money to sit:
+ * there is nothing to compose a payment out of, and a half-filled form is
+ * worse than an untouched one. Allocations are deliberately absent — the open
+ * documents for a payer arrive a round trip after the payer is chosen, so a
+ * filler that guessed them would be filling a grid it cannot see.
+ */
+function composeDemoPayment(
+    type: PaymentType,
+    contactOptions: PaymentContactOption[],
+    cashAccountOptions: CashAccountOption[],
+): Pick<
+    FormShape,
+    | 'contact_id'
+    | 'amount_centavos'
+    | 'payment_date'
+    | 'cash_account_id'
+    | 'method'
+    | 'reference'
+> | null {
+    if (contactOptions.length === 0 || cashAccountOptions.length === 0) {
+        return null;
     }
 
-    const parsed = Number(cleaned);
+    const received = new Date();
+    received.setDate(received.getDate() - pick([0, 0, 1, 2, 5]));
 
-    return Number.isNaN(parsed) ? 0 : Math.round(parsed * 100);
-}
-
-function today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return {
+        contact_id: pick(contactOptions).id,
+        amount_centavos: pick([500, 1200, 2500, 5000, 15000]) * 100,
+        payment_date: format(received, 'yyyy-MM-dd'),
+        // Never an invented id: `cashAccountOptions` already excludes system
+        // and non-cash accounts, and PaymentRequest refuses anything else.
+        cash_account_id: pick(cashAccountOptions).id,
+        method: pick<PaymentMethod>([
+            'cash',
+            'cash',
+            'bank_transfer',
+            'cheque',
+            'online',
+        ]),
+        reference:
+            pick(DEMO_REFERENCES[type]) +
+            String(Math.floor(Math.random() * 9000) + 1000),
+    };
 }
 
 function buildDefaults(mode: Mode): FormShape {
@@ -157,6 +225,7 @@ function buildDefaults(mode: Mode): FormShape {
 
 export function PaymentForm({
     mode,
+    ref,
     contactOptions,
     cashAccountOptions,
     outstandingInvoices,
@@ -171,7 +240,7 @@ export function PaymentForm({
     // after the decimals — so a multi-digit figure cannot be typed at all.
     // Third time this pattern has been needed; see journal-entry-form.tsx.
     const [rawAmount, setRawAmount] = useState<string>(() =>
-        centavosToPesos(form.data.amount_centavos),
+        centavosToAmountInput(form.data.amount_centavos),
     );
 
     // Per-invoice raw text, keyed by invoice id rather than by row index so
@@ -182,7 +251,7 @@ export function PaymentForm({
         Object.fromEntries(
             form.data.allocations.map((a) => [
                 a.invoice_id,
-                centavosToPesos(a.amount_centavos),
+                centavosToAmountInput(a.amount_centavos),
             ]),
         ),
     );
@@ -209,8 +278,7 @@ export function PaymentForm({
     const overAllocated = unallocated < 0;
 
     /** Reload the page's options once a counterparty is chosen. */
-    const onContactChange = (value: string): void => {
-        const contactId = Number(value);
+    const onContactChange = (contactId: number): void => {
         form.setData('contact_id', contactId);
 
         const target = isEdit
@@ -235,22 +303,37 @@ export function PaymentForm({
     };
 
     const setAmount = (input: string): void => {
-        if (!AMOUNT_PATTERN.test(input)) {
+        if (!isAmountInput(input)) {
             return;
         }
 
         setRawAmount(input);
-        form.setData('amount_centavos', pesosToCentavos(input));
+        form.setData('amount_centavos', amountInputToCentavos(input));
+    };
+
+    /**
+     * Group and pad on the way out, not on each keystroke — regrouping while
+     * typing moves the caret to the end of the box after every character.
+     */
+    const formatAmountOnBlur = (): void => {
+        setRawAmount((prev) => formatAmountInput(prev));
+    };
+
+    const formatAllocationOnBlur = (invoiceId: number): void => {
+        setRawAllocations((prev) => ({
+            ...prev,
+            [invoiceId]: formatAmountInput(prev[invoiceId] ?? ''),
+        }));
     };
 
     const setAllocation = (invoiceId: number, input: string): void => {
-        if (!AMOUNT_PATTERN.test(input)) {
+        if (!isAmountInput(input)) {
             return;
         }
 
         setRawAllocations((prev) => ({ ...prev, [invoiceId]: input }));
 
-        const centavos = pesosToCentavos(input);
+        const centavos = amountInputToCentavos(input);
         const without = form.data.allocations.filter(
             (a) => a.invoice_id !== invoiceId,
         );
@@ -287,7 +370,7 @@ export function PaymentForm({
 
             if (take > 0) {
                 next.push({ invoice_id: invoice.id, amount_centavos: take });
-                raw[invoice.id] = centavosToPesos(take);
+                raw[invoice.id] = centavosToAmountInput(take);
                 remaining -= take;
             }
         }
@@ -300,6 +383,42 @@ export function PaymentForm({
         form.setData('allocations', []);
         setRawAllocations({});
     };
+
+    const fillWithDemoData = (): void => {
+        const draft = composeDemoPayment(
+            form.data.type,
+            contactOptions,
+            cashAccountOptions,
+        );
+
+        if (draft === null) {
+            return;
+        }
+
+        form.setData((previous) => ({
+            ...previous,
+            amount_centavos: draft.amount_centavos,
+            payment_date: draft.payment_date,
+            cash_account_id: draft.cash_account_id,
+            method: draft.method,
+            reference: draft.reference,
+        }));
+
+        // The amount box is driven by its own raw text, so setting the
+        // centavos alone would leave it blank while the totals below showed
+        // money.
+        setRawAmount(centavosToAmountInput(draft.amount_centavos));
+
+        // Through the same handler a person's click goes through, not
+        // `setData`: choosing a payer is what fetches their open documents,
+        // and a filler that set the id directly would leave the grid empty
+        // and the allocation controls with nothing to work on.
+        if (draft.contact_id !== null) {
+            onContactChange(draft.contact_id);
+        }
+    };
+
+    useImperativeHandle(ref, () => ({ fillWithDemoData }));
 
     const handleSubmit = (event: FormEvent): void => {
         event.preventDefault();
@@ -337,30 +456,14 @@ export function PaymentForm({
                         <Label htmlFor="contact_id">
                             {isReceipt ? 'Received from' : 'Paid to'}
                         </Label>
-                        <Select
-                            value={
-                                form.data.contact_id === null
-                                    ? ''
-                                    : String(form.data.contact_id)
-                            }
-                            onValueChange={onContactChange}
-                        >
-                            <SelectTrigger id="contact_id">
-                                <SelectValue
-                                    placeholder={`Choose a ${isReceipt ? 'customer' : 'supplier'}`}
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {contactOptions.map((contact) => (
-                                    <SelectItem
-                                        key={contact.id}
-                                        value={String(contact.id)}
-                                    >
-                                        {contact.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <CounterpartyPicker
+                            id="contact_id"
+                            noun={isReceipt ? 'customer' : 'supplier'}
+                            options={contactOptions}
+                            value={form.data.contact_id}
+                            disabled={contactOptions.length === 0}
+                            onSelect={onContactChange}
+                        />
                         <InputError message={form.errors.contact_id} />
                     </div>
 
@@ -373,19 +476,27 @@ export function PaymentForm({
                             placeholder="0.00"
                             className="text-right tabular-nums"
                             onChange={(e) => setAmount(e.target.value)}
+                            onBlur={formatAmountOnBlur}
                         />
                         <InputError message={form.errors.amount_centavos} />
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="payment_date">Date</Label>
-                        <Input
+                        {/*
+                          DatePicker, not `<Input type="date">` — the native
+                          control renders differently in every browser and
+                          ignores the theme (CODING_STANDARDS_REACT.md §Date
+                          inputs). Same swap the invoice form carries.
+                        */}
+                        <DatePicker
                             id="payment_date"
-                            type="date"
                             value={form.data.payment_date}
-                            onChange={(e) =>
-                                form.setData('payment_date', e.target.value)
+                            onChange={(value) =>
+                                form.setData('payment_date', value)
                             }
+                            placeholder="Pick a date"
+                            ariaInvalid={!!form.errors.payment_date}
                         />
                         <InputError message={form.errors.payment_date} />
                     </div>
@@ -552,6 +663,11 @@ export function PaymentForm({
                                                                     invoice.id,
                                                                     e.target
                                                                         .value,
+                                                                )
+                                                            }
+                                                            onBlur={() =>
+                                                                formatAllocationOnBlur(
+                                                                    invoice.id,
                                                                 )
                                                             }
                                                         />

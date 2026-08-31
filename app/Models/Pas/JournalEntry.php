@@ -78,6 +78,21 @@ final class JournalEntry extends Model
         self::STATUS_VOIDED,
     ];
 
+    /**
+     * `source_type` marker for the cutover snapshot written by
+     * `PostOpeningBalances`.
+     *
+     * Every other value in this column is a model FQCN with a matching
+     * `source_id` — an Invoice, a Payment, a PayrollRun. An opening balance
+     * has no such source: it describes what the books already said before
+     * this system existed, so there is no row here to point at and
+     * `source_id` stays null. A sentinel rather than a new boolean column
+     * because the question it answers ("where did this entry come from?") is
+     * the one `source_type` already exists to answer, and nothing morphs the
+     * column into a class.
+     */
+    public const SOURCE_OPENING_BALANCE = 'opening-balance';
+
     protected $table = 'pas_journal_entries';
 
     /** @var list<string> */
@@ -239,6 +254,28 @@ final class JournalEntry extends Model
     public function scopeForPeriod(Builder $query, int $accountingPeriodId): Builder
     {
         return $query->where('accounting_period_id', $accountingPeriodId);
+    }
+
+    /**
+     * The cutover snapshot, posted or otherwise.
+     *
+     * Scoped rather than left to callers because "is there already an
+     * opening balance for this school?" is asked from three places — the
+     * import preview, the posting action's one-snapshot guard, and the
+     * report note — and three hand-written `where` clauses on a sentinel
+     * string is how one of them ends up spelling it differently.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeOpeningBalance(Builder $query): Builder
+    {
+        return $query->where('source_type', self::SOURCE_OPENING_BALANCE);
+    }
+
+    public function isOpeningBalance(): bool
+    {
+        return $this->source_type === self::SOURCE_OPENING_BALANCE;
     }
 
     /** @return HasMany<JournalEntryLine, $this> */

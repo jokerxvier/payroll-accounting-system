@@ -30,6 +30,28 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Payment gateways
+    |--------------------------------------------------------------------------
+    |
+    | Where money settled by PayMongo or Stripe lands, when a school has not
+    | said otherwise on the gateway settings screen.
+    |
+    | Keyed by chart-of-accounts CODE rather than by a system code, unlike the
+    | merchant-fee account beside it. Giving a cash account a `system_code`
+    | would remove it from the manual payment picker —
+    | `PaymentController::cashAccountOptions()` excludes system accounts on
+    | purpose — so breaking hand-keyed receipts to tidy up a gateway form is a
+    | trade not worth making. Resolving by code follows the same
+    | config-not-code precedent as the payroll mapping below.
+    |
+    */
+
+    'gateway' => [
+        'default_cash_account_code' => env('ACCOUNTING_GATEWAY_CASH_ACCOUNT_CODE', '1110'),
+    ],
+
     'payroll' => [
 
         /*

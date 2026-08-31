@@ -90,6 +90,11 @@ export interface JournalEntryEditable {
 
 export interface JournalEntryIndexProps {
     entries: Paginator<JournalEntryRow>;
-    filters: { status: JournalEntryStatus | null };
+    filters: {
+        status: JournalEntryStatus | null;
+        /** Inclusive entry-date bounds, 'YYYY-MM-DD' or null. */
+        from: string | null;
+        to: string | null;
+    };
     can: { create: boolean };
 }

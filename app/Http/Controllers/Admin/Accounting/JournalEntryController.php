@@ -13,6 +13,7 @@ use App\Http\Requests\Admin\Accounting\JournalEntryRequest;
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\JournalEntry;
 use App\Models\Pas\JournalEntryLine;
+use App\Support\DayBoundary;
 use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
@@ -51,12 +52,23 @@ final class JournalEntryController extends Controller
 
         $status = (string) $request->query('status', '');
 
+        // Bounds are inclusive at both ends, and go through DayBoundary
+        // rather than a bare 'Y-m-d': a `date` column compared to a plain
+        // date string drops the last day of the range under SQLite.
+        $from = DayBoundary::parse($request->query('from'));
+        $to = DayBoundary::parse($request->query('to'));
+
+        $after = $from !== null ? DayBoundary::start($from) : null;
+        $before = $to !== null ? DayBoundary::end($to) : null;
+
         $entries = JournalEntry::query()
             ->with(['accountingPeriod:id,code'])
             ->when(
                 in_array($status, JournalEntry::STATUSES, true),
                 fn ($query) => $query->where('status', $status),
             )
+            ->when($after !== null, fn ($query) => $query->where('date', '>=', $after))
+            ->when($before !== null, fn ($query) => $query->where('date', '<=', $before))
             ->orderByDesc('date')
             ->orderByDesc('id')
             ->paginate(self::PER_PAGE)
@@ -65,7 +77,11 @@ final class JournalEntryController extends Controller
 
         return Inertia::render('admin/accounting/journal/index', [
             'entries' => $entries,
-            'filters' => ['status' => $status !== '' ? $status : null],
+            'filters' => [
+                'status' => $status !== '' ? $status : null,
+                'from' => $from?->toDateString(),
+                'to' => $to?->toDateString(),
+            ],
             'can' => [
                 'create' => Gate::allows('create', JournalEntry::class),
             ],

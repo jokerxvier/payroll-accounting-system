@@ -8,6 +8,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Accounting\ContactRequest;
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\Contact;
+use App\Models\Pas\Invoice;
+use App\Models\Pas\Payment;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -75,8 +78,13 @@ final class ContactController extends Controller
 
         $contact = DB::transaction(fn (): Contact => Contact::create($data));
 
+        // Back where the sheet was opened, not always the register: the same
+        // sheet now creates a customer from the invoice form, and sending
+        // that operator to the contacts list would throw away the draft they
+        // were part way through. From the register itself `back()` is the
+        // register, filters and all.
         return redirect()
-            ->route('admin.contacts.index')
+            ->back(fallback: route('admin.contacts.index'))
             ->with('success', "Contact '{$contact->name}' created.");
     }
 
@@ -113,7 +121,18 @@ final class ContactController extends Controller
                 ->with('error', "Cannot delete '{$contact->name}' — documents reference it. Mark the contact inactive instead, so its history stays readable.");
         }
 
-        DB::transaction(fn () => $contact->delete());
+        try {
+            DB::transaction(fn () => $contact->delete());
+        } catch (QueryException $e) {
+            // The foreign key is the real guarantee; the check above is the
+            // friendly one. A document created between the two would
+            // otherwise surface as an unhandled integrity violation.
+            report($e);
+
+            return redirect()
+                ->route('admin.contacts.index')
+                ->with('error', "Cannot delete '{$contact->name}' — something now references it. Mark the contact inactive instead.");
+        }
 
         return redirect()
             ->route('admin.contacts.index')
@@ -123,13 +142,20 @@ final class ContactController extends Controller
     /**
      * Whether any document points at this contact.
      *
-     * Always false today. Slice 5 fills this in with the invoice and bill
-     * relations; keeping the call site here means the refusal path is already
-     * written, tested, and worded when it does.
+     * This was a stub returning `false` from Slice 4 to Slice 11, waiting for
+     * the documents that would fill it in. They arrived in Slice 5 and nobody
+     * came back — so the refusal path below it, already written and worded,
+     * never once fired, and deleting an invoiced contact hit the
+     * `restrictOnDelete` foreign key as an unhandled 500 instead.
+     *
+     * Invoices and payments only. `pas_contact_students` cascades on purpose:
+     * a link to a student has no meaning without the payer, and it is not
+     * financial history worth preserving on its own.
      */
     private function isReferenced(Contact $contact): bool
     {
-        return false;
+        return Invoice::query()->where('contact_id', $contact->getKey())->exists()
+            || Payment::query()->where('contact_id', $contact->getKey())->exists();
     }
 
     /**
@@ -158,7 +184,12 @@ final class ContactController extends Controller
             // The next model here with real state inherits it for free.
             'can' => [
                 'update' => Gate::allows('update', $contact),
-                'delete' => Gate::allows('delete', $contact),
+                // State first, then policy — the same ordering PaymentController
+                // uses, and for the same reason: `Gate::before` grants a
+                // platform admin every ability and would sail straight past a
+                // check that lived only in the policy.
+                'delete' => ! $this->isReferenced($contact)
+                    && Gate::allows('delete', $contact),
             ],
         ];
     }

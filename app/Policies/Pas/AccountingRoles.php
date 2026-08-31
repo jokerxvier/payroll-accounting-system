@@ -62,6 +62,21 @@ final class AccountingRoles
     public const POST_LEDGER = ['super-admin', 'accountant'];
 
     /**
+     * Enter and change payment gateway credentials.
+     *
+     * The narrowest list in this class, narrower even than CLOSE_PERIOD. A
+     * closed period can be reopened; a leaked or swapped secret key can move
+     * money to somewhere else entirely, and the person who did it is not
+     * recorded in the value because `PaymentGatewaySetting::auditExclude()`
+     * deliberately keeps credentials out of the audit trail. Kept to
+     * `super-admin` — plus platform admins, who reach it through the
+     * `Gate::before` short-circuit like everything else.
+     *
+     * @var list<string>
+     */
+    public const PAYMENT_GATEWAY = ['super-admin'];
+
+    /**
      * Close and reopen an accounting period.
      *
      * Deliberately narrower than MANAGE: closing freezes the ledger and

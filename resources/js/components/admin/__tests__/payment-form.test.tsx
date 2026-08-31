@@ -1,6 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { createRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { PaymentForm } from '@/components/admin/payment-form';
+import type { PaymentFormHandle } from '@/components/admin/payment-form';
 import type {
     CashAccountOption,
     OutstandingInvoice,
@@ -28,10 +30,16 @@ vi.mock('@inertiajs/react', async () => {
             const [data, setData] = useStateInner<T>(initial);
 
             const setField = (
-                key: keyof T | Partial<T>,
+                key: keyof T | Partial<T> | ((previous: T) => T),
                 value?: T[keyof T],
             ): void => {
-                if (typeof key === 'string') {
+                if (typeof key === 'function') {
+                    // Inertia's useForm accepts a functional updater and the
+                    // demo filler uses one. Without this branch the shim
+                    // spreads the function itself into state and every field
+                    // it set is silently discarded.
+                    setData((prev) => (key as (previous: T) => T)(prev));
+                } else if (typeof key === 'string') {
                     setData((prev) => ({ ...prev, [key]: value }));
                 } else {
                     setData((prev) => ({ ...prev, ...(key as Partial<T>) }));
@@ -104,9 +112,12 @@ function renderForm(outstanding = OUTSTANDING): void {
 }
 
 /**
- * Edit mode, which is the only way to render with a counterparty already
- * chosen — picking one through a Radix Select is not driveable in jsdom, and
- * the create form deliberately shows nothing until one is picked.
+ * Render with a counterparty already chosen.
+ *
+ * This used edit mode because picking one through a Radix Select was not
+ * driveable in jsdom. The field is a combobox now and `chooseContact()` below
+ * drives it directly, but edit mode is still the shortest way to start a test
+ * from a chosen payer without a round trip.
  */
 function renderWithContact(outstanding = OUTSTANDING): void {
     render(
@@ -131,6 +142,12 @@ function renderWithContact(outstanding = OUTSTANDING): void {
             outstandingInvoices={outstanding}
         />,
     );
+}
+
+/** Pick a payer the way an operator does, through the combobox. */
+function chooseContact(name: string | RegExp = /Dela Cruz/): void {
+    fireEvent.click(screen.getByLabelText('Received from'));
+    fireEvent.click(screen.getByRole('option', { name }));
 }
 
 /**
@@ -295,8 +312,8 @@ describe('PaymentForm', () => {
         );
 
         // ₱5,000 covers the older ₱3,000 in full, leaving ₱2,000 for the next.
-        expect(valueOf(APPLY_1)).toBe('3000.00');
-        expect(valueOf(APPLY_2)).toBe('2000.00');
+        expect(valueOf(APPLY_1)).toBe('3,000.00');
+        expect(valueOf(APPLY_2)).toBe('2,000.00');
         expect(totalFor('Held as an advance')).toContain('0.00');
     });
 
@@ -308,7 +325,7 @@ describe('PaymentForm', () => {
             screen.getByRole('button', { name: 'Allocate oldest first' }),
         );
 
-        expect(valueOf(APPLY_1)).toBe('1000.00');
+        expect(valueOf(APPLY_1)).toBe('1,000.00');
         expect(valueOf(APPLY_2)).toBe('');
     });
 
@@ -322,8 +339,8 @@ describe('PaymentForm', () => {
             screen.getByRole('button', { name: 'Allocate oldest first' }),
         );
 
-        expect(valueOf(APPLY_1)).toBe('3000.00');
-        expect(valueOf(APPLY_2)).toBe('4000.00');
+        expect(valueOf(APPLY_1)).toBe('3,000.00');
+        expect(valueOf(APPLY_2)).toBe('4,000.00');
         expect(totalFor('Held as an advance')).toContain('2,000.00');
     });
 
@@ -353,5 +370,134 @@ describe('PaymentForm', () => {
         });
 
         expect(totalFor('Applied')).toContain('0.00');
+    });
+});
+
+/*
+ * Choosing a payer is what fetches their open documents. The field became a
+ * searchable combobox because a school's register runs to hundreds of
+ * families; the reload behind it is the part most easily lost in that swap.
+ */
+describe('choosing who paid', () => {
+    it('searches the register rather than listing it', () => {
+        renderForm();
+
+        fireEvent.click(screen.getByLabelText('Received from'));
+        fireEvent.change(
+            screen.getByPlaceholderText(/search by name or tin/i),
+            { target: { value: 'dela' } },
+        );
+
+        expect(
+            screen.getByRole('option', { name: /Dela Cruz/ }),
+        ).toBeInTheDocument();
+    });
+
+    it("asks the server for that payer's open documents", () => {
+        // A partial reload, not a page load: the grid needs this contact's
+        // documents and nothing else on the page has changed.
+        routerGet.mockClear();
+        renderForm();
+
+        chooseContact();
+
+        expect(routerGet).toHaveBeenCalledTimes(1);
+        expect(routerGet.mock.calls[0][1]).toEqual({
+            type: 'receipt',
+            contact_id: 1,
+        });
+        expect(routerGet.mock.calls[0][2]).toMatchObject({
+            only: ['outstandingInvoices'],
+            preserveState: true,
+        });
+    });
+
+    it('says who was chosen once one is', () => {
+        renderForm();
+
+        chooseContact();
+
+        expect(screen.getByLabelText('Received from')).toHaveTextContent(
+            'Dela Cruz Family',
+        );
+    });
+});
+
+/*
+ * The dev filler. Gated server-side on `dev.demo-fill`; the form only exposes
+ * the handle, and the page decides whether to offer a button for it.
+ */
+describe('filling with demo data', () => {
+    function fill(
+        props: {
+            contactOptions?: typeof CONTACTS;
+            cashAccountOptions?: typeof CASH_ACCOUNTS;
+        } = {},
+    ): React.RefObject<PaymentFormHandle | null> {
+        const ref = createRef<PaymentFormHandle>();
+
+        render(
+            <PaymentForm
+                ref={ref}
+                mode={{ kind: 'create', type: 'receipt' }}
+                contactOptions={props.contactOptions ?? CONTACTS}
+                cashAccountOptions={props.cashAccountOptions ?? CASH_ACCOUNTS}
+                outstandingInvoices={[]}
+            />,
+        );
+
+        act(() => ref.current?.fillWithDemoData());
+
+        return ref;
+    }
+
+    it('fills the amount box, not just the figure behind it', () => {
+        // The amount input is driven by its own raw text. Setting the centavos
+        // alone leaves the box blank while the totals below show money.
+        fill();
+
+        expect(valueOf('Amount')).not.toBe('');
+        expect(Number(valueOf('Amount').replace(/,/g, ''))).toBeGreaterThan(0);
+    });
+
+    it('picks a real payer and asks for their documents', () => {
+        // Through the same handler a click goes through — a filler that set
+        // the id directly would leave the allocation grid empty.
+        routerGet.mockClear();
+        fill();
+
+        expect(routerGet).toHaveBeenCalledTimes(1);
+        expect(routerGet.mock.calls[0][1]).toMatchObject({ type: 'receipt' });
+    });
+
+    it('picks a cash account the server will accept', () => {
+        // Never an invented id: PaymentRequest refuses anything that is not an
+        // active, cash-equivalent asset, and the options list is already that.
+        fill();
+
+        expect(screen.getByLabelText('Received into')).toHaveTextContent(
+            'Cash on Hand',
+        );
+    });
+
+    it('leaves allocations alone', () => {
+        // The open documents arrive a round trip after the payer is chosen, so
+        // a filler that guessed them would be filling a grid it cannot see.
+        fill();
+
+        expect(screen.queryByLabelText(/^Apply to /)).not.toBeInTheDocument();
+    });
+
+    it('does nothing when there is nowhere for the money to sit', () => {
+        // A half-filled form is worse than an untouched one.
+        fill({ cashAccountOptions: [] });
+
+        expect(valueOf('Amount')).toBe('');
+    });
+
+    it('does nothing when the register is empty', () => {
+        fill({ contactOptions: [] });
+
+        expect(valueOf('Amount')).toBe('');
     });
 });

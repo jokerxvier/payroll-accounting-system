@@ -43,11 +43,17 @@ final class PostJournalEntry
     ) {}
 
     /**
+     * `$actorUserId` is nullable because not every posting has a person
+     * behind it. A gateway webhook posts a receipt with no authenticated
+     * user, and `posted_by_user_id` is nullable with a foreign key to
+     * `pas_users` — so a sentinel like 0 would violate the constraint, while
+     * null records the truth: nobody clicked anything.
+     *
      * @throws DomainException Illegal status, malformed or empty lines.
      * @throws UnbalancedJournalEntryException Debits ≠ credits.
      * @throws ClosedAccountingPeriodException Period closed or missing.
      */
-    public function execute(JournalEntry $entry, int $actorUserId): JournalEntry
+    public function execute(JournalEntry $entry, ?int $actorUserId): JournalEntry
     {
         if (! $entry->isPostable()) {
             throw new DomainException(sprintf(

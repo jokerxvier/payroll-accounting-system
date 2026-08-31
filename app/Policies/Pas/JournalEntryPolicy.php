@@ -72,6 +72,20 @@ final class JournalEntryPolicy
     }
 
     /**
+     * Import and post the cutover snapshot.
+     *
+     * Instance-free because there is no entry to check yet — the whole point
+     * of the flow is that it builds one. It sits with POST_LEDGER rather
+     * than MANAGE for the same reason {@see self::post()} does, and with
+     * more force: a snapshot writes an opening figure to every account at
+     * once, and is corrected only by reversing it.
+     */
+    public function postOpeningBalance(User $user): bool
+    {
+        return $user->hasAnyRole(AccountingRoles::POST_LEDGER);
+    }
+
+    /**
      * Post a reversing entry against a posted one.
      *
      * `isReversible()` refuses a second reversal — overshooting would leave

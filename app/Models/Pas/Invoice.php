@@ -43,6 +43,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property int $school_id
  * @property string $type
+ * @property ?int $recurring_invoice_id
  * @property int $contact_id
  * @property ?string $number
  * @property ?string $reference
@@ -62,6 +63,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?CarbonImmutable $approved_at
  * @property ?int $approved_by_user_id
  * @property ?CarbonImmutable $sent_at
+ * @property ?string $sent_to
  * @property ?CarbonImmutable $voided_at
  * @property ?int $voided_by_user_id
  * @property ?string $void_reason
@@ -127,8 +129,12 @@ final class Invoice extends Model
     protected $fillable = [
         'school_id',
         'type',
+        'recurring_invoice_id',
         'contact_id',
+        'lms_student_id',
+        'student_name',
         'number',
+        'pay_token',
         'reference',
         'issue_date',
         'due_date',
@@ -146,6 +152,7 @@ final class Invoice extends Model
         'approved_at',
         'approved_by_user_id',
         'sent_at',
+        'sent_to',
         'voided_at',
         'voided_by_user_id',
         'void_reason',
@@ -163,6 +170,7 @@ final class Invoice extends Model
         return [
             'school_id' => 'integer',
             'contact_id' => 'integer',
+            'lms_student_id' => 'integer',
             'issue_date' => 'immutable_date',
             'due_date' => 'immutable_date',
             'is_vat_inclusive' => 'boolean',

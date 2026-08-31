@@ -1,7 +1,17 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, Ban, CheckCircle2, Pencil, Printer } from 'lucide-react';
+import {
+    ArrowLeft,
+    Ban,
+    Check,
+    CheckCircle2,
+    Link as LinkIcon,
+    Mail,
+    Pencil,
+    Printer,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import InputError from '@/components/input-error';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
 import {
@@ -32,11 +42,14 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useClipboard } from '@/hooks/use-clipboard';
 import {
     approve as invoiceApprove,
     edit as invoiceEdit,
     index as invoiceIndex,
+    payLink as invoicePayLink,
     print as invoicePrint,
+    send as invoiceSend,
     // Wayfinder renames the `void` route export, because `void` is a
     // reserved word in JavaScript.
     voidMethod as invoiceVoid,
@@ -55,9 +68,86 @@ export default function InvoiceShow({ invoice }: Props) {
     const [voiding, setVoiding] = useState(false);
     const [voidReason, setVoidReason] = useState('');
     const [processing, setProcessing] = useState(false);
+    const [copyingLink, setCopyingLink] = useState(false);
+    const [copiedLink, setCopiedLink] = useState(false);
+    const [, copyToClipboard] = useClipboard();
+    const [sending, setSending] = useState(false);
+    /*
+     * The address the send goes to, seeded from what the record already knows:
+     * the one it last went to on a re-send, the payer's on file otherwise. It
+     * stays editable — a family may want this term's bill at a second address,
+     * and the contact record is deliberately not rewritten by sending.
+     */
+    const [recipient, setRecipient] = useState(
+        invoice.sent_to ?? invoice.contact?.email ?? '',
+    );
+    const [sendProcessing, setSendProcessing] = useState(false);
+    /*
+     * Why the dialog holds its own error rather than reading a flash: a
+     * refusal here is about the box the operator is looking at, and a toast
+     * that appears after the dialog has closed makes them reopen it, retype
+     * nothing, and guess. The server sends anything typing can fix as a
+     * validation error on `email`, which also keeps the dialog open.
+     */
+    const [sendError, setSendError] = useState<string | null>(null);
 
     const isSales = invoice.type === 'sales';
     const heading = invoice.number ?? `Draft ${isSales ? 'invoice' : 'bill'}`;
+
+    /**
+     * Mint the link server-side, then put it on the clipboard.
+     *
+     * Send by email is the usual route to a parent now. This stays for the
+     * cases email is not: a school that talks to its families over Messenger
+     * or SMS, or a payer whose address bounces.
+     */
+    const copyPayLink = (): void => {
+        setCopyingLink(true);
+
+        router.post(
+            invoicePayLink({ invoice: invoice.id }).url,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: (page) => {
+                    // From the re-rendered invoice, not from a flash. The old
+                    // read was `flash.payLink`, which nothing ever set —
+                    // `HandleFlashToasts` folds every flash key into `toast` —
+                    // so this returned early every single time and the button
+                    // did nothing at all.
+                    const link = (
+                        page.props.invoice as InvoiceDetail | undefined
+                    )?.pay_url;
+
+                    if (!link) {
+                        toast.error('The pay link could not be built.');
+
+                        return;
+                    }
+
+                    void copyToClipboard(link).then((copied) => {
+                        if (copied) {
+                            setCopiedLink(true);
+                            toast.success('Pay link copied', {
+                                description: link,
+                            });
+                            window.setTimeout(() => setCopiedLink(false), 3000);
+
+                            return;
+                        }
+
+                        // Refusing to copy is not refusing to help: the link
+                        // is now on the page under Document, where it can be
+                        // selected by hand.
+                        toast.info('Pay link ready — copy it below', {
+                            description: link,
+                        });
+                    });
+                },
+                onFinish: () => setCopyingLink(false),
+            },
+        );
+    };
 
     const handleApprove = (): void => {
         setProcessing(true);
@@ -69,6 +159,34 @@ export default function InvoiceShow({ invoice }: Props) {
                 onSuccess: () => setConfirmingApprove(false),
                 onError: () => toast.error('Could not approve this document.'),
                 onFinish: () => setProcessing(false),
+            },
+        );
+    };
+
+    const handleSend = (): void => {
+        setSendProcessing(true);
+        setSendError(null);
+
+        router.post(
+            invoiceSend({ invoice: invoice.id }).url,
+            { email: recipient },
+            {
+                preserveScroll: true,
+                // The success toast is the server's sentence — it names the
+                // address the mail actually went to, which is the part worth
+                // reading back.
+                onSuccess: () => setSending(false),
+                onError: (errors) => {
+                    setSendError(errors.email ?? null);
+
+                    // Only when there is nothing to show beside the field.
+                    // Both at once says the same thing twice, in two places,
+                    // one of which disappears.
+                    if (!errors.email) {
+                        toast.error('Could not send this invoice.');
+                    }
+                },
+                onFinish: () => setSendProcessing(false),
             },
         );
     };
@@ -143,6 +261,50 @@ export default function InvoiceShow({ invoice }: Props) {
                                         <Pencil className="mr-1 h-4 w-4" />
                                         Edit draft
                                     </Link>
+                                </Button>
+                            ) : null}
+
+                            {/*
+                              Mints the customer-facing link on first press
+                              and copies it. Only for an issued sales invoice
+                              — there is nobody to send a bill's link to, and
+                              a draft has nothing to collect.
+                            */}
+                            {isSales && !invoice.can.approve ? (
+                                <Button
+                                    variant="outline"
+                                    onClick={copyPayLink}
+                                    disabled={copyingLink}
+                                >
+                                    {copiedLink ? (
+                                        <Check className="mr-1 h-4 w-4" />
+                                    ) : (
+                                        <LinkIcon className="mr-1 h-4 w-4" />
+                                    )}
+                                    {copiedLink
+                                        ? 'Link copied'
+                                        : 'Copy pay link'}
+                                </Button>
+                            ) : null}
+
+                            {/*
+                              Sends the same tokenised link the copy button
+                              hands over, but to an address rather than to the
+                              clipboard. Sales only and issued only — the
+                              policy decides, this just reads its answer.
+                            */}
+                            {invoice.can.send ? (
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSendError(null);
+                                        setSending(true);
+                                    }}
+                                >
+                                    <Mail className="mr-1 h-4 w-4" />
+                                    {invoice.sent_at
+                                        ? 'Send again'
+                                        : 'Send by email'}
                                 </Button>
                             ) : null}
 
@@ -359,6 +521,44 @@ export default function InvoiceShow({ invoice }: Props) {
                                     </DetailRow>
                                 </dl>
 
+                                {/*
+                                  The send record, in the place a delivery
+                                  dispute gets settled: a parent saying the
+                                  invoice never arrived is answered by the
+                                  address it went to, not by the timestamp.
+                                */}
+                                {invoice.sent_at ? (
+                                    <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
+                                        Emailed to{' '}
+                                        {invoice.sent_to ?? 'the payer'} on{' '}
+                                        {formatSentAt(invoice.sent_at)}.
+                                    </p>
+                                ) : null}
+
+                                {/*
+                                  Shown, not just copied. A clipboard write can
+                                  fail for reasons the operator cannot act on —
+                                  the API does not exist outside a secure
+                                  context, and this app is served over plain
+                                  http on a .test domain in development — so
+                                  the link has to be somewhere it can be
+                                  selected by hand. It also lets someone check
+                                  they are about to send the right one.
+                                */}
+                                {invoice.pay_url ? (
+                                    <div className="mt-4 space-y-1 border-t pt-3">
+                                        <p className="text-xs text-muted-foreground">
+                                            Pay link
+                                        </p>
+                                        <p
+                                            data-testid="pay-link"
+                                            className="font-mono text-xs break-all text-muted-foreground select-all"
+                                        >
+                                            {invoice.pay_url}
+                                        </p>
+                                    </div>
+                                ) : null}
+
                                 {invoice.void_reason ? (
                                     <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
                                         Voided: {invoice.void_reason}
@@ -445,10 +645,9 @@ export default function InvoiceShow({ invoice }: Props) {
                             Approve this {isSales ? 'invoice' : 'bill'}?
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            This takes the next serial and posts the document to
-                            the ledger. After that it cannot be edited —
-                            correcting it means voiding it and raising a
-                            replacement.
+                            This posts the document to the ledger. After that it
+                            cannot be edited — correcting it means voiding it
+                            and raising a replacement.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -515,8 +714,102 @@ export default function InvoiceShow({ invoice }: Props) {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <AlertDialog
+                open={sending}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setSending(false);
+                    }
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            Send {invoice.number ?? 'this invoice'} by email?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            The payer gets the amount, the due date and a link
+                            that pays this invoice online. The link is theirs
+                            alone, so check the address before it goes.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="space-y-2">
+                        <Label htmlFor="send_email">Send to</Label>
+                        <Input
+                            id="send_email"
+                            type="email"
+                            value={recipient}
+                            maxLength={160}
+                            placeholder="parent@example.com"
+                            aria-invalid={!!sendError}
+                            onChange={(e) => {
+                                setRecipient(e.target.value);
+                                // The complaint was about what was in the box;
+                                // it stops being true the moment that changes.
+                                setSendError(null);
+                            }}
+                        />
+                        <InputError message={sendError ?? undefined} />
+                        {/*
+                          Two states worth naming rather than leaving the
+                          operator to infer from an empty box: the payer has
+                          no address on file, or this is a second send and the
+                          box is showing where the first one went.
+                        */}
+                        {invoice.contact?.email ? null : (
+                            <p className="text-sm text-muted-foreground">
+                                {invoice.contact?.name ?? 'This customer'} has
+                                no email address on file. What you type here is
+                                used for this send only.
+                            </p>
+                        )}
+                        {invoice.sent_to ? (
+                            <p className="text-sm text-muted-foreground">
+                                Last sent to {invoice.sent_to}.
+                            </p>
+                        ) : null}
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={sendProcessing}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={sendProcessing || recipient.trim() === ''}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                handleSend();
+                            }}
+                        >
+                            {sendProcessing ? 'Sending…' : 'Send invoice'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
+}
+
+/**
+ * An ISO timestamp as a person reads it — '3 Sep 2026, 2:15 pm'.
+ *
+ * `en-GB` for the same reason the payslip pins it: `en-PH` puts the month
+ * first on a long date, which disagrees with every other date on the page.
+ */
+function formatSentAt(iso: string): string {
+    const parsed = new Date(iso);
+
+    if (Number.isNaN(parsed.getTime())) {
+        return iso;
+    }
+
+    return parsed.toLocaleString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
 }
 
 /** 2.5000 → 2.5, 1.0000 → 1. */

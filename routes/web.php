@@ -7,9 +7,37 @@ use App\Http\Controllers\Employees\EmployeeDeductionController;
 use App\Http\Controllers\Employees\EmployeeLoanController;
 use App\Http\Controllers\Employees\PayrollAdjustmentController;
 use App\Http\Controllers\PayrollPreviewController;
+use App\Http\Controllers\Public\InvoicePaymentController;
+use App\Http\Controllers\Webhooks\GatewayWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+
+/*
+ * Customer-facing payment routes — the first guest-reachable application
+ * routes in this app, and the first unauthenticated POST.
+ *
+ * The `/schools/{slug}/` prefix is not decoration: it is what lets
+ * SchoolTenantFinder resolve the school on a request that carries no session
+ * and no user. A gateway posting to a single fixed URL would 404 at
+ * NeedsTenant before reaching any controller.
+ *
+ * The slug is NOT the credential. For a guest, ApplyTenantOverride's
+ * LMS-pinning does not run, so a crafted slug resolves whatever it names —
+ * which is why every lookup past this point matches on school AND the
+ * invoice's own unguessable pay token together.
+ */
+Route::prefix('schools/{slug}')->group(function () {
+    Route::get('pay/{token}', [InvoicePaymentController::class, 'show'])
+        ->name('public.pay.show');
+    Route::post('pay/{token}/checkout', [InvoicePaymentController::class, 'checkout'])
+        ->name('public.pay.checkout');
+    Route::get('pay/{token}/return', [InvoicePaymentController::class, 'return'])
+        ->name('public.pay.return');
+
+    Route::post('webhooks/{provider}', GatewayWebhookController::class)
+        ->name('public.webhooks');
+});
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');

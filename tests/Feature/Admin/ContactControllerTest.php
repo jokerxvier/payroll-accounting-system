@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\Contact;
+use App\Models\Pas\ContactStudent;
+use App\Models\Pas\Invoice;
+use App\Models\Pas\Payment;
 use App\Models\Pas\School;
 use App\Models\User;
 
@@ -344,4 +347,77 @@ it('deletes an unreferenced contact', function () {
         ->assertSessionHas('success');
 
     expect(Contact::query()->count())->toBe(0);
+});
+
+/* ── Deleting a contact that documents point at ─────────────────────── */
+
+it('refuses to delete a contact that has been invoiced', function () {
+    $contact = Contact::factory()->customer()->create();
+
+    Invoice::factory()->create([
+        'contact_id' => $contact->getKey(),
+        'type' => Invoice::TYPE_SALES,
+    ]);
+
+    // This used to reach `restrictOnDelete` as an unhandled 500: the guard
+    // existed and was worded, but `isReferenced()` was a stub returning false
+    // from Slice 4 until Slice 11.
+    $this->actingAs(contactAuthAs('accountant'))
+        ->delete(route('admin.contacts.destroy', $contact))
+        ->assertRedirect(route('admin.contacts.index'));
+
+    expect(Contact::query()->find($contact->getKey()))->not->toBeNull();
+});
+
+it('refuses to delete a contact that has taken a payment', function () {
+    $contact = Contact::factory()->customer()->create();
+
+    Payment::factory()->receipt()->create([
+        'contact_id' => $contact->getKey(),
+    ]);
+
+    $this->actingAs(contactAuthAs('accountant'))
+        ->delete(route('admin.contacts.destroy', $contact));
+
+    expect(Contact::query()->find($contact->getKey()))->not->toBeNull();
+});
+
+it('does not offer the delete button for a contact that cannot go', function () {
+    $contact = Contact::factory()->customer()->create();
+    Invoice::factory()->create(['contact_id' => $contact->getKey()]);
+
+    // A visible control that 500s on click is worse than no control.
+    $this->actingAs(contactAuthAs('accountant'))
+        ->get(route('admin.contacts.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('contacts.data.0.can.delete', false));
+});
+
+it('still deletes a contact nothing references', function () {
+    $contact = Contact::factory()->customer()->create();
+
+    $this->actingAs(contactAuthAs('accountant'))
+        ->delete(route('admin.contacts.destroy', $contact));
+
+    expect(Contact::query()->find($contact->getKey()))->toBeNull();
+});
+
+it('deletes a contact whose only reference is a student link', function () {
+    $contact = Contact::factory()->customer()->create();
+
+    ContactStudent::create([
+        'contact_id' => $contact->getKey(),
+        'lms_student_id' => 77,
+        'student_name' => 'Francesca Inez',
+        'is_primary_payer' => true,
+    ]);
+
+    // The link cascades: it has no meaning without the payer, and it is not
+    // financial history worth preserving on its own.
+    $this->actingAs(contactAuthAs('accountant'))
+        ->delete(route('admin.contacts.destroy', $contact));
+
+    expect(Contact::query()->find($contact->getKey()))->toBeNull()
+        ->and(ContactStudent::query()->count())->toBe(0);
 });

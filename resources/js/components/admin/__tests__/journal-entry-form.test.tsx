@@ -240,14 +240,14 @@ describe('JournalEntryForm — typing amounts', () => {
         expect(screen.getByText('Balanced')).toBeInTheDocument();
     });
 
-    it('normalises to two decimals on blur', () => {
+    it('groups and normalises to two decimals on blur', () => {
         render(<Harness />);
 
         typeChars('Debit for line 1', '5000');
         fireEvent.blur(screen.getByLabelText('Debit for line 1'));
 
         expect(screen.getByLabelText('Debit for line 1')).toHaveValue(
-            '5000.00',
+            '5,000.00',
         );
     });
 

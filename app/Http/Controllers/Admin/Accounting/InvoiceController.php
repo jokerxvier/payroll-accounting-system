@@ -5,20 +5,26 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin\Accounting;
 
 use App\Actions\Accounting\ApproveInvoice;
+use App\Actions\Accounting\CreateInvoiceDraft;
+use App\Actions\Accounting\SendInvoiceEmail;
+use App\Actions\Accounting\StartInvoiceSchedule;
 use App\Actions\Accounting\VoidInvoice;
+use App\Actions\Payments\MintInvoicePayToken;
 use App\Exceptions\ClosedAccountingPeriodException;
-use App\Exceptions\DocumentNumberUnavailableException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Accounting\InvoiceRequest;
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\Contact;
-use App\Models\Pas\DocumentNumberSeries;
+use App\Models\Pas\ContactStudent;
 use App\Models\Pas\Invoice;
 use App\Models\Pas\InvoiceLine;
 use App\Models\Pas\PaymentAllocation;
+use App\Models\Pas\RecurringInvoice;
+use App\Models\Pas\School;
 use App\Models\Pas\TaxRate;
-use App\Services\Accounting\DocumentNumberAllocator;
-use App\Services\Accounting\InvoiceTotalsCalculator;
+use App\Services\Accounting\InvoiceHeaderAttributes;
+use App\Services\Accounting\InvoiceLineWriter;
+use App\Support\DayBoundary;
 use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
@@ -26,9 +32,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
+use Spatie\Multitenancy\Models\Tenant;
 
 /**
  * Admin surface for invoices and bills — Phase 5 Slice 5.
@@ -60,6 +68,15 @@ final class InvoiceController extends Controller
         $type = in_array($type, Invoice::TYPES, true) ? $type : Invoice::TYPE_SALES;
         $status = (string) $request->query('status', '');
 
+        // Bounds are inclusive at both ends, and go through DayBoundary
+        // rather than a bare 'Y-m-d': a `date` column compared to a plain
+        // date string drops the last day of the range under SQLite.
+        $from = DayBoundary::parse($request->query('from'));
+        $to = DayBoundary::parse($request->query('to'));
+
+        $after = $from !== null ? DayBoundary::start($from) : null;
+        $before = $to !== null ? DayBoundary::end($to) : null;
+
         $invoices = Invoice::query()
             ->with(['contact:id,name'])
             ->ofType($type)
@@ -67,6 +84,8 @@ final class InvoiceController extends Controller
                 in_array($status, Invoice::STATUSES, true),
                 fn ($query) => $query->where('status', $status),
             )
+            ->when($after !== null, fn ($query) => $query->where('issue_date', '>=', $after))
+            ->when($before !== null, fn ($query) => $query->where('issue_date', '<=', $before))
             ->orderByDesc('issue_date')
             ->orderByDesc('id')
             ->paginate(self::PER_PAGE)
@@ -78,6 +97,8 @@ final class InvoiceController extends Controller
             'filters' => [
                 'type' => $type,
                 'status' => $status !== '' ? $status : null,
+                'from' => $from?->toDateString(),
+                'to' => $to?->toDateString(),
             ],
             'can' => [
                 'create' => Gate::allows('create', Invoice::class),
@@ -98,24 +119,67 @@ final class InvoiceController extends Controller
         ]);
     }
 
-    public function store(InvoiceRequest $request, InvoiceTotalsCalculator $calculator): RedirectResponse
-    {
+    public function store(
+        InvoiceRequest $request,
+        CreateInvoiceDraft $draft,
+        StartInvoiceSchedule $schedules,
+    ): RedirectResponse {
         Gate::authorize('create', Invoice::class);
 
         /** @var array<string, mixed> $data */
         $data = $request->validated();
 
-        $invoice = DB::transaction(function () use ($data, $calculator): Invoice {
-            $invoice = Invoice::create($this->headerAttributes($data));
+        /** @var ?array<string, mixed> $recurrence */
+        $recurrence = ($data['repeat'] ?? false) === true && isset($data['recurrence'])
+            ? (array) $data['recurrence']
+            : null;
 
-            $this->replaceLines($invoice, (array) $data['lines'], $calculator);
+        if ($recurrence !== null) {
+            // The page not offering a control is not the same as the server
+            // refusing it. Both abilities gate on AccountingRoles::MANAGE, so
+            // this never fires for someone who reached the form legitimately.
+            Gate::authorize('create', RecurringInvoice::class);
+        }
 
-            return $invoice;
-        });
+        // One transaction: the draft and the instruction to repeat it are one
+        // decision, and half of it is worse than neither — a schedule with no
+        // claimed first period would bill the month again tonight, and an
+        // invoice saved without the schedule the operator asked for is a
+        // promise quietly not kept.
+        try {
+            [$invoice, $schedule] = DB::transaction(
+                function () use ($draft, $schedules, $data, $recurrence): array {
+                    $invoice = $draft->execute($data, (array) $data['lines']);
+
+                    return [
+                        $invoice,
+                        $recurrence === null ? null : $schedules->execute($invoice, $recurrence),
+                    ];
+                },
+            );
+        } catch (DomainException $e) {
+            // Refusing to repeat a bill, say. Actionable guidance rather than
+            // a 500, and the draft rolls back with it: the operator asked for
+            // a document AND a standing instruction, and got neither.
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+
+        $message = sprintf(
+            'Draft %s saved. Approve it to post it to the ledger.',
+            $invoice->number,
+        );
+
+        if ($schedule !== null) {
+            $message .= sprintf(
+                ' It repeats %s — next invoice %s.',
+                $schedule->frequency,
+                $schedule->next_run_on->format('j F Y'),
+            );
+        }
 
         return redirect()
             ->route('admin.invoices.show', $invoice)
-            ->with('success', 'Draft saved. Approve it to issue a number and post it to the ledger.');
+            ->with('success', $message);
     }
 
     public function show(Invoice $invoice): Response
@@ -150,6 +214,7 @@ final class InvoiceController extends Controller
                 'id' => $invoice->id,
                 'type' => $invoice->type,
                 'contact_id' => $invoice->contact_id,
+                'lms_student_id' => $invoice->lms_student_id,
                 'reference' => $invoice->reference,
                 'issue_date' => $invoice->issue_date->toDateString(),
                 'due_date' => $invoice->due_date?->toDateString(),
@@ -171,7 +236,8 @@ final class InvoiceController extends Controller
     public function update(
         InvoiceRequest $request,
         Invoice $invoice,
-        InvoiceTotalsCalculator $calculator,
+        InvoiceHeaderAttributes $header,
+        InvoiceLineWriter $lines,
     ): RedirectResponse {
         Gate::authorize('update', $invoice);
         $this->assertMutable($invoice);
@@ -179,10 +245,10 @@ final class InvoiceController extends Controller
         /** @var array<string, mixed> $data */
         $data = $request->validated();
 
-        DB::transaction(function () use ($invoice, $data, $calculator): void {
-            $invoice->update($this->headerAttributes($data));
+        DB::transaction(function () use ($invoice, $data, $header, $lines): void {
+            $invoice->update($header->fromValidated($data));
 
-            $this->replaceLines($invoice, (array) $data['lines'], $calculator);
+            $lines->replace($invoice, (array) $data['lines']);
         });
 
         return redirect()
@@ -204,13 +270,16 @@ final class InvoiceController extends Controller
             ->with('success', 'Draft deleted.');
     }
 
-    public function approve(Invoice $invoice, ApproveInvoice $action): RedirectResponse
-    {
+    public function approve(
+        Invoice $invoice,
+        ApproveInvoice $action,
+        SendInvoiceEmail $mailer,
+    ): RedirectResponse {
         Gate::authorize('approve', $invoice);
 
         try {
             $approved = $action->execute($invoice, (int) auth()->id());
-        } catch (DocumentNumberUnavailableException|ClosedAccountingPeriodException|DomainException|RuntimeException $e) {
+        } catch (ClosedAccountingPeriodException|DomainException|RuntimeException $e) {
             // Each of these is actionable: register a series, extend the
             // Authority To Print, reopen the period, fix the chart. None of
             // them is a bug worth a 500.
@@ -219,9 +288,122 @@ final class InvoiceController extends Controller
                 ->with('error', $e->getMessage());
         }
 
+        $message = "{$approved->number} approved and posted to the ledger.";
+
+        // Only a document a schedule raised sends itself. Approving an invoice
+        // typed by hand behaves exactly as it did before recurring billing
+        // existed — an operator who was not ready to send one must not have it
+        // leave the building because they approved it.
+        //
+        // Deliberately outside ApproveInvoice: that action's transaction has
+        // committed by the time execution reaches here, which is the only safe
+        // moment to mint a token and hand anything to a mail server.
+        if ($approved->recurring_invoice_id !== null) {
+            try {
+                $message .= ' '.$mailer->execute($approved);
+            } catch (DomainException $e) {
+                // The ledger posting stands. Failing to send is a separate
+                // problem and is reported as one.
+                return redirect()
+                    ->route('admin.invoices.show', $approved)
+                    ->with('error', $message.' It could not be sent: '.$e->getMessage());
+            }
+        }
+
         return redirect()
             ->route('admin.invoices.show', $approved)
-            ->with('success', "{$approved->number} approved and posted to the ledger.");
+            ->with('success', $message);
+    }
+
+    /**
+     * Mints the customer-facing pay link and hands it back to be copied.
+     *
+     * The route has existed since the payments slice; the method it points at
+     * did not, so pressing it was a 500 waiting to happen and
+     * `MintInvoicePayToken` had no callers at all.
+     */
+    public function payLink(Invoice $invoice, MintInvoicePayToken $tokens): RedirectResponse
+    {
+        Gate::authorize('view', $invoice);
+
+        $tenant = Tenant::current();
+
+        if (! $tenant instanceof School) {
+            return back()->with('error', 'No school is current, so a pay link cannot be built.');
+        }
+
+        try {
+            // Minted for its effect on the invoice, not for its return value:
+            // the link reaches the page through `detail()`'s `pay_url` on the
+            // re-render this redirect triggers. Flashing the URL here instead
+            // put a bare address in a toast and left the page with nothing to
+            // copy — `HandleFlashToasts` folds every flash key into `toast`,
+            // so the `flash.payLink` the page was reading never existed.
+            $tokens->execute($invoice);
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Pay link ready.');
+    }
+
+    /**
+     * Email an issued invoice to the person who has to pay it.
+     *
+     * The address is optional on the wire: an operator who does not touch the
+     * field is sending to the one the form showed them, which is the payer's.
+     * A typed address is used for this send only — it is deliberately not
+     * written back to the contact, because a one-off send to a grandparent
+     * must not quietly rewrite the family's billing email.
+     *
+     * `SendInvoiceEmail` treats an explicit address as permission to send
+     * again, so pressing this on an already-sent invoice re-sends it. That is
+     * the case this exists for: "they never got it", or it went to a typo.
+     */
+    public function send(Request $request, Invoice $invoice, SendInvoiceEmail $mailer): RedirectResponse
+    {
+        Gate::authorize('send', $invoice);
+
+        /** @var array{email?: ?string} $validated */
+        $validated = $request->validate([
+            'email' => ['nullable', 'email', 'max:160'],
+        ]);
+
+        $contact = $invoice->contact;
+        $typed = trim((string) ($validated['email'] ?? ''));
+        $recipient = $typed !== '' ? $typed : $contact?->email;
+
+        // A refusal goes back as an error on `email` when typing an address
+        // would fix it, and as a flash when nothing the operator can type
+        // would. The difference is not cosmetic: a validation error keeps the
+        // send dialog open with the message under the box being complained
+        // about, while a flash closes it — which is right for "this document
+        // cannot be sent at all" and wrong for "that address is no good".
+        if ($contact === null) {
+            return back()->with('error', sprintf(
+                '%s has no payer on record, so there is nobody to send it to.',
+                $invoice->number ?? 'This invoice',
+            ));
+        }
+
+        if ($recipient === null || $recipient === '') {
+            // Raised here rather than left to the action, whose own message
+            // for this case is worded for an approval that has just happened.
+            throw ValidationException::withMessages([
+                'email' => sprintf(
+                    '%s has no email address on file. Type one to send this invoice.',
+                    $contact->name,
+                ),
+            ]);
+        }
+
+        try {
+            $message = $mailer->execute($invoice, $recipient);
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', $message);
     }
 
     public function void(Request $request, Invoice $invoice, VoidInvoice $action): RedirectResponse
@@ -280,76 +462,6 @@ final class InvoiceController extends Controller
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    private function headerAttributes(array $data): array
-    {
-        return [
-            'type' => $data['type'],
-            'contact_id' => (int) $data['contact_id'],
-            'reference' => $data['reference'] ?? null,
-            'issue_date' => CarbonImmutable::parse((string) $data['issue_date']),
-            'due_date' => isset($data['due_date']) && $data['due_date'] !== null
-                ? CarbonImmutable::parse((string) $data['due_date'])
-                : null,
-            'is_vat_inclusive' => (bool) $data['is_vat_inclusive'],
-            'notes' => $data['notes'] ?? null,
-            'terms' => $data['terms'] ?? null,
-            'status' => Invoice::STATUS_DRAFT,
-        ];
-    }
-
-    /**
-     * Replace a draft's lines wholesale, then recompute the totals.
-     *
-     * Deleting and re-inserting rather than diffing, for the same reason the
-     * journal does: a draft's lines have no identity worth preserving, and
-     * the audit trail reads better as "these lines were replaced" than as a
-     * scatter of per-line edits. Deletion goes through Eloquent so each
-     * removed line still writes its own audit row.
-     *
-     * @param  array<int, array<string, mixed>>  $lines
-     */
-    private function replaceLines(
-        Invoice $invoice,
-        array $lines,
-        InvoiceTotalsCalculator $calculator,
-    ): void {
-        foreach ($invoice->lines()->get() as $existing) {
-            $existing->delete();
-        }
-
-        $created = [];
-
-        foreach (array_values($lines) as $index => $line) {
-            $created[] = InvoiceLine::create([
-                'invoice_id' => $invoice->getKey(),
-                'line_number' => $index + 1,
-                'description' => (string) $line['description'],
-                'quantity' => number_format((float) $line['quantity'], 4, '.', ''),
-                'unit_price_centavos' => (int) $line['unit_price_centavos'],
-                'account_id' => (int) $line['account_id'],
-                'tax_rate_id' => isset($line['tax_rate_id']) && $line['tax_rate_id'] !== null
-                    ? (int) $line['tax_rate_id']
-                    : null,
-            ]);
-        }
-
-        // Load the rates the calculator needs in one query rather than one
-        // per line.
-        $models = InvoiceLine::query()
-            ->with('taxRate')
-            ->whereIn('id', array_map(static fn (InvoiceLine $l): int => $l->getKey(), $created))
-            ->orderBy('line_number')
-            ->get();
-
-        $calculator->applyTo($invoice, $models);
-
-        foreach ($models as $model) {
-            $model->save();
-        }
-
-        $invoice->save();
-    }
-
     /**
      * @return array<string, mixed>
      */
@@ -359,6 +471,9 @@ final class InvoiceController extends Controller
             'id' => $invoice->id,
             'type' => $invoice->type,
             'number' => $invoice->number,
+            // So an officer reviewing forty drafts on a Monday morning can
+            // see which of them a schedule raised overnight.
+            'is_recurring' => $invoice->recurring_invoice_id !== null,
             'reference' => $invoice->reference,
             'contact_name' => $invoice->contact?->name,
             'issue_date' => $invoice->issue_date->toDateString(),
@@ -398,6 +513,12 @@ final class InvoiceController extends Controller
             'notes' => $invoice->notes,
             'terms' => $invoice->terms,
             'approved_at' => $invoice->approved_at?->toIso8601String(),
+            // Both halves of the send record. Without them the page cannot
+            // tell a sent invoice from an unsent one, and a re-send has no
+            // address to default to.
+            'sent_at' => $invoice->sent_at?->toIso8601String(),
+            'sent_to' => $invoice->sent_to,
+            'pay_url' => $this->payUrl($invoice),
             'voided_at' => $invoice->voided_at?->toIso8601String(),
             'void_reason' => $invoice->void_reason,
             'contact' => $invoice->contact === null ? null : [
@@ -438,17 +559,45 @@ final class InvoiceController extends Controller
             'can' => [
                 ...$this->summarise($invoice)['can'],
                 'print' => Gate::allows('print', $invoice),
+                'send' => Gate::allows('send', $invoice),
             ],
         ];
     }
 
     /**
-     * Everything the create and edit forms need to populate their selects.
+     * The customer-facing link, once one has been minted.
      *
-     * `nextNumber` is a preview of the serial this document would take. It
-     * is deliberately a peek and not an allocation — showing it must never
-     * consume a number, because most drafts are opened and closed without
-     * ever being approved.
+     * Null until somebody presses Copy pay link — tokens are minted on demand
+     * so the number of live public URLs stays equal to the number a person
+     * deliberately created, and this only reports what already exists.
+     *
+     * It lives on the payload rather than being flashed back by `payLink()`
+     * because a flash is a worse contract for it: `HandleFlashToasts` folds
+     * every flash key into a `toast` prop, so the URL arrived as toast text
+     * and the page's own read of `flash.payLink` found nothing. On the payload
+     * the link is simply there after the mint, and can be shown as well as
+     * copied.
+     */
+    private function payUrl(Invoice $invoice): ?string
+    {
+        $tenant = Tenant::current();
+
+        if ($invoice->pay_token === null || $invoice->pay_token === '') {
+            return null;
+        }
+
+        if (! $tenant instanceof School) {
+            return null;
+        }
+
+        return route('public.pay.show', [
+            'slug' => $tenant->slug,
+            'token' => $invoice->pay_token,
+        ]);
+    }
+
+    /**
+     * Everything the create and edit forms need to populate their selects.
      *
      * @return array<string, mixed>
      */
@@ -464,6 +613,23 @@ final class InvoiceController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'tin']),
             'accountOptions' => $this->accountOptions($isSales),
+            // The counterparty picker can raise a contact without leaving the
+            // draft, through the same sheet the register uses — so the same
+            // control-account options travel with it. `ContactController@store`
+            // redirects back here, and the new contact arrives in
+            // `contactOptions` on the re-render.
+            'canCreateContact' => Gate::allows('create', Contact::class),
+            'receivableAccountOptions' => $this->controlAccountOptions(ChartOfAccount::TYPE_ASSET),
+            'payableAccountOptions' => $this->controlAccountOptions(ChartOfAccount::TYPE_LIABILITY),
+            // Dev/demo affordance only — super-admin outside production. The
+            // form composes a random draft from the options above rather
+            // than from a fixture, so what it fills is always real data for
+            // this tenant and differs on every click.
+            'canDemoFill' => Gate::allows('dev.demo-fill'),
+            // Students with the contacts responsible for them, so choosing a
+            // student can resolve a payer without a round trip. Sales only —
+            // a supplier's bill has no pupil behind it.
+            'studentOptions' => $isSales ? $this->studentOptions() : [],
             'taxRateOptions' => TaxRate::query()
                 ->active()
                 ->whereIn('type', $isSales
@@ -471,12 +637,68 @@ final class InvoiceController extends Controller
                     : [TaxRate::TYPE_VAT_PURCHASE, TaxRate::TYPE_EXEMPT, TaxRate::TYPE_ZERO_RATED])
                 ->orderBy('code')
                 ->get(['id', 'code', 'name', 'rate_bps', 'type']),
-            'nextNumber' => app(DocumentNumberAllocator::class)->peek(
-                $isSales
-                    ? DocumentNumberSeries::TYPE_SALES_INVOICE
-                    : DocumentNumberSeries::TYPE_BILL,
-            ),
         ];
+    }
+
+    /**
+     * Every student someone in this school is recorded as paying for.
+     *
+     * Built from `pas_contact_students` rather than from the LMS, because a
+     * student nobody is linked to cannot be invoiced anyway — the payer would
+     * fail validation. The primary payer is listed first so the form can take
+     * the head of the list without re-deciding what "primary" means.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function studentOptions(): array
+    {
+        $links = ContactStudent::query()
+            ->with('contact:id,name,tin,address')
+            ->orderByDesc('is_primary_payer')
+            ->orderBy('student_name')
+            ->get();
+
+        $byStudent = [];
+
+        foreach ($links as $link) {
+            $id = $link->lms_student_id;
+
+            $byStudent[$id] ??= [
+                'lms_student_id' => $id,
+                'name' => $link->student_name,
+                'payers' => [],
+            ];
+
+            $byStudent[$id]['payers'][] = [
+                'contact_id' => $link->contact_id,
+                'name' => $link->contact?->name,
+                'tin' => $link->contact?->tin,
+                'address' => $link->contact?->address,
+                'relationship' => $link->relationship,
+                'is_primary_payer' => $link->is_primary_payer,
+            ];
+        }
+
+        return array_values($byStudent);
+    }
+
+    /**
+     * Accounts offered as a control-account override on the new-contact sheet.
+     *
+     * Mirrors ContactController::accountOptions() — a receivable is an asset
+     * and a payable is a liability, and offering the other side is always a
+     * mistake. Duplicated rather than shared because the two controllers own
+     * their own payloads; if a third caller appears, lift it to a service.
+     *
+     * @return Collection<int, ChartOfAccount>
+     */
+    private function controlAccountOptions(string $type): Collection
+    {
+        return ChartOfAccount::query()
+            ->active()
+            ->ofType($type)
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'type']);
     }
 
     /**

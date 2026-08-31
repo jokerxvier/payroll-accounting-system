@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Pas\School;
+use App\Services\SchoolLogo;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use Spatie\Multitenancy\Models\Tenant;
@@ -75,6 +76,10 @@ class HandleInertiaRequests extends Middleware
                 'id' => $tenant->id,
                 'name' => $tenant->name,
                 'slug' => $tenant->slug,
+                // Null until a logo is uploaded, and null too if
+                // `storage:link` has never been run — the sidebar falls back
+                // to the generic mark either way.
+                'logo_url' => app(SchoolLogo::class)->url($tenant),
             ] : null,
             // Only platform-admins (payroll-native + role) get the switcher
             // dropdown — feeds the in-app tenant switcher with the list of

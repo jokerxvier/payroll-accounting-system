@@ -16,6 +16,7 @@ use App\Models\Pas\Invoice;
 use App\Models\Pas\Payment;
 use App\Models\Pas\PaymentAllocation;
 use App\Services\Accounting\InvoiceBalanceService;
+use App\Support\DayBoundary;
 use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
@@ -52,6 +53,15 @@ final class PaymentController extends Controller
         $type = in_array($type, Payment::TYPES, true) ? $type : Payment::TYPE_RECEIPT;
         $status = (string) $request->query('status', '');
 
+        // Bounds are inclusive at both ends, and go through DayBoundary
+        // rather than a bare 'Y-m-d': a `date` column compared to a plain
+        // date string drops the last day of the range under SQLite.
+        $from = DayBoundary::parse($request->query('from'));
+        $to = DayBoundary::parse($request->query('to'));
+
+        $after = $from !== null ? DayBoundary::start($from) : null;
+        $before = $to !== null ? DayBoundary::end($to) : null;
+
         $payments = Payment::query()
             ->with(['contact:id,name', 'cashAccount:id,code,name'])
             ->ofType($type)
@@ -59,6 +69,8 @@ final class PaymentController extends Controller
                 in_array($status, Payment::STATUSES, true),
                 fn ($query) => $query->where('status', $status),
             )
+            ->when($after !== null, fn ($query) => $query->where('payment_date', '>=', $after))
+            ->when($before !== null, fn ($query) => $query->where('payment_date', '<=', $before))
             ->orderByDesc('payment_date')
             ->orderByDesc('id')
             ->paginate(self::PER_PAGE)
@@ -70,6 +82,8 @@ final class PaymentController extends Controller
             'filters' => [
                 'type' => $type,
                 'status' => $status !== '' ? $status : null,
+                'from' => $from?->toDateString(),
+                'to' => $to?->toDateString(),
             ],
             'can' => [
                 'create' => Gate::allows('create', Payment::class),
@@ -395,6 +409,10 @@ final class PaymentController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'tin']),
             'cashAccountOptions' => $this->cashAccountOptions(),
+            // Dev/demo affordance only — super-admin outside production. The
+            // form composes a draft from the options above rather than from a
+            // fixture, so what it fills is always real data for this tenant.
+            'canDemoFill' => Gate::allows('dev.demo-fill'),
             'outstandingInvoices' => $contactId === null
                 ? []
                 : $this->outstandingInvoicesFor($type, $contactId),

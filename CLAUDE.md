@@ -4,16 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Payroll system built on the Laravel React Starter Kit. Uses Laravel 13 + Inertia.js v3 + React 19 + TypeScript. Authentication is handled by Laravel Fortify (login, registration, 2FA, email verification, password reset). Authorization uses Spatie Permission, with payroll roles assigned on first login by mapping LMS roles via `config/payroll.php`. Served locally by Laravel Herd at `payroll-system.test`.
+Payroll system built on the Laravel React Starter Kit. Uses Laravel 13 + Inertia.js v3 + React 19 + TypeScript. Authentication is handled by Laravel Fortify (login, registration, 2FA, email verification, password reset). Authorization uses Spatie Permission, with payroll roles assigned on first login by mapping LMS roles via `config/payroll.php`. Served locally by Laravel Herd at `payroll-system.test`. Note the toolchain split: the local runtime and CI (`.github/workflows/ci.yml`) both run PHP 8.4, but `composer.json` pins `config.platform.php` to 8.3.27, so Composer resolves dependencies as if on 8.3 — a package requiring 8.4 will refuse to install until that pin moves.
 
-Current phase: **Phase 5 — Invoicing & Accounting** (post-v1). Phase 1–4 *code* (payroll engine, batch processing, reports/audit) and multi-tenancy have merged to `main`, but Phase 4's launch tail is still open and unticked in `rules/PLAN.md`: Forge staging/production envs, client UAT, WCAG AA pass, cross-browser smoke, user documentation, and the production cutover. Those are client/infra dependencies, not code work. Phase 5 ships in slices; `main` carries Slices 1–7 (ledger foundation, journal entries, payroll→GL seam, contacts, sales invoices + supplier bills, payments/allocation) and the active branch adds Slice 8a (ledger reports). Outstanding: Slice 8b's four statements (Income Statement / Balance Sheet / Cash Flow / Equity — the `is_cash_equivalent` prerequisite shipped 2026-08-25), 8c (receivables and document reports), and credit notes / official receipts (blocked on Open Question 1). See `rules/PLAN.md` §5 for the slice-by-slice status with the reasoning behind each decision, and `rules/MILESTONES.md` for the client-facing gate view.
+Current phase: **Phase 5 — Invoicing & Accounting** (post-v1). Phase 1–4 *code* (payroll engine, batch processing, reports/audit) and multi-tenancy have merged to `main`, but Phase 4's launch tail is still open and unticked in `rules/PLAN.md`: Forge staging/production envs, client UAT, WCAG AA pass, cross-browser smoke, user documentation, and the production cutover. Those are client/infra dependencies, not code work. Phase 5 ships in slices; `main` carries Slices 1–8a (ledger foundation, journal entries, payroll→GL seam, contacts, sales invoices + supplier bills, payments/allocation, ledger reports) plus Slice 8b's `is_cash_equivalent` prerequisite (merged 2026-08-25). Outstanding: Slice 8b's four statements (Income Statement / Balance Sheet / Cash Flow / Equity — `rules/PLAN.md:486`), 8c (receivables and document reports — `rules/PLAN.md:490`), and credit notes / official receipts (blocked on Open Question 1). See `rules/PLAN.md` §5 for the slice-by-slice status with the reasoning behind each decision, and `rules/MILESTONES.md` for the client-facing gate view.
 
 ## Common Commands
 
 ```bash
+# First-time setup
+composer setup                # install deps, .env, key:generate, migrate --force, npm install, npm run build
+
 # Development
 composer run dev              # Starts artisan serve, queue, pail, vite concurrently
 npm run dev                   # Vite dev server only
+npm run build                 # Production bundle; also regenerates Wayfinder bindings
+php artisan horizon           # Real queue supervisor (composer run dev only uses queue:listen)
+php artisan pail              # Tail application logs
 
 # Testing
 php artisan test --compact                        # Run all tests
@@ -39,6 +45,8 @@ composer ci:check                        # Full gate: lint, format, types, phpst
 # Frontend tests (Vitest)
 npm test                                 # Run all Vitest tests
 npm run test:watch                       # Watch mode
+npx vitest run path/to/file.test.tsx     # Run a single Vitest file
+npx vitest run -t "name"                 # Run a single Vitest case by name
 
 # Scaffolding (always pass --no-interaction)
 php artisan make:model ModelName --no-interaction
@@ -67,13 +75,19 @@ php artisan make:controller ControllerName --no-interaction
 - **Middleware** — `HandleInertiaRequests` shares props globally (including `auth.user.roles` for React-side gating); `HandleAppearance` manages theme
 
 ### Accounting (Phase 5)
-The accounting module is a second bounded context layered on the same stack: `app/Actions/Accounting/`, `app/Services/Accounting/` (+ `Reports/`), `app/Http/Controllers/Admin/Accounting/`, `app/Models/Pas/{ChartOfAccount,TaxRate,AccountingPeriod,JournalEntry,JournalEntryLine,Contact,Invoice,InvoiceLine,Payment,PaymentAllocation,DocumentNumberSeries}.php`, pages under `resources/js/pages/admin/accounting/`. Money stays integer centavos and tax rates integer basis points (12% = 1200) — never floats. Note the `tests/Architecture/PayrollFloatAuditTest.php` guard scans only `app/Actions/Payroll/` and `app/Services/Payroll/`, so nothing mechanically enforces this in accounting code; it is on you.
+The accounting module is a second bounded context layered on the same stack: `app/Actions/Accounting/`, `app/Services/Accounting/` (+ `Reports/`), `app/Http/Controllers/Admin/Accounting/`, `app/Models/Pas/{ChartOfAccount,TaxRate,AccountingPeriod,JournalEntry,JournalEntryLine,Contact,Invoice,InvoiceLine,Payment,PaymentAllocation}.php`, pages under `resources/js/pages/admin/accounting/`. Money stays integer centavos and tax rates integer basis points (12% = 1200) — never floats. Note the `tests/Architecture/PayrollFloatAuditTest.php` guard scans only `app/Actions/Payroll/` and `app/Services/Payroll/`, so nothing mechanically enforces this in accounting code; it is on you.
 
 Invariants that span files — respect them rather than re-deriving them:
 - **One way into the ledger.** Every posting goes through `PostJournalEntry`, which asserts debits === credits in centavos and resolves the period via `AccountingPeriodGuard::resolveOpenPeriodFor()` inside the transaction. Never write `pas_journal_entry_lines` directly, and never re-check `AccountingPeriod::status` locally.
 - **Posted entries are immutable.** Correct by reversal (`ReverseJournalEntry`); the original AND the reversal both stay `posted` so they offset. Voiding the original would drop it from `scopePosted()` and understate the account. Guarded by `tests/Feature/Admin/JournalEntryImmutabilityTest.php`.
-- **Two failure policies, on purpose.** A ledger failure must NOT fail a payroll post — `LedgerPostingService` logs, leaves `journal_entry_id` null, and is idempotent so the run can be re-posted once the books are ready. A ledger failure MUST fail an invoice approval (`InvoicePostingService`), because a numbered BIR document cannot reach a third party while the books reject it.
-- **Serials are gapless.** `DocumentNumberAllocator::allocate()` throws when `DB::transactionLevel() === 0`, so a failed save rolls the serial back instead of burning it; issuing past `serial_end` is refused, not warned.
+- **Two failure policies, on purpose.** A ledger failure must NOT fail a payroll post — `LedgerPostingService` logs, leaves `journal_entry_id` null, and is idempotent so the run can be re-posted once the books are ready. A ledger failure MUST fail an invoice approval (`InvoicePostingService`), because a document handed to a third party cannot reach them while the books reject it.
+- **Parents are the payers; students are who charges are for.** `pas_contact_students` links them, many-to-many in both directions, with `is_primary_payer` enforced in `ImportLmsGuardians` rather than the schema. **One payer gets one contact however many children they have** — duplicating a payer scatters a family's receivable. `pas_contacts.lms_parent_id` is the import's dedupe key, unique **per school** because LMS ids repeat across tenant databases. `pas_invoices.lms_student_id` + `student_name` (a snapshot) record who was taught; `InvoiceRequest` refuses a payer not linked to that student.
+- **The LMS read surface now includes `sm_students` and `sm_parents`** (`rules/PLAN.md` §2, amended 2026-08-30). Read through `App\Models\Lms\{Student,Guardian}` on `ReadOnlyModel` only — and note the class is `Guardian`, not `Parent`, because `parent` is a PHP reserved word. `sm_fees_*` stays out of bounds: this system owns the fee schedule. Tests needing student fixtures use `useLmsSqliteMirror()` plus `database/migrations/testing/0001_01_01_create_test_lms_student_tables.php`; the live LMS has one student and cannot exercise the sibling case.
+- **Online payments go through a driver seam.** `app/Services/Payments/` holds a `PaymentGateway` contract with PayMongo and Stripe implementations; nothing downstream knows which paid, because both drivers normalise to a `GatewayEvent` DTO. Credentials are **per school** in `pas_payment_gateway_settings`, `encrypted` cast + `auditExclude()` following `School::lms_db_password`, and a secret is **never** sent to the browser (the page gets four masked characters). The webhook at `/schools/{slug}/webhooks/{provider}` is the app's first unauthenticated POST and first CSRF exclusion — its URL carries the slug because `SchoolTenantFinder` would otherwise 404 it before any controller runs. Idempotency is the unique on `pas_gateway_events (provider, external_event_id)`. `RecordGatewayPayment` **composes** `ApplyPaymentAllocations` + `PostPayment` rather than writing payments itself.
+- **The gateway's two accounts are defaults, not questions.** `GatewayAccountResolver` answers both: the fee from `ChartOfAccount::SYSTEM_MERCHANT_FEES` (`5250 Bank and Merchant Fees`, seeded and backfilled), the cash by chart CODE from `config('accounting.gateway.default_cash_account_code')` — **deliberately not a system code**, because `PaymentController::cashAccountOptions()` excludes system accounts and giving `1110` one would drop it from the manual payment picker. `PaymentGatewaySetting::isUsable()` asks whether the accounts *resolve*, not whether the columns are set, so a broken chart fails at the settings screen rather than in the webhook after a customer has paid. `RecordGatewayPayment` snapshots the **resolved** ids onto the Payment — the Payment is the reproducibility record, settings are mutable config.
+- **Gateway fees split gross from net.** `pas_payments.fee_centavos` holds what the gateway kept; `amount_centavos` stays gross. `PaymentPostingService` debits cash `amount − fee` and the fee to `fee_account_id`, so the receivable clears in full. Posting the net instead would strand every online invoice at `partially_paid`.
+- **The public pay page trusts the token, not the slug.** `BelongsToTenant` fails OPEN when no tenant is current, and a guest bypasses `ApplyTenantOverride`'s LMS-pinning — so `InvoicePaymentController` scopes `school_id` explicitly and matches on `pas_invoices.pay_token` too. Every refusal is an identical 404.
+- **Invoice numbers are derived, not administered.** The BIR series machinery (`pas_document_number_series`, `DocumentNumberAllocator`, Authority To Print, authorised ranges) was removed on 2026-08-30. `InvoiceNumberAllocator` replaces it: `INV-{year}-{00001}` / `BILL-{year}-{00001}`, read from the highest number already issued for that school, type and **issue-date year**, taken under `lockForUpdate` inside the creating transaction. Numbers are allocated **when a draft is created**, not at approval, and gaps are tolerated — an abandoned draft keeps its number. That is fine for an internal reference and would NOT be fine for a controlled serial, so reinstating BIR numbering means restoring a structurally gapless allocator rather than extending this one.
 - **Balances are derived, never stored ad hoc.** `InvoiceBalanceService` is the only place `amount_paid_centavos` comes from, and it counts allocations from **posted** payments only — that is what makes a void restore balances without deleting allocation rows.
 - **Control accounts resolve in one place.** `ControlAccountResolver` — a contact's AR/AP account is an override; null falls back to the school's `AR_CONTROL` / `AP_CONTROL` system account (`ChartOfAccount::SYSTEM_*`).
 - **Reports: keep raw and natural signing apart.** Dr/Cr columns use `debits − credits` (that is what makes a trial balance foot); anything directional goes through `ChartOfAccount::movementCentavos()`. Date ranges filter on the entry's own `date`, never `posted_at`, and must use `dayStart()`/`dayEnd()` — a bare `<= 'Y-m-d'` drops the last day under SQLite's string comparison.
@@ -100,7 +114,7 @@ Invariants that span files — respect them rather than re-deriving them:
 
 ### Routes
 - `routes/web.php` — welcome, dashboard, employee directory
-- `routes/admin.php` — **most domain routes live here**, all under the `/admin` prefix and `admin.` name (payroll runs, pay periods, allowances, deduction types, schools, audit log, reports, contribution tables, employee bulk import, and the whole accounting module: chart of accounts, tax rates, accounting periods, journal, contacts, invoices, payments, document series, ledger reports). Static segments and action routes are registered before `{wildcard}` route-model-binding params (see the `contribution-tables/template` and `accounting-periods/{accountingPeriod}/close` comments) — keep that ordering when adding routes.
+- `routes/admin.php` — **most domain routes live here**, all under the `/admin` prefix and `admin.` name (payroll runs, pay periods, allowances, deduction types, schools, audit log, reports, contribution tables, employee bulk import, and the whole accounting module: chart of accounts, tax rates, accounting periods, journal, contacts, invoices, payments, opening balances, ledger reports). Static segments and action routes are registered before `{wildcard}` route-model-binding params (see the `contribution-tables/template` and `accounting-periods/{accountingPeriod}/close` comments) — keep that ordering when adding routes.
 - `routes/settings.php` — settings pages (profile, security, appearance)
 - `routes/console.php` — scheduled commands (e.g. `horizon:snapshot` every 5 min)
 - Auth routes registered by Fortify automatically; the Horizon dashboard is served at `/horizon`
@@ -124,6 +138,12 @@ Invariants that span files — respect them rather than re-deriving them:
 Domain-specific skills are installed in `.agents/skills/` and `.claude/skills/` (shadcn, vercel-react-best-practices, git-commit, frontend-design, etc.). Activate the relevant skill when working in that domain — Laravel Boost handles the general activation policy.
 
 Always activate `/frontend-design:frontend-design` when creating or modifying frontend UI pages and components.
+
+**Dates in the UI always use `<DatePicker>`** from `@/components/ui/date-picker` — never `<Input type="date">`. Its `value` is `'YYYY-MM-DD'` or `''`, matching an Inertia `useForm` string field, and it carries its own Clear. This applies to date filters above all: a native input cannot be cleared once set. See `rules/CODING_STANDARDS_REACT.md` §8 for the layout caveat (the trigger is `inline-flex`, so put the width on the wrapper).
+
+**Date filtering on the server goes through `App\Support\DayBoundary`**, never a bare `'Y-m-d'` comparison. A `date` column compared to a plain date string silently drops the last day of the range under SQLite, because Eloquent's date cast writes `Y-m-d H:i:s` and the comparison becomes a string compare.
+
+Two MCP servers are wired in `.mcp.json`: `laravel-boost` (`php artisan boost:mcp` — app introspection, docs search, read-only DB queries) and `shadcn` (component registry). Prefer Boost's `database-query` / `database-schema` over raw tinker SQL.
 
 ## Subagents
 
@@ -160,6 +180,7 @@ Before making changes, read the relevant rule files in `rules/`. Also see `AGENT
 - `rules/CODING_STANDARDS_LARAVEL.md` — Backend architecture: Repository + Service + Action layered pattern, money as integer centavos via `Money` value object, double-entry accounting invariants, domain integrity (period locks, voiding instead of deleting), `declare(strict_types=1)` on every PHP file, Policy per model
 - `rules/CODING_STANDARDS_REACT.md` — Frontend architecture: TypeScript strict mode, Inertia patterns, component conventions, hooks, state management, forms, data fetching, routing, performance, error handling, testing
 - `rules/RULES.md` — UI implementation rules: semantic color tokens only (never raw hex), `<Money>` component for all currency, `<PageHeader>` on every page, shadcn/ui composition patterns, financial table conventions, status badge variants
+- `docs/improvement/` — exploratory design write-ups (`multi-tenant-payroll.md`, `plan-2.md`). Background reasoning, not binding rules; `rules/PLAN.md` is authoritative on scope.
 - `rules/THEME.md` — Visual design spec: warm cream/charcoal palette, Book Cloth orange accent, Inter/Source Serif 4/JetBrains Mono font stack, spacing rhythm, elevation levels, print styles
 
 ## Workflow Rules
@@ -178,6 +199,25 @@ Every new authenticated Inertia page must have a corresponding entry in the side
 
 ### Sidebar gating must mirror the page's authorization
 Every gated nav item lives in a constant at the top of `app-sidebar.tsx` (`EMPLOYEE_DIRECTORY_ROLES`, `PAYROLL_MAKER_ROLES`, `CATALOG_READ_ROLES`, `ACCOUNTING_ROLES`, `AUDIT_ROLES`, `SCHOOLS_ADMIN_ROLES`) that names the roles allowed by the page's policy or controller gate. Adding or modifying a policy MUST update the matching sidebar constant in the same PR — the visible-to-role set must equal the page's policy/gate set, not merely a subset. This prevents two failure modes: dead links (visible nav → 403 on click) and hidden-but-allowed pages (the user can't find the page they're authorized for). When you add a sidebar constant, cite the source policy in a one-line comment above it. `platform-admin` is included in every constant because `Gate::before` auto-grants it backend-side; the sidebar mirrors that visibility.
+
+### File uploads and PDF images
+`app/Services/SchoolLogo.php` is the only stored-upload path in the app and the
+precedent for any other. Copy it rather than inventing a second shape: the
+`public` disk, a content-hashed filename so the URL is immutable, an extension
+taken from the **validated** mime and never from the client filename, and
+`mimes:png,jpg,jpeg` — never SVG, which is a script-bearing document and
+becomes stored XSS the moment it is served back.
+
+`php artisan storage:link` must be run once per environment or every uploaded
+image 404s.
+
+Anything an image goes into a **PDF**: dompdf runs with `enable_remote` off
+(there is no `config/dompdf.php`, so vendor defaults apply) and silently
+refuses `http(s)` sources — `Storage::url()` renders nothing, with no error.
+Pass a base64 `data:` URI, and size it with an explicit `height` plus
+`width: auto`, because dompdf honours `max-height` unreliably. A resolver that
+cannot find the file must return null, not throw: a missing logo must never
+take payroll's PDF generation down.
 
 ### Never wrap pages in AppLayout
 The global Inertia resolver in `resources/js/app.tsx` automatically wraps every authenticated page in `AppLayout`. Page components must NOT import or wrap with `<AppLayout>` themselves — doing so renders a second `SidebarProvider` inside the first, injecting a phantom 256 px gap that pushes all page content right by the sidebar width. The correct pattern is:

@@ -1,5 +1,13 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ChevronRight, FileText, Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+    CalendarClock,
+    ChevronRight,
+    FileText,
+    Pencil,
+    Plus,
+    Trash2,
+    X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
@@ -18,6 +26,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
     Select,
     SelectContent,
@@ -59,9 +68,14 @@ export default function InvoiceIndex({
      * changed key would silently drop the other and drop the operator into a
      * list they did not ask for.
      */
+    const hasFilters =
+        filters.status !== null || filters.from !== null || filters.to !== null;
+
     const navigate = (patch: {
         type?: InvoiceType;
         status?: string | null;
+        from?: string | null;
+        to?: string | null;
         page?: number;
     }): void => {
         const query: Record<string, string | number> = {
@@ -73,6 +87,19 @@ export default function InvoiceIndex({
 
         if (status) {
             query.status = status;
+        }
+
+        // Carried on every navigation so changing the status never silently
+        // widens the date range back out again.
+        const from = patch.from === undefined ? filters.from : patch.from;
+        const to = patch.to === undefined ? filters.to : patch.to;
+
+        if (from) {
+            query.from = from;
+        }
+
+        if (to) {
+            query.to = to;
         }
 
         if (patch.page) {
@@ -117,7 +144,7 @@ export default function InvoiceIndex({
                     title={isSales ? 'Invoices' : 'Bills'}
                     description={
                         isSales
-                            ? 'Sales invoices issued to customers. A draft carries no number; approving it takes the next serial and posts it to the ledger.'
+                            ? 'Sales invoices issued to customers. A draft is numbered as soon as it is created; approving it posts the receivable and the output VAT to the ledger.'
                             : 'Bills received from suppliers. Approving one posts the payable and the input VAT.'
                     }
                     actions={
@@ -183,6 +210,61 @@ export default function InvoiceIndex({
                             <SelectItem value="voided">Voided</SelectItem>
                         </SelectContent>
                     </Select>
+
+                    {/*
+                      Bounds are inclusive at both ends, and either can stand
+                      alone — "everything since March" is as common a question
+                      as a closed range, so neither picker requires the other.
+                    */}
+                    <div className="flex items-center gap-2">
+                        <DatePicker
+                            id="filter-from"
+                            value={filters.from ?? ''}
+                            onChange={(value) =>
+                                navigate({ from: value === '' ? null : value })
+                            }
+                            placeholder="From"
+                            className="w-[10.5rem]"
+                        />
+                        <span className="text-xs text-muted-foreground">
+                            to
+                        </span>
+                        <DatePicker
+                            id="filter-to"
+                            value={filters.to ?? ''}
+                            onChange={(value) =>
+                                navigate({ to: value === '' ? null : value })
+                            }
+                            placeholder="To"
+                            className="w-[10.5rem]"
+                        />
+                    </div>
+
+                    {/*
+                      Only when something is actually filtered. A permanent
+                      Clear on an unfiltered list is a control that does
+                      nothing, and it reads as though a filter is on.
+                      `type` is deliberately not reset — it selects which list
+                      you are looking at, not how it is narrowed.
+                    */}
+                    {hasFilters && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground"
+                            onClick={() =>
+                                navigate({
+                                    status: null,
+                                    from: null,
+                                    to: null,
+                                })
+                            }
+                        >
+                            <X className="mr-1 h-3.5 w-3.5" />
+                            Clear filters
+                        </Button>
+                    )}
 
                     <span className="text-xs text-muted-foreground tabular-nums">
                         {invoices.total}{' '}
@@ -260,6 +342,15 @@ export default function InvoiceIndex({
                                             <TableRow key={row.id}>
                                                 <TableCell className="font-mono text-xs">
                                                     {row.number ?? '—'}
+                                                    {row.is_recurring ? (
+                                                        <span
+                                                            className="mt-0.5 flex items-center gap-1 font-sans text-[10px] text-muted-foreground"
+                                                            title="Raised overnight by a recurring schedule"
+                                                        >
+                                                            <CalendarClock className="h-3 w-3" />
+                                                            Recurring
+                                                        </span>
+                                                    ) : null}
                                                 </TableCell>
                                                 <TableCell className="max-w-[16rem]">
                                                     <span className="line-clamp-1">
@@ -468,6 +559,13 @@ export function InvoiceStatusBadge({
 
     if (status === 'draft') {
         return <Badge variant="outline">Draft</Badge>;
+    }
+
+    // Reserved since Slice 5 and never reached until invoices could be emailed
+    // by hand — until then a sent invoice fell through and read as merely
+    // 'Approved', which is the one thing the operator already knew.
+    if (status === 'sent') {
+        return <Badge variant="outline">Sent</Badge>;
     }
 
     return <Badge variant="outline">Approved</Badge>;

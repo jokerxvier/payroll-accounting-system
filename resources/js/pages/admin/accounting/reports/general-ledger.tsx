@@ -1,11 +1,12 @@
 import { Head, useForm } from '@inertiajs/react';
+import { CutoverNote } from '@/components/admin/cutover-note';
 import { ReportExportMenu } from '@/components/admin/report-export-menu';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Label } from '@/components/ui/label';
 import {
     Select,
@@ -23,6 +24,11 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { generalLedger as generalLedgerRoute } from '@/routes/admin/reports';
 import type { AccountLedger, LedgerAccountOption } from '@/types/ledger-report';
 
@@ -30,6 +36,52 @@ interface Props {
     filters: { from: string; to: string; account_id: number | null };
     accountOptions: LedgerAccountOption[];
     ledger: AccountLedger | null;
+    booksOpenedOn?: string | null;
+}
+
+/**
+ * The other side of an entry, without letting one entry stretch the table.
+ *
+ * An ordinary posting names one or two contra accounts and reads fine in
+ * full. A cutover snapshot names twenty, and joining those into one string
+ * widened the column past the viewport — putting a horizontal scrollbar under
+ * every row in the ledger, including the short ones it had nothing to do with.
+ *
+ * Two are shown rather than one because a two-sided entry is the common case:
+ * collapsing a receipt against a receivable to "+1 more" would hide half of
+ * something that already fitted. The rest stay reachable rather than lost —
+ * the exports keep the complete list regardless.
+ */
+function ContraAccounts({ accounts }: { accounts: string[] }) {
+    const VISIBLE = 2;
+
+    if (accounts.length === 0) {
+        return null;
+    }
+
+    const shown = accounts.slice(0, VISIBLE);
+    const hidden = accounts.slice(VISIBLE);
+
+    return (
+        <span className="flex flex-wrap items-baseline gap-x-1">
+            <span>{shown.join('; ')}</span>
+            {hidden.length > 0 && (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            type="button"
+                            className="cursor-help underline decoration-dotted underline-offset-2"
+                        >
+                            +{hidden.length} more
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                        {hidden.join('; ')}
+                    </TooltipContent>
+                </Tooltip>
+            )}
+        </span>
+    );
 }
 
 function Amount({ centavos }: { centavos: number }) {
@@ -44,6 +96,7 @@ export default function GeneralLedgerReport({
     filters,
     accountOptions,
     ledger,
+    booksOpenedOn,
 }: Props) {
     const form = useForm({
         from: filters.from,
@@ -76,6 +129,12 @@ export default function GeneralLedgerReport({
                             disabled={ledger === null}
                         />
                     }
+                />
+
+                <CutoverNote
+                    booksOpenedOn={booksOpenedOn}
+                    from={filters.from}
+                    to={filters.to}
                 />
 
                 <Card>
@@ -117,26 +176,26 @@ export default function GeneralLedgerReport({
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="space-y-1">
+                            <div className="w-[11rem] space-y-1">
                                 <Label htmlFor="from">From</Label>
-                                <Input
+                                <DatePicker
                                     id="from"
-                                    type="date"
                                     value={form.data.from}
-                                    onChange={(event) =>
-                                        form.setData('from', event.target.value)
+                                    onChange={(value) =>
+                                        form.setData('from', value)
                                     }
+                                    placeholder="From"
                                 />
                             </div>
-                            <div className="space-y-1">
+                            <div className="w-[11rem] space-y-1">
                                 <Label htmlFor="to">To</Label>
-                                <Input
+                                <DatePicker
                                     id="to"
-                                    type="date"
                                     value={form.data.to}
-                                    onChange={(event) =>
-                                        form.setData('to', event.target.value)
+                                    onChange={(value) =>
+                                        form.setData('to', value)
                                     }
+                                    placeholder="To"
                                 />
                             </div>
                             <Button
@@ -267,10 +326,12 @@ export default function GeneralLedgerReport({
                                                         {line.description ??
                                                             line.narration}
                                                     </TableCell>
-                                                    <TableCell className="text-xs text-muted-foreground">
-                                                        {line.contra_accounts.join(
-                                                            '; ',
-                                                        )}
+                                                    <TableCell className="max-w-[22rem] text-xs text-muted-foreground">
+                                                        <ContraAccounts
+                                                            accounts={
+                                                                line.contra_accounts
+                                                            }
+                                                        />
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <Amount

@@ -16,6 +16,10 @@ use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollRun;
 use App\Models\Pas\Payslip;
+use App\Models\Pas\School;
+use App\Services\SchoolLogo;
+use App\Support\ContributionLedger;
+use App\Support\PayslipLabel;
 use Barryvdh\DomPDF\Facade\Pdf;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
@@ -26,6 +30,7 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
+use Spatie\Multitenancy\Models\Tenant;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
@@ -286,7 +291,19 @@ final class PayrollRunController extends Controller
      * HTML page and the dompdf-rendered PDF. Single source of truth so
      * the two surfaces never drift.
      *
-     * @return array{run: array<string,mixed>, payslip: array<string,mixed>, employee: array<string,mixed>, earnings: list<array<string,mixed>>, deductions: list<array<string,mixed>>, employer_lines: list<array<string,mixed>>}
+     * They drifted anyway, because the page was handed only a third of this
+     * and split `audit_lines` itself. Both surfaces now render from the same
+     * `earnings` / `deductions` / `employer_lines` this returns.
+     *
+     * @return array{
+     *     run: array<string,mixed>,
+     *     payslip: array<string,mixed>,
+     *     employee: array<string,mixed>,
+     *     earnings: list<array<string,mixed>>,
+     *     deductions: list<array<string,mixed>>,
+     *     employer_lines: list<array<string,mixed>>,
+     *     school: array{name: string|null, tin: string|null, address: string|null, logo: string|null}
+     * }
      */
     private function payslipViewModel(PayrollRun $run, Payslip $payslip): array
     {
@@ -341,6 +358,26 @@ final class PayrollRunController extends Controller
             ],
             'earnings' => $earnings,
             'deductions' => $deductions,
+            // The employer, which this document did not name at all before.
+            // Resolved in BOTH view models on purpose — they are deliberately
+            // duplicated, and a field the template reads that appears in only
+            // one of them throws an undefined variable on the other path.
+            'school' => (function (): array {
+                $tenant = Tenant::current();
+                $school = $tenant instanceof School ? $tenant : null;
+
+                return [
+                    'name' => $school === null
+                        ? null
+                        : ($school->registered_name ?? $school->name),
+                    // A payslip is routinely handed to a bank or a landlord as
+                    // proof of employment, so the employer has to be
+                    // identifiable on it and not merely named.
+                    'tin' => $school?->tin,
+                    'address' => $school?->business_address,
+                    'logo' => app(SchoolLogo::class)->dataUri($school),
+                ];
+            })(),
             'employer_lines' => $employerLines,
         ];
     }
@@ -362,12 +399,33 @@ final class PayrollRunController extends Controller
 
         $vm = $this->payslipViewModel($payrollRun, $payslip);
 
-        // Inertia page only consumes a subset; pass the full VM so the
-        // page can render however it likes.
+        // The screen and the PDF are the same document in two media, so they
+        // are handed the same figures rather than each deriving its own. The
+        // page used to split `audit_lines` itself and print the raw codes,
+        // which is how the two drifted apart in the first place.
         return Inertia::render('admin/payroll-runs/payslips/show', [
             'run' => $vm['run'],
             'payslip' => $vm['payslip'],
             'employee' => $vm['employee'],
+            // The VM's logo is a base64 data URI, which dompdf needs and a
+            // browser does not: sending it here would put ~300 KB of image
+            // into the page payload on every visit instead of letting the
+            // web server serve one cacheable file.
+            'school' => [
+                'name' => $vm['school']['name'],
+                'tin' => $vm['school']['tin'],
+                'address' => $vm['school']['address'],
+                'logo_url' => app(SchoolLogo::class)->url(
+                    Tenant::current() instanceof School ? Tenant::current() : null,
+                ),
+            ],
+            'earnings' => PayslipLabel::humaniseLines($vm['earnings']),
+            'deductions' => PayslipLabel::humaniseLines($vm['deductions']),
+            'employerLines' => PayslipLabel::humaniseLines($vm['employer_lines']),
+            'contributions' => ContributionLedger::build(
+                $vm['deductions'],
+                $vm['employer_lines'],
+            ),
         ]);
     }
 

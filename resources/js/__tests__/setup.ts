@@ -23,3 +23,24 @@ if (
     // Radix Select uses scrollIntoView on item highlight.
     Element.prototype.scrollIntoView = (): void => {};
 }
+
+/*
+ * Recharts measures its parent before it draws anything, and jsdom reports
+ * every element as 0x0. Without a size, `ResponsiveContainer` renders an empty
+ * div and every chart assertion fails for a reason that has nothing to do with
+ * the chart.
+ *
+ * Giving the container a fixed box is enough: the tests assert on the data a
+ * chart is handed and the states around it — an empty range, a loading
+ * filter — not on pixel geometry, which jsdom could not tell us about anyway.
+ */
+if (typeof Element !== 'undefined') {
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        value: 800,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+        configurable: true,
+        value: 400,
+    });
+}

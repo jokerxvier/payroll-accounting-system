@@ -7,6 +7,7 @@ namespace App\Services\Accounting\Reports;
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\JournalEntry;
 use App\Models\Pas\JournalEntryLine;
+use App\Support\DayBoundary;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
@@ -30,10 +31,18 @@ use Illuminate\Support\Collection;
  *    its answer for a closed period.
  *
  * 3. **Opening balance is every posted movement strictly before `from`.**
- *    There is no opening-balance entry type — the ledger starts at zero and
- *    every figure in it was posted. `from = null` means "since inception",
- *    and then the opening columns are zero by construction rather than by
- *    a special case.
+ *    It is derived here, never stored: there is no opening-balance column on
+ *    an account, and nothing in this file knows a cutover from any other
+ *    date. `from = null` means "since inception", and then the opening
+ *    columns are zero by construction rather than by a special case.
+ *
+ *    Slice 9 added a cutover snapshot (`JournalEntry::SOURCE_OPENING_BALANCE`)
+ *    so a school can carry in the balances it kept elsewhere — and this rule
+ *    is exactly why that needed no change here. The snapshot is an ordinary
+ *    posted entry dated at cutover, so it sweeps into the opening balance of
+ *    every later range on its own. What this service still cannot say is
+ *    where an opening figure came from; `CutoverNote` makes that distinction
+ *    in the page, because it is a claim about provenance, not arithmetic.
  *
  * 4. **Debits and credits are summed separately and kept unsigned.** The
  *    normal-balance signing happens in the value objects, at the point a
@@ -204,12 +213,12 @@ final class LedgerReportService
      */
     private static function dayStart(CarbonImmutable $date): string
     {
-        return $date->startOfDay()->format('Y-m-d H:i:s');
+        return DayBoundary::start($date);
     }
 
     private static function dayEnd(CarbonImmutable $date): string
     {
-        return $date->endOfDay()->format('Y-m-d H:i:s');
+        return DayBoundary::end($date);
     }
 
     /**

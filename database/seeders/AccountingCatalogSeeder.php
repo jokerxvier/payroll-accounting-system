@@ -97,6 +97,7 @@ final class AccountingCatalogSeeder extends Seeder
         ['code' => '5220', 'name' => 'Office Supplies', 'type' => 'expense', 'subtype' => 'operating_expense', 'cash_flow' => 'operating'],
         ['code' => '5230', 'name' => 'Repairs and Maintenance', 'type' => 'expense', 'subtype' => 'operating_expense', 'cash_flow' => 'operating'],
         ['code' => '5240', 'name' => 'Professional Fees', 'type' => 'expense', 'subtype' => 'operating_expense', 'cash_flow' => 'operating'],
+        ['code' => '5250', 'name' => 'Bank and Merchant Fees', 'type' => 'expense', 'subtype' => 'operating_expense', 'cash_flow' => 'operating', 'system' => ChartOfAccount::SYSTEM_MERCHANT_FEES],
         ['code' => '5300', 'name' => 'Depreciation Expense', 'type' => 'expense', 'subtype' => 'operating_expense', 'cash_flow' => 'none', 'description' => 'Non-cash. Excluded from the Cash Flow Statement, hence cash_flow_category = none.'],
         ['code' => '5400', 'name' => 'Interest Expense', 'type' => 'expense', 'subtype' => 'other_expense', 'cash_flow' => 'financing'],
         ['code' => '5900', 'name' => 'Miscellaneous Expense', 'type' => 'expense', 'subtype' => 'operating_expense', 'cash_flow' => 'operating'],

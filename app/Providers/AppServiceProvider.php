@@ -8,7 +8,6 @@ use App\Models\Pas\Allowance;
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\Contact;
 use App\Models\Pas\DeductionType;
-use App\Models\Pas\DocumentNumberSeries;
 use App\Models\Pas\EmployeeAllowance;
 use App\Models\Pas\EmployeeDeduction;
 use App\Models\Pas\EmployeeLoan;
@@ -16,9 +15,11 @@ use App\Models\Pas\EmployeeProfile;
 use App\Models\Pas\Invoice;
 use App\Models\Pas\JournalEntry;
 use App\Models\Pas\Payment;
+use App\Models\Pas\PaymentGatewaySetting;
 use App\Models\Pas\PayPeriod;
 use App\Models\Pas\PayrollAdjustment;
 use App\Models\Pas\PayrollRun;
+use App\Models\Pas\RecurringInvoice;
 use App\Models\Pas\School;
 use App\Models\Pas\StatutoryContribution;
 use App\Models\Pas\TaxRate;
@@ -26,23 +27,25 @@ use App\Observers\InvoiceObserver;
 use App\Observers\JournalEntryObserver;
 use App\Observers\PaymentObserver;
 use App\Observers\PayrollRunObserver;
+use App\Observers\RecurringInvoiceObserver;
 use App\Observers\SchoolObserver;
 use App\Policies\Pas\AccountingPeriodPolicy;
 use App\Policies\Pas\AllowancePolicy;
 use App\Policies\Pas\ChartOfAccountPolicy;
 use App\Policies\Pas\ContactPolicy;
 use App\Policies\Pas\DeductionTypePolicy;
-use App\Policies\Pas\DocumentNumberSeriesPolicy;
 use App\Policies\Pas\EmployeeAllowancePolicy;
 use App\Policies\Pas\EmployeeDeductionPolicy;
 use App\Policies\Pas\EmployeeLoanPolicy;
 use App\Policies\Pas\EmployeeProfilePolicy;
 use App\Policies\Pas\InvoicePolicy;
 use App\Policies\Pas\JournalEntryPolicy;
+use App\Policies\Pas\PaymentGatewaySettingPolicy;
 use App\Policies\Pas\PaymentPolicy;
 use App\Policies\Pas\PayPeriodPolicy;
 use App\Policies\Pas\PayrollAdjustmentPolicy;
 use App\Policies\Pas\PayrollRunPolicy;
+use App\Policies\Pas\RecurringInvoicePolicy;
 use App\Policies\Pas\SchoolPolicy;
 use App\Policies\Pas\StatutoryContributionPolicy;
 use App\Policies\Pas\TaxRatePolicy;
@@ -106,6 +109,7 @@ class AppServiceProvider extends ServiceProvider
         PayrollRun::observe(PayrollRunObserver::class);
         JournalEntry::observe(JournalEntryObserver::class);
         Invoice::observe(InvoiceObserver::class);
+        RecurringInvoice::observe(RecurringInvoiceObserver::class);
         Payment::observe(PaymentObserver::class);
     }
 
@@ -187,13 +191,14 @@ class AppServiceProvider extends ServiceProvider
 
         // Phase 5 Slice 2 — the journal.
         Gate::policy(JournalEntry::class, JournalEntryPolicy::class);
+        Gate::policy(PaymentGatewaySetting::class, PaymentGatewaySettingPolicy::class);
 
         // Phase 5 Slice 4 — the contact register.
         Gate::policy(Contact::class, ContactPolicy::class);
 
         // Phase 5 Slice 5 — invoices and the serials they draw from.
         Gate::policy(Invoice::class, InvoicePolicy::class);
-        Gate::policy(DocumentNumberSeries::class, DocumentNumberSeriesPolicy::class);
+        Gate::policy(RecurringInvoice::class, RecurringInvoicePolicy::class);
 
         // Phase 5 Slice 7 — payments and allocation.
         Gate::policy(Payment::class, PaymentPolicy::class);
@@ -208,6 +213,16 @@ class AppServiceProvider extends ServiceProvider
         // but gating here keeps the button hidden in the admin UI.
         Gate::define(
             'dev.seed-demo-salaries',
+            fn ($user): bool => $user->hasRole('super-admin') && ! app()->environment('production'),
+        );
+
+        // Same shape, for the demo-fill button on the document forms — the
+        // invoice and the payment. A separate gate rather than reusing the
+        // salaries one: they grant different things, and a name that describes
+        // salaries would have to be read past by anyone auditing who can
+        // fabricate an invoice.
+        Gate::define(
+            'dev.demo-fill',
             fn ($user): bool => $user->hasRole('super-admin') && ! app()->environment('production'),
         );
     }

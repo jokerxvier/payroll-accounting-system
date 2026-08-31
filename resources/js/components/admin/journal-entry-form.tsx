@@ -30,6 +30,11 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    amountInputToCentavos,
+    centavosToAmountInput,
+    isAmountInput,
+} from '@/lib/money-input';
 import { cn } from '@/lib/utils';
 import {
     index as journalIndex,
@@ -102,39 +107,6 @@ function buildDefaults(mode: Mode): FormShape {
     };
 }
 
-function centavosToPesos(centavos: number): string {
-    return centavos === 0 ? '' : (centavos / 100).toFixed(2);
-}
-
-function pesosToCentavos(input: string): number {
-    const cleaned = input.trim();
-
-    if (cleaned === '') {
-        return 0;
-    }
-
-    const parsed = Number(cleaned);
-
-    if (Number.isNaN(parsed) || parsed < 0) {
-        return 0;
-    }
-
-    return Math.round(parsed * 100);
-}
-
-/**
- * Digits, at most one decimal point, at most two places after it.
- *
- * Applied as a gate on each keystroke rather than sanitising afterwards, so
- * a rejected character simply never appears. That also covers the minus
- * sign: a line moves one side by a positive amount, so a negative is not a
- * value to correct later, it is a keystroke to refuse now.
- *
- * A trailing point ("1234.") passes — it is a legitimate half-finished
- * entry, and refusing it would eat the key the moment it was pressed.
- */
-const AMOUNT_PATTERN = /^\d*\.?\d{0,2}$/;
-
 /** The raw text sitting in one line's two amount inputs. */
 interface RawAmounts {
     debit: string;
@@ -143,8 +115,8 @@ interface RawAmounts {
 
 function rawFor(line: JournalEntryLineDraft): RawAmounts {
     return {
-        debit: centavosToPesos(line.debit_centavos),
-        credit: centavosToPesos(line.credit_centavos),
+        debit: centavosToAmountInput(line.debit_centavos),
+        credit: centavosToAmountInput(line.credit_centavos),
     };
 }
 
@@ -207,11 +179,11 @@ export function JournalEntryForm({
         side: 'debit' | 'credit',
         input: string,
     ): void => {
-        if (!AMOUNT_PATTERN.test(input)) {
+        if (!isAmountInput(input)) {
             return;
         }
 
-        const centavos = pesosToCentavos(input);
+        const centavos = amountInputToCentavos(input);
         const clearsOther = centavos > 0;
 
         setRaw((prev) =>
@@ -248,7 +220,7 @@ export function JournalEntryForm({
         );
     };
 
-    /** Settle a half-finished figure ("1234.") into "1234.00" once focus leaves. */
+    /** Settle a half-finished figure ("1234.") into "1,234.00" once focus leaves. */
     const normaliseAmount = (index: number, side: 'debit' | 'credit'): void => {
         const line = form.data.lines[index];
 
@@ -262,7 +234,7 @@ export function JournalEntryForm({
         setRaw((prev) =>
             prev.map((entry, i) =>
                 i === index
-                    ? { ...entry, [side]: centavosToPesos(centavos) }
+                    ? { ...entry, [side]: centavosToAmountInput(centavos) }
                     : entry,
             ),
         );

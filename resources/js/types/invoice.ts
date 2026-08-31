@@ -5,10 +5,11 @@
  * The client converts to and from pesos at the input boundary only.
  *
  * One set of types covers both a sales invoice and a purchase bill, because
- * the shape is identical — only the posting direction and the numbering
- * series differ. The `type` discriminator says which.
+ * the shape is identical — only the posting direction differs. The `type`
+ * discriminator says which.
  */
 
+import type { ContactAccountOption, ContactPickerOption } from './contact';
 import type { Paginator } from './pagination';
 
 export type InvoiceType = 'sales' | 'purchase';
@@ -21,12 +22,14 @@ export type InvoiceStatus =
     | 'paid'
     | 'voided';
 
-/** Lean contact shape for the counterparty picker. */
-export interface InvoiceContactOption {
-    id: number;
-    name: string;
-    tin: string | null;
-}
+/**
+ * Lean contact shape for the counterparty picker.
+ *
+ * An alias rather than a second declaration: the picker is shared with the
+ * payment and recurring-schedule forms now, so there is one shape, and this
+ * name survives only so the invoice module reads in its own vocabulary.
+ */
+export type InvoiceContactOption = ContactPickerOption;
 
 /** Lean account shape for the line pickers — income or expense only. */
 export interface InvoiceAccountOption {
@@ -77,6 +80,8 @@ export interface InvoiceRow {
     type: InvoiceType;
     /** Null until approved — a draft does not burn a BIR serial. */
     number: string | null;
+    /** Raised by a recurring schedule rather than typed by hand. */
+    is_recurring: boolean;
     reference: string | null;
     contact_name: string | null;
     issue_date: string;
@@ -108,6 +113,17 @@ export interface InvoiceDetail extends InvoiceRow {
     notes: string | null;
     terms: string | null;
     approved_at: string | null;
+    /** When it was last emailed, and to where. Null until someone sends it. */
+    sent_at: string | null;
+    sent_to: string | null;
+    /**
+     * The customer-facing pay link, or null until one has been minted.
+     *
+     * Tokens are created on demand, so this is null for every invoice nobody
+     * has shared — which keeps the number of live public URLs equal to the
+     * number someone deliberately created.
+     */
+    pay_url: string | null;
     voided_at: string | null;
     void_reason: string | null;
     contact: {
@@ -135,7 +151,7 @@ export interface InvoiceDetail extends InvoiceRow {
         payment_date: string | null;
         amount_centavos: number;
     }>;
-    can: InvoiceRow['can'] & { print: boolean };
+    can: InvoiceRow['can'] & { print: boolean; send: boolean };
 }
 
 /** Shape the edit page hands to the form. */
@@ -143,6 +159,8 @@ export interface InvoiceEditable {
     id: number;
     type: InvoiceType;
     contact_id: number;
+    /** Who the charges are for. Null on an invoice raised without a student. */
+    lms_student_id: number | null;
     reference: string | null;
     issue_date: string;
     due_date: string | null;
@@ -152,56 +170,64 @@ export interface InvoiceEditable {
     lines: InvoiceLineDraft[];
 }
 
+/** A payer recorded as responsible for a student. */
+export interface StudentPayerOption {
+    contact_id: number;
+    name: string | null;
+    tin: string | null;
+    address: string | null;
+    relationship: string | null;
+    is_primary_payer: boolean;
+}
+
+/**
+ * A student someone is recorded as paying for.
+ *
+ * `payers` is ordered primary-first, so the form can take the head of the list
+ * rather than re-deciding what "primary" means on the client.
+ */
+export interface InvoiceStudentOption {
+    lms_student_id: number;
+    name: string;
+    payers: StudentPayerOption[];
+}
+
 /** Everything the create and edit forms need to populate their selects. */
 export interface InvoiceFormOptions {
     contactOptions: InvoiceContactOption[];
+    /**
+     * Whether the counterparty picker offers a New button. Mirrors the
+     * `create` ability on Contact — an operator who cannot reach the contacts
+     * register must not be handed a sheet that posts to it.
+     */
+    canCreateContact?: boolean;
+    /**
+     * Control-account overrides for the new-contact sheet, which is the same
+     * component the contacts register uses. Absent on a page that does not
+     * offer the New button.
+     */
+    receivableAccountOptions?: ContactAccountOption[];
+    payableAccountOptions?: ContactAccountOption[];
     accountOptions: InvoiceAccountOption[];
     taxRateOptions: InvoiceTaxRateOption[];
+    /** Sales only — a supplier's bill has no pupil behind it. */
+    studentOptions?: InvoiceStudentOption[];
     /**
-     * A preview of the serial this document would take, or null when no
-     * series is configured. A peek, never an allocation — most drafts are
-     * opened and closed without ever being approved.
+     * Whether to offer the demo-fill button. Super-admin outside production
+     * only, via the `dev.demo-fill` gate — it is a development affordance,
+     * not a product feature.
      */
-    nextNumber: string | null;
+    canDemoFill?: boolean;
 }
 
 export interface InvoiceIndexProps {
     invoices: Paginator<InvoiceRow>;
-    filters: { type: InvoiceType; status: InvoiceStatus | null };
-    can: { create: boolean };
-}
-
-/* ── Document numbering series ──────────────────────────────────────── */
-
-export type DocumentSeriesType =
-    | 'sales_invoice'
-    | 'official_receipt'
-    | 'credit_note'
-    | 'bill';
-
-export interface DocumentSeriesRow {
-    id: number;
-    document_type: DocumentSeriesType;
-    label: string;
-    prefix: string | null;
-    padding: number;
-    next_number: number;
-    /** What the next document would actually be stamped with. */
-    next_formatted: string;
-    serial_start: number | null;
-    serial_end: number | null;
-    atp_number: string | null;
-    permit_issued_at: string | null;
-    /** False until the client supplies permit details — a normal state. */
-    has_authority_to_print: boolean;
-    /** Null when the series is unbounded. */
-    remaining_in_range: number | null;
-    is_active: boolean;
-    can: { update: boolean };
-}
-
-export interface DocumentSeriesIndexProps {
-    series: DocumentSeriesRow[];
-    documentTypes: DocumentSeriesType[];
+    filters: {
+        type: InvoiceType;
+        status: InvoiceStatus | null;
+        /** Inclusive issue-date bounds, 'YYYY-MM-DD' or null. */
+        from: string | null;
+        to: string | null;
+    };
     can: { create: boolean };
 }

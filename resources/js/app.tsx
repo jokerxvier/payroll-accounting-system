@@ -14,6 +14,11 @@ createInertiaApp({
         switch (true) {
             case name === 'welcome':
                 return null;
+            // Customer-facing pages render their own chrome and must NOT get
+            // AppLayout — it draws the admin sidebar and reads `auth.user`,
+            // neither of which exists for a guest paying an invoice.
+            case name.startsWith('public/'):
+                return null;
             case name.startsWith('auth/'):
                 return AuthLayout;
             case name.startsWith('settings/'):
