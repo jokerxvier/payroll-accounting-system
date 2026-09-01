@@ -1,4 +1,5 @@
 import { Head, useForm } from '@inertiajs/react';
+import { AccountPicker } from '@/components/admin/account-picker';
 import { CutoverNote } from '@/components/admin/cutover-note';
 import { ReportExportMenu } from '@/components/admin/report-export-menu';
 import { Money } from '@/components/money';
@@ -8,13 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -148,33 +142,28 @@ export default function GeneralLedgerReport({
                             onSubmit={submit}
                             className="flex flex-wrap items-end gap-3"
                         >
-                            <div className="space-y-1">
+                            {/*
+                              Width on the wrapper, not the trigger: the
+                              picker's button is inline-flex, so a width class
+                              on it collapses to the content.
+                            */}
+                            <div className="w-[22rem] space-y-1">
                                 <Label htmlFor="account_id">Account</Label>
-                                <Select
-                                    value={form.data.account_id}
-                                    onValueChange={(value) =>
-                                        form.setData('account_id', value)
+                                <AccountPicker
+                                    id="account_id"
+                                    options={accountOptions}
+                                    value={
+                                        form.data.account_id
+                                            ? Number(form.data.account_id)
+                                            : null
                                     }
-                                >
-                                    <SelectTrigger
-                                        id="account_id"
-                                        className="w-[22rem]"
-                                    >
-                                        <SelectValue placeholder="Choose an account…" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {accountOptions.map((account) => (
-                                            <SelectItem
-                                                key={account.id}
-                                                value={String(account.id)}
-                                            >
-                                                {account.code} {account.name}
-                                                {!account.is_active &&
-                                                    ' (inactive)'}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                    onSelect={(accountId) =>
+                                        form.setData(
+                                            'account_id',
+                                            String(accountId),
+                                        )
+                                    }
+                                />
                             </div>
                             <div className="w-[11rem] space-y-1">
                                 <Label htmlFor="from">From</Label>

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Admin\Accounting\AccountingPeriodController;
 use App\Http\Controllers\Admin\Accounting\ChartOfAccountController;
+use App\Http\Controllers\Admin\Accounting\ChartOfAccountImportController;
 use App\Http\Controllers\Admin\Accounting\ContactController;
+use App\Http\Controllers\Admin\Accounting\ContactImportController;
 use App\Http\Controllers\Admin\Accounting\FinancialDashboardController;
 use App\Http\Controllers\Admin\Accounting\GuardianImportController;
 use App\Http\Controllers\Admin\Accounting\InvoiceController;
@@ -12,6 +14,7 @@ use App\Http\Controllers\Admin\Accounting\InvoicePrintController;
 use App\Http\Controllers\Admin\Accounting\JournalEntryController;
 use App\Http\Controllers\Admin\Accounting\LedgerReportController;
 use App\Http\Controllers\Admin\Accounting\OpeningBalanceController;
+use App\Http\Controllers\Admin\Accounting\OpeningItemController;
 use App\Http\Controllers\Admin\Accounting\PaymentController;
 use App\Http\Controllers\Admin\Accounting\PaymentGatewaySettingController;
 use App\Http\Controllers\Admin\Accounting\ReceivablesDashboardController;
@@ -184,6 +187,18 @@ Route::middleware(['auth', 'verified'])
         // what the sheet posts to.
         // The kebab-case URI maps back to the camelCase {chartOfAccount}
         // parameter so the controller keeps a conventional variable name.
+        // The chart's spreadsheet round trip. Static segments, registered
+        // before the resource so they win against `chart-of-accounts/{id}`.
+        // There is no index route: the preview renders in a dialog on the
+        // chart itself, so `preview` redirects back there.
+        Route::get('chart-of-accounts/export', [ChartOfAccountImportController::class, 'export'])
+            ->name('chart-of-accounts.export');
+        Route::get('chart-of-accounts/import/template', [ChartOfAccountImportController::class, 'template'])
+            ->name('chart-of-accounts.import.template');
+        Route::post('chart-of-accounts/import/preview', [ChartOfAccountImportController::class, 'preview'])
+            ->name('chart-of-accounts.import.preview');
+        Route::post('chart-of-accounts/import/confirm/{token}', [ChartOfAccountImportController::class, 'confirm'])
+            ->name('chart-of-accounts.import.confirm');
         Route::resource('chart-of-accounts', ChartOfAccountController::class)
             ->parameters(['chart-of-accounts' => 'chartOfAccount'])
             ->except(['show', 'create', 'edit']);
@@ -206,6 +221,20 @@ Route::middleware(['auth', 'verified'])
             ->name('contacts.import-guardians.preview');
         Route::post('contacts/import-guardians/confirm/{token}', [GuardianImportController::class, 'confirm'])
             ->name('contacts.import-guardians.confirm');
+
+        // The spreadsheet round trip: take the register out, correct it, put
+        // it back. Static segments, registered before the resource for the
+        // same reason as the guardian import above.
+        Route::get('contacts/export', [ContactImportController::class, 'export'])
+            ->name('contacts.export');
+        Route::get('contacts/import', [ContactImportController::class, 'index'])
+            ->name('contacts.import.index');
+        Route::get('contacts/import/template', [ContactImportController::class, 'template'])
+            ->name('contacts.import.template');
+        Route::post('contacts/import/preview', [ContactImportController::class, 'preview'])
+            ->name('contacts.import.preview');
+        Route::post('contacts/import/confirm/{token}', [ContactImportController::class, 'confirm'])
+            ->name('contacts.import.confirm');
         Route::resource('contacts', ContactController::class)
             ->except(['show', 'create', 'edit']);
 
@@ -318,6 +347,19 @@ Route::middleware(['auth', 'verified'])
             ->name('opening-balances.preview');
         Route::post('opening-balances/confirm/{token}', [OpeningBalanceController::class, 'confirm'])
             ->name('opening-balances.confirm');
+
+        // Phase 5 Slice 9 — the documents behind that snapshot.
+        //
+        // Same shape and the same session-token contract; separate because
+        // the balances have to exist before the items that explain them.
+        Route::get('opening-items', [OpeningItemController::class, 'index'])
+            ->name('opening-items.index');
+        Route::get('opening-items/template', [OpeningItemController::class, 'template'])
+            ->name('opening-items.template');
+        Route::post('opening-items/preview', [OpeningItemController::class, 'preview'])
+            ->name('opening-items.preview');
+        Route::post('opening-items/confirm/{token}', [OpeningItemController::class, 'confirm'])
+            ->name('opening-items.confirm');
 
         // Phase 5 Slice 8a — ledger reports.
         //

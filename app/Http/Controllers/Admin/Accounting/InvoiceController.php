@@ -67,6 +67,14 @@ final class InvoiceController extends Controller
         $type = (string) $request->query('type', Invoice::TYPE_SALES);
         $type = in_array($type, Invoice::TYPES, true) ? $type : Invoice::TYPE_SALES;
         $status = (string) $request->query('status', '');
+        $search = trim((string) $request->query('search', ''));
+
+        // The invoice dashboard's Top Outstanding table links here with a
+        // contact, so a payer's name opens their documents rather than the
+        // whole list. Read as an int and dropped when it is not one — the
+        // tenant scope does the rest, so a foreign contact simply matches
+        // nothing.
+        $contactId = (int) $request->query('contact_id', 0);
 
         // Bounds are inclusive at both ends, and go through DayBoundary
         // rather than a bare 'Y-m-d': a `date` column compared to a plain
@@ -84,6 +92,8 @@ final class InvoiceController extends Controller
                 in_array($status, Invoice::STATUSES, true),
                 fn ($query) => $query->where('status', $status),
             )
+            ->when($contactId > 0, fn ($query) => $query->where('contact_id', $contactId))
+            ->matching($search)
             ->when($after !== null, fn ($query) => $query->where('issue_date', '>=', $after))
             ->when($before !== null, fn ($query) => $query->where('issue_date', '<=', $before))
             ->orderByDesc('issue_date')
@@ -96,6 +106,8 @@ final class InvoiceController extends Controller
             'invoices' => $invoices,
             'filters' => [
                 'type' => $type,
+                'search' => $search !== '' ? $search : null,
+                'contact_id' => $contactId > 0 ? $contactId : null,
                 'status' => $status !== '' ? $status : null,
                 'from' => $from?->toDateString(),
                 'to' => $to?->toDateString(),

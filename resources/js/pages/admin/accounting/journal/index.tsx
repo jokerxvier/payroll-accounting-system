@@ -1,5 +1,13 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { BookText, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react';
+import {
+    BookText,
+    ChevronRight,
+    Pencil,
+    Plus,
+    Search,
+    Trash2,
+    X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
@@ -19,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DatePicker } from '@/components/ui/date-picker';
+import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
@@ -34,6 +43,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useTableFilters } from '@/hooks/use-table-filters';
 import {
     create as journalCreate,
     destroy as journalDestroy,
@@ -55,44 +65,41 @@ export default function JournalIndex({
     );
     const [isDeleting, setIsDeleting] = useState(false);
 
-    /**
-     * Every navigation carries every filter.
+    /*
+     * The shared filter hook, not another hand-rolled navigate().
      *
-     * Previously the status change and the page change each built their own
-     * query, and the page one had a comment warning that dropping a filter
-     * lands the operator back in an unfiltered list. With three filters that
-     * shape has to be one function or they start dropping each other.
+     * The previous local function existed because four filters have to travel
+     * together or they drop each other — which is exactly what this hook does,
+     * plus the debounce a text search needs.
      */
+    const {
+        filters: current,
+        apply,
+        applyDebounced,
+    } = useTableFilters(
+        {
+            search: filters.search ?? '',
+            status: filters.status ?? '',
+            from: filters.from ?? '',
+            to: filters.to ?? '',
+        },
+        journalIndex().url,
+    );
+
     const hasFilters =
-        filters.status !== null || filters.from !== null || filters.to !== null;
+        current.search !== '' ||
+        current.status !== '' ||
+        current.from !== '' ||
+        current.to !== '';
 
-    const navigate = (patch: {
-        status?: string | null;
-        from?: string | null;
-        to?: string | null;
-        page?: number;
-    }): void => {
-        const query: Record<string, string | number> = {};
+    /** Paging carries the filters but is never merged into them. */
+    const goPage = (page: number): void => {
+        const query: Record<string, string | number> = { page };
 
-        const status =
-            patch.status === undefined ? filters.status : patch.status;
-        const from = patch.from === undefined ? filters.from : patch.from;
-        const to = patch.to === undefined ? filters.to : patch.to;
-
-        if (status) {
-            query.status = status;
-        }
-
-        if (from) {
-            query.from = from;
-        }
-
-        if (to) {
-            query.to = to;
-        }
-
-        if (patch.page) {
-            query.page = patch.page;
+        for (const key of ['search', 'status', 'from', 'to'] as const) {
+            if (current[key]) {
+                query[key] = current[key];
+            }
         }
 
         router.get(journalIndex().url, query, {
@@ -100,11 +107,6 @@ export default function JournalIndex({
             preserveState: true,
         });
     };
-
-    const onStatusChange = (value: string): void =>
-        navigate({ status: value === ALL ? null : value, page: undefined });
-
-    const goPage = (page: number): void => navigate({ page });
 
     const handleConfirmDelete = (): void => {
         if (pendingDelete === null) {
@@ -150,9 +152,31 @@ export default function JournalIndex({
                 />
 
                 <div className="flex flex-wrap items-center gap-3">
+                    {/*
+                      First in the row because it is the widest net. The others
+                      narrow a list; this one finds a thing — an entry number,
+                      a document reference, or a payer, since every posting
+                      service writes the counterparty into the narration.
+                    */}
+                    <div className="relative w-[18rem]">
+                        <Search className="absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            aria-label="Search journal entries"
+                            placeholder="Entry number, reference or name…"
+                            defaultValue={current.search}
+                            className="pl-8"
+                            onChange={(e) =>
+                                applyDebounced({ search: e.target.value })
+                            }
+                        />
+                    </div>
+
                     <Select
-                        value={filters.status ?? ALL}
-                        onValueChange={onStatusChange}
+                        value={current.status === '' ? ALL : current.status}
+                        onValueChange={(value) =>
+                            apply({ status: value === ALL ? '' : value })
+                        }
                     >
                         <SelectTrigger
                             className="w-[12rem]"
@@ -175,10 +199,8 @@ export default function JournalIndex({
                     <div className="flex items-center gap-2">
                         <DatePicker
                             id="filter-from"
-                            value={filters.from ?? ''}
-                            onChange={(value) =>
-                                navigate({ from: value === '' ? null : value })
-                            }
+                            value={current.from}
+                            onChange={(value) => apply({ from: value })}
                             placeholder="From"
                             className="w-[10.5rem]"
                         />
@@ -187,10 +209,8 @@ export default function JournalIndex({
                         </span>
                         <DatePicker
                             id="filter-to"
-                            value={filters.to ?? ''}
-                            onChange={(value) =>
-                                navigate({ to: value === '' ? null : value })
-                            }
+                            value={current.to}
+                            onChange={(value) => apply({ to: value })}
                             placeholder="To"
                             className="w-[10.5rem]"
                         />
@@ -210,10 +230,11 @@ export default function JournalIndex({
                             size="sm"
                             className="text-muted-foreground"
                             onClick={() =>
-                                navigate({
-                                    status: null,
-                                    from: null,
-                                    to: null,
+                                apply({
+                                    search: '',
+                                    status: '',
+                                    from: '',
+                                    to: '',
                                 })
                             }
                         >

@@ -6,7 +6,9 @@ use App\Models\Pas\AccountingPeriod;
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\JournalEntry;
 use App\Models\Pas\JournalEntryLine;
+use App\Models\Pas\School;
 use App\Models\User;
+use Spatie\Multitenancy\Models\Tenant;
 
 /*
  * /admin/journal-entries (Phase 5 Slice 2).
@@ -400,4 +402,81 @@ it('reports a posted total identically whichever source is used', function () {
         ->assertInertia(fn ($page) => $page
             ->where('entry.total_debit_centavos', $posted->total_debit_centavos)
             ->where('entry.total_credit_centavos', $posted->total_credit_centavos));
+});
+
+/* ── Search ──────────────────────────────────────────────────────────── */
+
+it('finds an entry by its number, its reference, or a name in the narration', function () {
+    // Every posting service writes the counterparty into the narration, so
+    // searching the header gives payer lookup without joining anything.
+    JournalEntry::factory()->create([
+        'entry_number' => 'JE-2026-00042',
+        'reference' => 'OR-9423',
+        'narration' => 'Receipt #13 — Zachary Roy',
+        'date' => '2026-08-10',
+    ]);
+    JournalEntry::factory()->create([
+        'entry_number' => 'JE-2026-00043',
+        'reference' => 'INV-2026-00011',
+        'narration' => 'Sales invoice — Acme Trading',
+        'date' => '2026-08-11',
+    ]);
+
+    foreach (['JE-2026-00042', 'OR-9423', 'Zachary'] as $term) {
+        $this->actingAs(journalAuthAs('accountant'))
+            ->get('/admin/journal-entries?search='.urlencode($term))
+            ->assertInertia(fn ($page) => $page
+                ->where('entries.total', 1)
+                ->where('entries.data.0.entry_number', 'JE-2026-00042'));
+    }
+});
+
+it('keeps the search inside the other filters instead of escaping them', function () {
+    // The regression the wrapping closure in scopeMatching() exists to stop.
+    // Without it the orWhere chain breaks out of the status and date
+    // predicates and quietly returns entries from outside the range.
+    JournalEntry::factory()->create([
+        'entry_number' => 'JE-2026-00050',
+        'narration' => 'Tuition — Zachary Roy',
+        'status' => JournalEntry::STATUS_POSTED,
+        'date' => '2026-08-10',
+    ]);
+    JournalEntry::factory()->create([
+        'entry_number' => 'JE-2026-00051',
+        'narration' => 'Tuition — Zachary Roy',
+        'status' => JournalEntry::STATUS_DRAFT,
+        'date' => '2026-08-10',
+    ]);
+
+    $this->actingAs(journalAuthAs('accountant'))
+        ->get('/admin/journal-entries?search=Zachary&status=posted')
+        ->assertInertia(fn ($page) => $page
+            ->where('entries.total', 1)
+            ->where('entries.data.0.entry_number', 'JE-2026-00050'));
+});
+
+it('ignores a blank search rather than matching nothing', function () {
+    JournalEntry::factory()->count(3)->create(['date' => '2026-08-10']);
+
+    $this->actingAs(journalAuthAs('accountant'))
+        ->get('/admin/journal-entries?search=')
+        ->assertInertia(fn ($page) => $page
+            ->where('entries.total', 3)
+            ->where('filters.search', null));
+});
+
+it('never reaches another school through the search', function () {
+    JournalEntry::factory()->create([
+        'narration' => 'Tuition — Zachary Roy',
+        'date' => '2026-08-10',
+    ]);
+
+    $other = School::factory()->create();
+    $other->makeCurrent();
+
+    $this->actingAs(journalAuthAs('accountant'))
+        ->get('/admin/journal-entries?search=Zachary')
+        ->assertInertia(fn ($page) => $page->where('entries.total', 0));
+
+    Tenant::forgetCurrent();
 });

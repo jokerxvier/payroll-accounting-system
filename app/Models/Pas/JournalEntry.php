@@ -257,6 +257,45 @@ final class JournalEntry extends Model
     }
 
     /**
+     * Free-text lookup across the entry header.
+     *
+     * Three columns, and between them they hold everything somebody types:
+     * `entry_number` (JE-2026-00045), `reference` (OR-9423, INV-2026-00011,
+     * OPENING), and `narration` — which every posting service writes with the
+     * counterparty's name in it, so "Zachary Roy" finds his invoices and his
+     * receipts without this having to join anything.
+     *
+     * **The lines are deliberately not searched.** "Every entry touching 5210"
+     * is a fair question with a better answer already built: the General
+     * Ledger report gives it running balances and contra accounts, which a
+     * filtered list cannot.
+     *
+     * The wrapping closure is load-bearing rather than stylistic. Without it
+     * the `orWhere` chain escapes whatever status and date predicates the
+     * caller has already applied, and a search inside August would quietly
+     * return entries from every other month.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeMatching(Builder $query, string $term): Builder
+    {
+        $term = trim($term);
+
+        if ($term === '') {
+            return $query;
+        }
+
+        $like = '%'.$term.'%';
+
+        return $query->where(function (Builder $inner) use ($like): void {
+            $inner->where('entry_number', 'like', $like)
+                ->orWhere('reference', 'like', $like)
+                ->orWhere('narration', 'like', $like);
+        });
+    }
+
+    /**
      * The cutover snapshot, posted or otherwise.
      *
      * Scoped rather than left to callers because "is there already an

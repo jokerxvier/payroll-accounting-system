@@ -64,7 +64,14 @@ export default function OpeningBalancesIndex({
 
     const submitUpload = (e: FormEvent) => {
         e.preventDefault();
-        upload.post(PREVIEW_URL, { forceFormData: true });
+        // Inertia re-renders the same component on the redirect back, so the
+        // confirm form keeps its state — including a refusal from a previous
+        // attempt. Clearing it here stops a fresh worksheet inheriting the
+        // last one's error.
+        upload.post(PREVIEW_URL, {
+            forceFormData: true,
+            onSuccess: () => confirm.clearErrors(),
+        });
     };
 
     const submitConfirm = (e: FormEvent) => {
@@ -76,6 +83,23 @@ export default function OpeningBalancesIndex({
 
         confirm.post(`/admin/opening-balances/confirm/${token}`);
     };
+
+    /*
+     * Why the post was refused.
+     *
+     * `confirm` is typed by its one data field, so TypeScript does not know
+     * about the keys the CONTROLLER refuses under — `file` for a domain
+     * refusal, `token` for a preview that has gone stale. Both are real at
+     * runtime; the cast names them rather than widening the form's own type.
+     *
+     * This has to be read off the form instance and not off the page's shared
+     * `errors` prop: the upload form also refuses under `file`, and at page
+     * level the two are indistinguishable.
+     */
+    const confirmErrors = confirm.errors as Partial<
+        Record<'file' | 'token', string>
+    >;
+    const confirmError = confirmErrors.file ?? confirmErrors.token ?? null;
 
     const difference = summary?.difference_centavos ?? 0;
     const isBalanced = difference === 0;
@@ -119,6 +143,21 @@ export default function OpeningBalancesIndex({
                                 one would double every balance it touches.
                             </span>
                         </AlertDescription>
+                    </Alert>
+                )}
+
+                {/*
+                 * Page level, not inside the preview card: one of these
+                 * refusals is "no parsed worksheet in session", which arrives
+                 * with nothing to render the card at all.
+                 */}
+                {confirmError && (
+                    <Alert variant="destructive">
+                        <AlertCircle className="size-4" />
+                        <AlertTitle>
+                            These opening balances were not posted
+                        </AlertTitle>
+                        <AlertDescription>{confirmError}</AlertDescription>
                     </Alert>
                 )}
 

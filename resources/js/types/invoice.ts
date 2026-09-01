@@ -224,6 +224,10 @@ export interface InvoiceIndexProps {
     invoices: Paginator<InvoiceRow>;
     filters: {
         type: InvoiceType;
+        /** Free text over number, reference, student name, notes and payer. */
+        search: string | null;
+        /** Set when arriving from the dashboard's Top Outstanding table. */
+        contact_id: number | null;
         status: InvoiceStatus | null;
         /** Inclusive issue-date bounds, 'YYYY-MM-DD' or null. */
         from: string | null;

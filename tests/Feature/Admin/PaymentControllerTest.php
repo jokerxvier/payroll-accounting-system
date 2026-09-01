@@ -15,6 +15,7 @@ use App\Models\Pas\School;
 use App\Models\Pas\TaxRate;
 use App\Models\User;
 use Database\Seeders\AccountingCatalogSeeder;
+use Spatie\Multitenancy\Models\Tenant;
 
 /*
  * /admin/payments (Phase 5 Slice 7).
@@ -439,4 +440,140 @@ it('withholds demo fill in production, whoever is asking', function () {
     $this->actingAs(paymentAuthAs('super-admin'))
         ->get(route('admin.payments.create', ['type' => 'receipt']))
         ->assertInertia(fn ($page) => $page->where('canDemoFill', false));
+});
+
+/* ── Search and the ledger column ────────────────────────────────────── */
+
+it('finds a payment by reference, by note, or by the payer\'s name', function () {
+    // A payment carries no narration — its story is in the columns — so the
+    // payer's name has to come from the related contact.
+    $other = Contact::factory()->create(['name' => 'Santos Family']);
+
+    Payment::factory()->create([
+        'type' => Payment::TYPE_RECEIPT,
+        'contact_id' => $this->customer->id,
+        'cash_account_id' => $this->cash->id,
+        'payment_date' => '2026-08-10',
+        'reference' => 'OR-9423',
+        'notes' => 'Cheque cleared late',
+    ]);
+    Payment::factory()->create([
+        'type' => Payment::TYPE_RECEIPT,
+        'contact_id' => $other->id,
+        'cash_account_id' => $this->cash->id,
+        'payment_date' => '2026-08-11',
+        'reference' => 'OR-1111',
+    ]);
+
+    foreach (['OR-9423', 'cleared late', 'Dela Cruz'] as $term) {
+        $this->actingAs(paymentAuthAs('accountant'))
+            ->get('/admin/payments?type=receipt&search='.urlencode($term))
+            ->assertInertia(fn ($page) => $page
+                ->where('payments.total', 1)
+                ->where('payments.data.0.reference', 'OR-9423'));
+    }
+});
+
+it('keeps the search inside the type filter instead of escaping it', function () {
+    // The regression the wrapping closure in scopeMatching() exists to stop:
+    // without it a search among receipts returns disbursements too.
+    Payment::factory()->create([
+        'type' => Payment::TYPE_RECEIPT,
+        'contact_id' => $this->customer->id,
+        'cash_account_id' => $this->cash->id,
+        'payment_date' => '2026-08-10',
+        'reference' => 'MIX-1',
+    ]);
+    Payment::factory()->create([
+        'type' => Payment::TYPE_DISBURSEMENT,
+        'contact_id' => $this->customer->id,
+        'cash_account_id' => $this->cash->id,
+        'payment_date' => '2026-08-10',
+        'reference' => 'MIX-2',
+    ]);
+
+    $this->actingAs(paymentAuthAs('accountant'))
+        ->get('/admin/payments?type=receipt&search=MIX')
+        ->assertInertia(fn ($page) => $page
+            ->where('payments.total', 1)
+            ->where('payments.data.0.reference', 'MIX-1'));
+});
+
+it('does not multiply a row when the payer matches and the payment has many allocations', function () {
+    // `orWhereHas`, not a join. A join would repeat the payment once per
+    // allocation and the paginator would report a total it does not render.
+    $payment = Payment::factory()->create([
+        'type' => Payment::TYPE_RECEIPT,
+        'contact_id' => $this->customer->id,
+        'cash_account_id' => $this->cash->id,
+        'payment_date' => '2026-08-10',
+        'amount_centavos' => 300_000,
+    ]);
+
+    foreach ([100_000, 200_000] as $centavos) {
+        $invoice = Invoice::factory()->create([
+            'contact_id' => $this->customer->id,
+            'status' => Invoice::STATUS_APPROVED,
+            'total_centavos' => $centavos,
+        ]);
+
+        PaymentAllocation::factory()->create([
+            'payment_id' => $payment->id,
+            'invoice_id' => $invoice->id,
+            'amount_centavos' => $centavos,
+        ]);
+    }
+
+    $this->actingAs(paymentAuthAs('accountant'))
+        ->get('/admin/payments?type=receipt&search=Dela Cruz')
+        ->assertInertia(fn ($page) => $page->where('payments.total', 1));
+});
+
+it('shows the ledger entry a posted payment wrote, and nothing for a draft', function () {
+    $entry = JournalEntry::factory()->create([
+        'entry_number' => 'JE-2026-00042',
+        'date' => '2026-08-10',
+    ]);
+
+    Payment::factory()->create([
+        'type' => Payment::TYPE_RECEIPT,
+        'contact_id' => $this->customer->id,
+        'cash_account_id' => $this->cash->id,
+        'payment_date' => '2026-08-11',
+        'status' => Payment::STATUS_POSTED,
+        'journal_entry_id' => $entry->id,
+    ]);
+    Payment::factory()->create([
+        'type' => Payment::TYPE_RECEIPT,
+        'contact_id' => $this->customer->id,
+        'cash_account_id' => $this->cash->id,
+        'payment_date' => '2026-08-10',
+    ]);
+
+    $this->actingAs(paymentAuthAs('accountant'))
+        ->get('/admin/payments?type=receipt')
+        ->assertInertia(fn ($page) => $page
+            // Ordered by payment_date desc, so the posted one is first.
+            ->where('payments.data.0.journal_entry.entry_number', 'JE-2026-00042')
+            // Null, not absent: a draft has written nothing to the books.
+            ->where('payments.data.1.journal_entry', null));
+});
+
+it('never reaches another school through the payment search', function () {
+    Payment::factory()->create([
+        'type' => Payment::TYPE_RECEIPT,
+        'contact_id' => $this->customer->id,
+        'cash_account_id' => $this->cash->id,
+        'payment_date' => '2026-08-10',
+        'reference' => 'OR-9423',
+    ]);
+
+    $other = School::factory()->create();
+    $other->makeCurrent();
+
+    $this->actingAs(paymentAuthAs('accountant'))
+        ->get('/admin/payments?type=receipt&search=OR-9423')
+        ->assertInertia(fn ($page) => $page->where('payments.total', 0));
+
+    Tenant::forgetCurrent();
 });

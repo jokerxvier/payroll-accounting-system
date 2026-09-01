@@ -5,6 +5,7 @@ import {
     FileText,
     Pencil,
     Plus,
+    Search,
     Trash2,
     X,
 } from 'lucide-react';
@@ -27,6 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DatePicker } from '@/components/ui/date-picker';
+import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
@@ -42,6 +44,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useTableFilters } from '@/hooks/use-table-filters';
 import {
     create as invoiceCreate,
     destroy as invoiceDestroy,
@@ -63,47 +66,56 @@ export default function InvoiceIndex({
 
     const isSales = filters.type === 'sales';
 
-    /**
-     * Every navigation carries the active type and status. Passing only the
-     * changed key would silently drop the other and drop the operator into a
-     * list they did not ask for.
+    /*
+     * The shared filter hook rather than another hand-rolled navigate().
+     *
+     * It carries every filter on every visit — which is what the local
+     * function did — and adds the debounce a text search needs. `type` always
+     * has a value, so it survives the empty-stripping and keeps selecting
+     * which list you are on.
      */
-    const hasFilters =
-        filters.status !== null || filters.from !== null || filters.to !== null;
+    const {
+        filters: current,
+        apply,
+        applyDebounced,
+    } = useTableFilters(
+        {
+            type: filters.type,
+            search: filters.search ?? '',
+            contact_id: filters.contact_id ? String(filters.contact_id) : '',
+            status: filters.status ?? '',
+            from: filters.from ?? '',
+            to: filters.to ?? '',
+        },
+        invoiceIndex().url,
+    );
 
-    const navigate = (patch: {
-        type?: InvoiceType;
-        status?: string | null;
-        from?: string | null;
-        to?: string | null;
-        page?: number;
-    }): void => {
+    // `contact_id` counts: arriving from the dashboard's Top Outstanding table
+    // narrows the list, and Clear has to be able to widen it back out again.
+    const hasFilters =
+        current.search !== '' ||
+        current.contact_id !== '' ||
+        current.status !== '' ||
+        current.from !== '' ||
+        current.to !== '';
+
+    /** Paging carries the filters but is never merged into them. */
+    const goPage = (page: number): void => {
         const query: Record<string, string | number> = {
-            type: patch.type ?? filters.type,
+            type: current.type,
+            page,
         };
 
-        const status =
-            patch.status === undefined ? filters.status : patch.status;
-
-        if (status) {
-            query.status = status;
-        }
-
-        // Carried on every navigation so changing the status never silently
-        // widens the date range back out again.
-        const from = patch.from === undefined ? filters.from : patch.from;
-        const to = patch.to === undefined ? filters.to : patch.to;
-
-        if (from) {
-            query.from = from;
-        }
-
-        if (to) {
-            query.to = to;
-        }
-
-        if (patch.page) {
-            query.page = patch.page;
+        for (const key of [
+            'search',
+            'contact_id',
+            'status',
+            'from',
+            'to',
+        ] as const) {
+            if (current[key]) {
+                query[key] = current[key];
+            }
         }
 
         router.get(invoiceIndex().url, query, {
@@ -166,12 +178,37 @@ export default function InvoiceIndex({
                 />
 
                 <div className="flex flex-wrap items-center gap-3">
+                    {/*
+                      First in the row because it is the widest net. The others
+                      narrow a list; this one finds a document — by its number,
+                      by the payer, or by the STUDENT, whose name is snapshotted
+                      onto the invoice for exactly this.
+                    */}
+                    <div className="relative w-[18rem]">
+                        <Search className="absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            aria-label="Search invoices"
+                            placeholder="Number, payer or student…"
+                            defaultValue={current.search}
+                            className="pl-8"
+                            onChange={(e) =>
+                                applyDebounced({ search: e.target.value })
+                            }
+                        />
+                    </div>
+
                     <Select
-                        value={filters.type}
+                        value={current.type}
                         onValueChange={(value) =>
-                            navigate({
+                            // Status resets with the direction, as it did
+                            // before — it narrows one list, not both. So does
+                            // contact_id: a payer picked from the receivables
+                            // dashboard has no bearing on purchase bills.
+                            apply({
                                 type: value as InvoiceType,
-                                status: null,
+                                status: '',
+                                contact_id: '',
                             })
                         }
                     >
@@ -188,9 +225,9 @@ export default function InvoiceIndex({
                     </Select>
 
                     <Select
-                        value={filters.status ?? ALL}
+                        value={current.status === '' ? ALL : current.status}
                         onValueChange={(value) =>
-                            navigate({ status: value === ALL ? null : value })
+                            apply({ status: value === ALL ? '' : value })
                         }
                     >
                         <SelectTrigger
@@ -219,10 +256,8 @@ export default function InvoiceIndex({
                     <div className="flex items-center gap-2">
                         <DatePicker
                             id="filter-from"
-                            value={filters.from ?? ''}
-                            onChange={(value) =>
-                                navigate({ from: value === '' ? null : value })
-                            }
+                            value={current.from}
+                            onChange={(value) => apply({ from: value })}
                             placeholder="From"
                             className="w-[10.5rem]"
                         />
@@ -231,10 +266,8 @@ export default function InvoiceIndex({
                         </span>
                         <DatePicker
                             id="filter-to"
-                            value={filters.to ?? ''}
-                            onChange={(value) =>
-                                navigate({ to: value === '' ? null : value })
-                            }
+                            value={current.to}
+                            onChange={(value) => apply({ to: value })}
                             placeholder="To"
                             className="w-[10.5rem]"
                         />
@@ -254,10 +287,12 @@ export default function InvoiceIndex({
                             size="sm"
                             className="text-muted-foreground"
                             onClick={() =>
-                                navigate({
-                                    status: null,
-                                    from: null,
-                                    to: null,
+                                apply({
+                                    search: '',
+                                    contact_id: '',
+                                    status: '',
+                                    from: '',
+                                    to: '',
                                 })
                             }
                         >
@@ -408,9 +443,7 @@ export default function InvoiceIndex({
                             variant="outline"
                             size="sm"
                             disabled={invoices.current_page === 1}
-                            onClick={() =>
-                                navigate({ page: invoices.current_page - 1 })
-                            }
+                            onClick={() => goPage(invoices.current_page - 1)}
                         >
                             Previous
                         </Button>
@@ -423,9 +456,7 @@ export default function InvoiceIndex({
                             disabled={
                                 invoices.current_page === invoices.last_page
                             }
-                            onClick={() =>
-                                navigate({ page: invoices.current_page + 1 })
-                            }
+                            onClick={() => goPage(invoices.current_page + 1)}
                         >
                             Next
                         </Button>

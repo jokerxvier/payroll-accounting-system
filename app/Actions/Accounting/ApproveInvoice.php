@@ -6,6 +6,7 @@ namespace App\Actions\Accounting;
 
 use App\Exceptions\ClosedAccountingPeriodException;
 use App\Models\Pas\Invoice;
+use App\Services\Accounting\InvoiceNumberAllocator;
 use App\Services\Accounting\InvoicePostingService;
 use App\Services\Accounting\InvoiceTotalsCalculator;
 use DomainException;
@@ -27,13 +28,19 @@ use Illuminate\Support\Facades\DB;
  * the world with nothing behind it. A posting failure here fails the
  * approval.
  *
- * There was a third step here until document numbering was removed: a
- * BIR-controlled serial was allocated from a per-school series, inside this
- * same transaction so a rollback returned the number rather than burning it.
- * `pas_invoices.number` still exists and still holds the serials issued
- * before the removal, but nothing writes it now — an approved invoice is
- * identified by its id. Reinstating BIR numbering means restoring the
- * allocator and adding step 2 back here, ahead of the posting call.
+ * Numbering is deliberately NOT a step here. The BIR-controlled serial that
+ * used to be allocated at approval was removed on 2026-08-30; what replaced
+ * it, {@see InvoiceNumberAllocator}, runs at DRAFT
+ * CREATION instead, from `CreateInvoiceDraft`. Gaps are tolerated there — an
+ * abandoned draft keeps its number — which is fine for an internal reference
+ * and would not be for a controlled serial. Reinstating BIR numbering means a
+ * structurally gapless allocator, not moving this one back here.
+ *
+ * One document type does not pass through at all: an opening item carried in
+ * from a school's previous books is created already issued by
+ * {@see RecordOpeningItems}, keeping the number it was actually issued under
+ * and never posting. This action refuses it on the `isDraft()` guard below,
+ * which is what stops the cutover receivable being counted twice.
  */
 final class ApproveInvoice
 {

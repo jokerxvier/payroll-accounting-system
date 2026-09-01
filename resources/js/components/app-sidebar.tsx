@@ -17,6 +17,7 @@ import {
     FileSearch,
     FileText,
     CreditCard,
+    FileStack,
     FileUp,
     LayoutGrid,
     MinusCircle,
@@ -65,6 +66,7 @@ import { index as adminDeductionTypesIndex } from '@/routes/admin/deduction-type
 import { index as adminInvoicesIndex } from '@/routes/admin/invoices';
 import { index as adminJournalEntriesIndex } from '@/routes/admin/journal-entries';
 import { index as adminOpeningBalancesIndex } from '@/routes/admin/opening-balances';
+import { index as adminOpeningItemsIndex } from '@/routes/admin/opening-items';
 import { edit as adminOrganisationEdit } from '@/routes/admin/organisation';
 import { index as adminPayPeriodsIndex } from '@/routes/admin/pay-periods';
 import { index as adminPaymentGatewaysIndex } from '@/routes/admin/payment-gateways';
@@ -376,6 +378,16 @@ const accountingNavGroups: NavSubGroup[] = [
                 hideKey: 'accounting.opening-balances',
                 href: adminOpeningBalancesIndex(),
                 icon: FileUp,
+                roles: LEDGER_POSTING_ROLES,
+            },
+            // Same policy ability as opening balances: recording the documents
+            // behind the opening receivable is the same act of migration,
+            // done by the same person in the same sitting.
+            {
+                title: 'Opening items',
+                hideKey: 'accounting.opening-items',
+                href: adminOpeningItemsIndex(),
+                icon: FileStack,
                 roles: LEDGER_POSTING_ROLES,
             },
             // Mirrors PaymentGatewaySettingPolicy — the narrowest list in the

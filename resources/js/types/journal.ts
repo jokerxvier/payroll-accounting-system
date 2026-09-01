@@ -91,6 +91,8 @@ export interface JournalEntryEditable {
 export interface JournalEntryIndexProps {
     entries: Paginator<JournalEntryRow>;
     filters: {
+        /** Free text over entry number, reference and narration. */
+        search: string | null;
         status: JournalEntryStatus | null;
         /** Inclusive entry-date bounds, 'YYYY-MM-DD' or null. */
         from: string | null;

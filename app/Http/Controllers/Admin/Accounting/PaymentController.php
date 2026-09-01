@@ -52,6 +52,7 @@ final class PaymentController extends Controller
         $type = (string) $request->query('type', Payment::TYPE_RECEIPT);
         $type = in_array($type, Payment::TYPES, true) ? $type : Payment::TYPE_RECEIPT;
         $status = (string) $request->query('status', '');
+        $search = trim((string) $request->query('search', ''));
 
         // Bounds are inclusive at both ends, and go through DayBoundary
         // rather than a bare 'Y-m-d': a `date` column compared to a plain
@@ -63,12 +64,20 @@ final class PaymentController extends Controller
         $before = $to !== null ? DayBoundary::end($to) : null;
 
         $payments = Payment::query()
-            ->with(['contact:id,name', 'cashAccount:id,code,name'])
+            // `journalEntry` joins the list to the books: a posted payment
+            // shows the entry it wrote, so somebody reconciling can get from
+            // the receipt to the ledger without opening the payment first.
+            ->with([
+                'contact:id,name',
+                'cashAccount:id,code,name',
+                'journalEntry:id,entry_number,status',
+            ])
             ->ofType($type)
             ->when(
                 in_array($status, Payment::STATUSES, true),
                 fn ($query) => $query->where('status', $status),
             )
+            ->matching($search)
             ->when($after !== null, fn ($query) => $query->where('payment_date', '>=', $after))
             ->when($before !== null, fn ($query) => $query->where('payment_date', '<=', $before))
             ->orderByDesc('payment_date')
@@ -81,6 +90,7 @@ final class PaymentController extends Controller
             'payments' => $payments,
             'filters' => [
                 'type' => $type,
+                'search' => $search !== '' ? $search : null,
                 'status' => $status !== '' ? $status : null,
                 'from' => $from?->toDateString(),
                 'to' => $to?->toDateString(),
@@ -336,6 +346,12 @@ final class PaymentController extends Controller
             'reference' => $payment->reference,
             'cash_account_name' => $payment->cashAccount?->name,
             'status' => $payment->status,
+            // Null until the payment is posted, which is the honest answer:
+            // a draft has written nothing to the books yet.
+            'journal_entry' => $payment->journalEntry === null ? null : [
+                'id' => $payment->journalEntry->id,
+                'entry_number' => $payment->journalEntry->entry_number,
+            ],
             // Per-row permissions so the list offers exactly the actions that
             // are legal for each payment.
             //

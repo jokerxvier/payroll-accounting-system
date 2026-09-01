@@ -41,7 +41,20 @@
         'VAT' => $invoice->vat_centavos,
     ], static fn (int $centavos): bool => $centavos !== 0);
 
-    $partlyPaid = $invoice->amount_paid_centavos !== 0;
+    // Optional, so the template can be rendered directly with nothing but an
+    // invoice — which the document tests do. `InvoicePdf` always supplies
+    // both; `InvoicePdfTest` asserts the link reaches the finished PDF, so
+    // these defaults cannot quietly swallow a wiring mistake there.
+    $payUrl ??= null;
+    $payQr ??= null;
+
+    // Cast rather than compared bare: the column is NOT NULL DEFAULT 0, but
+    // the template renders whatever model instance a caller hands it, and a
+    // freshly built draft has not been round-tripped through the database yet.
+    // `null !== 0` is true, which would have declared an unpaid proforma part
+    // paid and then handed null to $peso(), taking the whole render down.
+    $paidCentavos = (int) $invoice->amount_paid_centavos;
+    $partlyPaid = $paidCentavos !== 0;
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -122,6 +135,45 @@
         }
 
         .aside { margin-top: 12px; }
+
+        /* Pay online. Sits with the money rather than in the colophon,
+           because it is the next action the total asks for. */
+        .pay {
+            width: 100%;
+            margin-top: 14px;
+            border: 1px solid #C8CFD8;
+            border-collapse: collapse;
+        }
+        .pay td { padding: 9px 10px; vertical-align: middle; }
+        /* An explicit height with width:auto — dompdf honours max-height
+           unreliably, and a QR that scales off its own aspect ratio stops
+           scanning. */
+        .pay .qr-cell { width: 74px; padding-right: 0; }
+        .pay .qr { height: 68px; width: auto; }
+        .pay-head {
+            font-size: 8.5pt;
+            font-weight: bold;
+            color: #141A24;
+            margin: 0 0 2px;
+        }
+        .pay-body {
+            font-size: 7.5pt;
+            color: #5B6675;
+            margin: 0 0 6px;
+        }
+        /* An anchor, which dompdf turns into a clickable annotation — so the
+           URL itself never has to appear on the page. On paper the button is
+           dead and the QR beside it is the way through, which is the whole
+           reason both are here. */
+        .pay-btn {
+            display: inline-block;
+            background: #1F3A5F;
+            color: #FFFFFF;
+            font-size: 8pt;
+            font-weight: bold;
+            text-decoration: none;
+            padding: 5px 14px;
+        }
     </style>
 </head>
 <body>
@@ -272,11 +324,36 @@
                 <table class="settled">
                     <tr>
                         <td class="label">Paid</td>
-                        <td class="value">{{ $peso($invoice->amount_paid_centavos) }}</td>
+                        <td class="value">{{ $peso($paidCentavos) }}</td>
                     </tr>
                     <tr class="balance">
                         <td>Balance due</td>
                         <td class="value">{{ $peso($invoice->balanceDue()->centavos()) }}</td>
+                    </tr>
+                </table>
+            @endif
+
+            {{-- Only for a document that can still take a payment: a sales
+                 invoice, issued, with something left owing. The service
+                 decides; a null URL means there is nothing to offer. --}}
+            @if ($payUrl)
+                <table class="pay">
+                    <tr>
+                        @if ($payQr)
+                            <td class="qr-cell">
+                                <img class="qr" src="{{ $payQr }}" alt="">
+                            </td>
+                        @endif
+                        <td>
+                            <p class="pay-head">Pay online</p>
+                            <p class="pay-body">
+                                {{ $payQr
+                                    ? 'Scan the code, or use the button if you are reading this on screen.'
+                                    : 'Use the button below if you are reading this on screen.' }}
+                                It opens a page for this invoice only — please do not forward it.
+                            </p>
+                            <a class="pay-btn" href="{{ $payUrl }}">Pay now</a>
+                        </td>
                     </tr>
                 </table>
             @endif

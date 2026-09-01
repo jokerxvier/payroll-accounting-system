@@ -776,3 +776,113 @@ it('rolls the invoice back when the schedule cannot be built', function () {
     expect(Invoice::query()->count())->toBe(0)
         ->and(RecurringInvoice::query()->count())->toBe(0);
 });
+
+/* ── Search and the dashboard drill-through ──────────────────────────── */
+
+it('finds an invoice by number, by payer, or by the student it is for', function () {
+    // `student_name` is snapshotted onto the invoice, so a school officer can
+    // find a document by the child's name without touching the LMS.
+    $other = Contact::factory()->create(['name' => 'Santos Family']);
+
+    Invoice::factory()->create([
+        'type' => Invoice::TYPE_SALES,
+        'contact_id' => $this->customer->id,
+        'number' => 'INV-2026-00011',
+        'student_name' => 'Juan Dela Cruz',
+        'issue_date' => '2026-08-10',
+    ]);
+    Invoice::factory()->create([
+        'type' => Invoice::TYPE_SALES,
+        'contact_id' => $other->id,
+        'number' => 'INV-2026-00012',
+        'student_name' => 'Maria Santos',
+        'issue_date' => '2026-08-11',
+    ]);
+
+    foreach (['INV-2026-00011', 'Dela Cruz Family', 'Juan Dela'] as $term) {
+        $this->actingAs(invoiceAuthAs('accountant'))
+            ->get('/admin/invoices?type=sales&search='.urlencode($term))
+            ->assertInertia(fn ($page) => $page
+                ->where('invoices.total', 1)
+                ->where('invoices.data.0.number', 'INV-2026-00011'));
+    }
+});
+
+it('keeps the search inside the type filter instead of escaping it', function () {
+    // The regression the wrapping closure in scopeMatching() exists to stop:
+    // without it a search among sales invoices returns purchase bills too.
+    Invoice::factory()->create([
+        'type' => Invoice::TYPE_SALES,
+        'contact_id' => $this->customer->id,
+        'number' => 'MIX-1',
+        'issue_date' => '2026-08-10',
+    ]);
+    Invoice::factory()->create([
+        'type' => Invoice::TYPE_PURCHASE,
+        'contact_id' => $this->customer->id,
+        'number' => 'MIX-2',
+        'issue_date' => '2026-08-10',
+    ]);
+
+    $this->actingAs(invoiceAuthAs('accountant'))
+        ->get('/admin/invoices?type=sales&search=MIX')
+        ->assertInertia(fn ($page) => $page
+            ->where('invoices.total', 1)
+            ->where('invoices.data.0.number', 'MIX-1'));
+});
+
+it('narrows to one payer when the dashboard links here with a contact', function () {
+    // The invoice dashboard's Top Outstanding table has always linked to
+    // `?contact_id=`, but the index ignored it — clicking a payer opened the
+    // whole list. The link was covered by a test; the destination was not.
+    $other = Contact::factory()->create(['name' => 'Santos Family']);
+
+    Invoice::factory()->count(2)->create([
+        'type' => Invoice::TYPE_SALES,
+        'contact_id' => $this->customer->id,
+        'issue_date' => '2026-08-10',
+    ]);
+    Invoice::factory()->create([
+        'type' => Invoice::TYPE_SALES,
+        'contact_id' => $other->id,
+        'issue_date' => '2026-08-10',
+    ]);
+
+    $this->actingAs(invoiceAuthAs('accountant'))
+        ->get('/admin/invoices?type=sales&contact_id='.$this->customer->id)
+        ->assertInertia(fn ($page) => $page
+            ->where('invoices.total', 2)
+            ->where('filters.contact_id', $this->customer->id));
+});
+
+it('ignores a contact_id that is not a number', function () {
+    Invoice::factory()->count(2)->create([
+        'type' => Invoice::TYPE_SALES,
+        'contact_id' => $this->customer->id,
+        'issue_date' => '2026-08-10',
+    ]);
+
+    $this->actingAs(invoiceAuthAs('accountant'))
+        ->get('/admin/invoices?type=sales&contact_id=nonsense')
+        ->assertInertia(fn ($page) => $page
+            ->where('invoices.total', 2)
+            ->where('filters.contact_id', null));
+});
+
+it('never reaches another school through the invoice search', function () {
+    Invoice::factory()->create([
+        'type' => Invoice::TYPE_SALES,
+        'contact_id' => $this->customer->id,
+        'number' => 'INV-2026-00011',
+        'issue_date' => '2026-08-10',
+    ]);
+
+    $other = School::factory()->create();
+    $other->makeCurrent();
+
+    $this->actingAs(invoiceAuthAs('accountant'))
+        ->get('/admin/invoices?type=sales&search=INV-2026-00011')
+        ->assertInertia(fn ($page) => $page->where('invoices.total', 0));
+
+    Tenant::forgetCurrent();
+});

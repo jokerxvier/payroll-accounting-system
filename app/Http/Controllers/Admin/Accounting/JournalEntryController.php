@@ -51,6 +51,7 @@ final class JournalEntryController extends Controller
         Gate::authorize('viewAny', JournalEntry::class);
 
         $status = (string) $request->query('status', '');
+        $search = trim((string) $request->query('search', ''));
 
         // Bounds are inclusive at both ends, and go through DayBoundary
         // rather than a bare 'Y-m-d': a `date` column compared to a plain
@@ -67,6 +68,7 @@ final class JournalEntryController extends Controller
                 in_array($status, JournalEntry::STATUSES, true),
                 fn ($query) => $query->where('status', $status),
             )
+            ->matching($search)
             ->when($after !== null, fn ($query) => $query->where('date', '>=', $after))
             ->when($before !== null, fn ($query) => $query->where('date', '<=', $before))
             ->orderByDesc('date')
@@ -78,6 +80,7 @@ final class JournalEntryController extends Controller
         return Inertia::render('admin/accounting/journal/index', [
             'entries' => $entries,
             'filters' => [
+                'search' => $search !== '' ? $search : null,
                 'status' => $status !== '' ? $status : null,
                 'from' => $from?->toDateString(),
                 'to' => $to?->toDateString(),

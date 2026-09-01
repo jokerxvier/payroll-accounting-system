@@ -1,10 +1,26 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OpeningBalancesIndex from '@/pages/admin/accounting/opening-balances';
 import type {
     OpeningBalanceRow,
     OpeningBalanceSummary,
 } from '@/types/opening-balance';
+
+/*
+ * Errors the SERVER hands back, per form.
+ *
+ * The page runs two `useForm` instances and Inertia keeps their errors
+ * apart — a failed confirm never populates the upload form's errors. Any
+ * mock returning one shared `errors: {}` cannot tell the two apart, and so
+ * cannot catch a confirm refusal being dropped on the floor.
+ */
+let uploadErrors: Record<string, string> = {};
+let confirmErrors: Record<string, string> = {};
+
+beforeEach(() => {
+    uploadErrors = {};
+    confirmErrors = {};
+});
 
 vi.mock('@inertiajs/react', () => ({
     Head: () => null,
@@ -14,7 +30,10 @@ vi.mock('@inertiajs/react', () => ({
         setData: vi.fn(),
         post: vi.fn(),
         processing: false,
-        errors: {},
+        errors:
+            'plug_to_retained_earnings' in initial
+                ? confirmErrors
+                : uploadErrors,
     }),
 }));
 
@@ -169,5 +188,49 @@ describe('opening balances import', () => {
             screen.getByText(/these books are already open/i),
         ).toBeInTheDocument();
         expect(screen.getByText('JE-2026-00042')).toBeInTheDocument();
+    });
+});
+
+/*
+ * Refusals that only the confirm endpoint can raise.
+ *
+ * The preview catches what it can see, but three things it cannot: the
+ * session expiring, another tab opening the books first, and a sheet whose
+ * rows are all zero. Each comes back from `OpeningBalanceController::confirm`
+ * as a redirect carrying `errors.file` or `errors.token` — and a redirect
+ * that renders identically to the page you were already on reads as a dead
+ * button, which is exactly what was reported.
+ */
+describe('a refusal from the confirm endpoint', () => {
+    it('shows why the post was refused', () => {
+        confirmErrors = {
+            file: 'An opening balance needs at least one account with a non-zero figure.',
+        };
+
+        render(<OpeningBalancesIndex {...balancedProps} />);
+
+        expect(
+            screen.getByText(/at least one account with a non-zero figure/i),
+        ).toBeInTheDocument();
+    });
+
+    it('shows an expired preview, which is keyed differently', () => {
+        confirmErrors = {
+            token: 'Preview is no longer valid. Re-upload the worksheet.',
+        };
+
+        render(<OpeningBalancesIndex {...balancedProps} />);
+
+        expect(
+            screen.getByText(/preview is no longer valid/i),
+        ).toBeInTheDocument();
+    });
+
+    it('says nothing when the post has not been refused', () => {
+        render(<OpeningBalancesIndex {...balancedProps} />);
+
+        expect(
+            screen.queryByRole('alert', { name: /could not be posted/i }),
+        ).not.toBeInTheDocument();
     });
 });

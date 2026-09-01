@@ -93,9 +93,11 @@ final class InvoiceBalanceService
     /**
      * The status a given paid amount implies.
      *
-     * `sent` is preserved when the document has been sent, so a future send
-     * flow is not silently undone the first time someone pays. Nothing writes
-     * `sent_at` today, so in practice this falls back to `approved`.
+     * `sent` is preserved when the document has been sent, so the send is not
+     * silently undone the first time someone pays. Two things write `sent_at`:
+     * `SendInvoiceEmail`, and `RecordOpeningItems`, which stamps it at the
+     * cutover — an invoice a school was already chasing before it moved has
+     * plainly been sent, whoever sent it.
      */
     private function statusFor(Invoice $invoice, int $paidCentavos): string
     {

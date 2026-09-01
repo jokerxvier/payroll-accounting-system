@@ -78,7 +78,7 @@ function renderIndex(
     return render(
         <JournalIndex
             entries={entries}
-            filters={{ status, from: null, to: null }}
+            filters={{ search: null, status, from: null, to: null }}
             can={{ create: true }}
         />,
     );
@@ -240,5 +240,51 @@ describe('filter clearing', () => {
         expect(
             screen.getByRole('button', { name: /clear filters/i }),
         ).toBeInTheDocument();
+    });
+});
+
+describe('JournalIndex — search', () => {
+    it('visits with the typed term, debounced', async () => {
+        // `useTableFilters` waits 300ms before visiting, so a burst of
+        // keystrokes is one request rather than one per character.
+        vi.useFakeTimers();
+        routerGet.mockClear();
+
+        renderIndex(paginator([row()]));
+
+        fireEvent.change(screen.getByLabelText('Search journal entries'), {
+            target: { value: 'Zachary' },
+        });
+
+        expect(routerGet).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(400);
+
+        expect(routerGet).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({ search: 'Zachary' }),
+            expect.anything(),
+        );
+
+        vi.useRealTimers();
+    });
+
+    it('carries the status filter along with the search', () => {
+        // The reason the page uses one filter object: a search must not
+        // silently widen the list back out to every status.
+        routerGet.mockClear();
+
+        renderIndex(paginator([row()]), 'posted');
+
+        fireEvent.change(screen.getByLabelText('Search journal entries'), {
+            target: { value: 'OR-9423' },
+        });
+
+        // The status select is separate, and applies immediately.
+        fireEvent.click(screen.getByLabelText('Filter by status'));
+
+        expect(screen.getByLabelText('Search journal entries')).toHaveValue(
+            'OR-9423',
+        );
     });
 });

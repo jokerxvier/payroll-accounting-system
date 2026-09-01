@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Download, Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { Download, Pencil, Plus, Trash2, Upload, Users } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ContactEditSheet } from '@/components/admin/contact-edit-sheet';
@@ -65,6 +65,24 @@ export default function ContactsIndex({
         { search: filters.search ?? '', role: filters.role ?? '' },
         contactsIndex().url,
     );
+
+    // The same filters the list is showing, so Export hands back what is on
+    // screen rather than the whole register.
+    const exportUrl = (() => {
+        const params = new URLSearchParams();
+
+        if (current.search) {
+            params.set('search', current.search);
+        }
+
+        if (current.role) {
+            params.set('role', current.role);
+        }
+
+        const query = params.toString();
+
+        return `/admin/contacts/export${query ? `?${query}` : ''}`;
+    })();
 
     const openCreate = (): void => {
         setEditing(undefined);
@@ -139,6 +157,24 @@ export default function ContactsIndex({
                                   each, so the import is offered beside the
                                   manual button rather than buried.
                                 */}
+                                {/*
+                                  Export carries the list's own filters, so
+                                  what comes down is what is on screen. It is
+                                  an <a>, not a Link: the response is a file,
+                                  and an Inertia visit cannot receive one.
+                                */}
+                                <Button asChild variant="outline">
+                                    <a href={exportUrl}>
+                                        <Download className="mr-1 h-4 w-4" />
+                                        Export
+                                    </a>
+                                </Button>
+                                <Button asChild variant="outline">
+                                    <Link href="/admin/contacts/import">
+                                        <Upload className="mr-1 h-4 w-4" />
+                                        Import
+                                    </Link>
+                                </Button>
                                 <Button asChild variant="outline">
                                     <Link href="/admin/contacts/import-guardians">
                                         <Download className="mr-1 h-4 w-4" />

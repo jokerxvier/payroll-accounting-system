@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services\Accounting;
 
+use App\Actions\Payments\MintInvoicePayToken;
 use App\Models\Pas\Invoice;
 use App\Models\Pas\School;
 use App\Services\SchoolLogo;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Barryvdh\DomPDF\PDF as PdfDocument;
+use DomainException;
 use Spatie\Multitenancy\Models\Tenant;
 
 /**
@@ -33,6 +35,8 @@ final class InvoicePdf
 {
     public function __construct(
         private readonly SchoolLogo $logos,
+        private readonly MintInvoicePayToken $tokens,
+        private readonly InvoiceQrCode $qr,
     ) {}
 
     /**
@@ -49,6 +53,8 @@ final class InvoicePdf
         $tenant = Tenant::current();
         $school = $tenant instanceof School ? $tenant : null;
 
+        $payUrl = $this->payUrlFor($invoice, $school);
+
         return Pdf::setOption(['isFontSubsettingEnabled' => true])
             ->loadView('invoices.pdf', [
                 'invoice' => $invoice,
@@ -56,8 +62,59 @@ final class InvoicePdf
                 // A data URI: dompdf runs with enable_remote off and would
                 // refuse a URL silently, rendering nothing at all.
                 'logo' => $this->logos->dataUri($school),
+                'payUrl' => $payUrl,
+                'payQr' => $payUrl === null ? null : $this->qr->dataUri($payUrl),
             ])
             ->setPaper('a4', 'portrait');
+    }
+
+    /**
+     * The public pay link, for documents that can actually take a payment.
+     *
+     * Three conditions, and each excludes a document for its own reason: a
+     * purchase bill is the supplier's paper and there is nobody to collect
+     * from, a draft is a proforma that has not been issued to anyone, and a
+     * settled invoice does not invite a second payment.
+     *
+     * The guard runs BEFORE the minter rather than relying on it, because
+     * {@see MintInvoicePayToken} answers the same two questions by throwing —
+     * which is right for a person pressing a button and wrong here, where a
+     * draft proforma still has to print. The catch is belt-and-braces for the
+     * same reason: no state of the document may stop it rendering.
+     *
+     * Note this MINTS a token when the invoice has none, so printing an issued
+     * invoice creates a live public URL. That widens the invariant stated in
+     * `InvoiceController::payUrl()` — tokens used to appear only when somebody
+     * pressed Copy pay link or Send. The trade is deliberate: a link that
+     * showed up on only some printed invoices, depending on whether a
+     * colleague had pressed a button earlier, would be worse than one that is
+     * always there. The write is idempotent, and a minted token is never
+     * churned afterwards.
+     */
+    private function payUrlFor(Invoice $invoice, ?School $school): ?string
+    {
+        if ($school === null) {
+            return null;
+        }
+
+        if (! $invoice->isSales() || ! $invoice->isIssued()) {
+            return null;
+        }
+
+        if (! $invoice->balanceDue()->isPositive()) {
+            return null;
+        }
+
+        try {
+            $token = $this->tokens->execute($invoice);
+        } catch (DomainException) {
+            return null;
+        }
+
+        return route('public.pay.show', [
+            'slug' => $school->slug,
+            'token' => $token,
+        ]);
     }
 
     /**

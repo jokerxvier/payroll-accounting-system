@@ -1,5 +1,13 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ChevronRight, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react';
+import {
+    ChevronRight,
+    Pencil,
+    Plus,
+    Search,
+    Trash2,
+    Wallet,
+    X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
@@ -19,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DatePicker } from '@/components/ui/date-picker';
+import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
@@ -34,6 +43,8 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useTableFilters } from '@/hooks/use-table-filters';
+import { show as journalShow } from '@/routes/admin/journal-entries';
 import {
     create as paymentCreate,
     destroy as paymentDestroy,
@@ -55,43 +66,48 @@ export default function PaymentIndex({
 
     const isReceipt = filters.type === 'receipt';
 
-    /** Every navigation carries both filters, so changing one never drops the other. */
-    const hasFilters =
-        filters.status !== null || filters.from !== null || filters.to !== null;
+    /*
+     * The shared filter hook rather than another hand-rolled navigate().
+     *
+     * It does what the previous local function did — merge a patch, drop empty
+     * values, preserve scroll and state — and adds the debounce a text search
+     * needs. `type` always has a value, so it survives the empty-stripping and
+     * keeps selecting which list you are looking at.
+     */
+    const {
+        filters: current,
+        apply,
+        applyDebounced,
+    } = useTableFilters(
+        {
+            type: filters.type,
+            search: filters.search ?? '',
+            status: filters.status ?? '',
+            from: filters.from ?? '',
+            to: filters.to ?? '',
+        },
+        paymentIndex().url,
+    );
 
-    const navigate = (patch: {
-        type?: PaymentType;
-        status?: string | null;
-        from?: string | null;
-        to?: string | null;
-        page?: number;
-    }): void => {
+    // `type` is excluded on purpose: it picks which list you are on, not how
+    // it is narrowed, so Clear must not reset it.
+    const hasFilters =
+        current.search !== '' ||
+        current.status !== '' ||
+        current.from !== '' ||
+        current.to !== '';
+
+    /** Paging carries the filters but never joins them — see the hook's note. */
+    const goPage = (page: number): void => {
         const query: Record<string, string | number> = {
-            type: patch.type ?? filters.type,
+            type: current.type,
+            page,
         };
 
-        const status =
-            patch.status === undefined ? filters.status : patch.status;
-
-        if (status) {
-            query.status = status;
-        }
-
-        // Carried on every navigation so changing the status never silently
-        // widens the date range back out again.
-        const from = patch.from === undefined ? filters.from : patch.from;
-        const to = patch.to === undefined ? filters.to : patch.to;
-
-        if (from) {
-            query.from = from;
-        }
-
-        if (to) {
-            query.to = to;
-        }
-
-        if (patch.page) {
-            query.page = patch.page;
+        for (const key of ['search', 'status', 'from', 'to'] as const) {
+            if (current[key]) {
+                query[key] = current[key];
+            }
         }
 
         router.get(paymentIndex().url, query, {
@@ -156,12 +172,34 @@ export default function PaymentIndex({
                 />
 
                 <div className="flex flex-wrap items-center gap-3">
+                    {/*
+                      First in the row because it is the widest net. The
+                      others narrow a list; this one finds a thing.
+                    */}
+                    <div className="relative w-[16rem]">
+                        <Search className="absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            aria-label="Search payments"
+                            placeholder="Reference, payer or note…"
+                            defaultValue={current.search}
+                            className="pl-8"
+                            onChange={(e) =>
+                                applyDebounced({ search: e.target.value })
+                            }
+                        />
+                    </div>
+
                     <Select
-                        value={filters.type}
+                        value={current.type}
                         onValueChange={(value) =>
-                            navigate({
+                            // Status resets with the direction, as it did
+                            // before: it is a per-list narrowing. The search
+                            // survives — looking for the same payer's bills
+                            // after their receipts is a fair next move.
+                            apply({
                                 type: value as PaymentType,
-                                status: null,
+                                status: '',
                             })
                         }
                     >
@@ -182,9 +220,9 @@ export default function PaymentIndex({
                     </Select>
 
                     <Select
-                        value={filters.status ?? ALL}
+                        value={current.status === '' ? ALL : current.status}
                         onValueChange={(value) =>
-                            navigate({ status: value === ALL ? null : value })
+                            apply({ status: value === ALL ? '' : value })
                         }
                     >
                         <SelectTrigger
@@ -209,10 +247,8 @@ export default function PaymentIndex({
                     <div className="flex items-center gap-2">
                         <DatePicker
                             id="filter-from"
-                            value={filters.from ?? ''}
-                            onChange={(value) =>
-                                navigate({ from: value === '' ? null : value })
-                            }
+                            value={current.from}
+                            onChange={(value) => apply({ from: value })}
                             placeholder="From"
                             className="w-[10.5rem]"
                         />
@@ -221,10 +257,8 @@ export default function PaymentIndex({
                         </span>
                         <DatePicker
                             id="filter-to"
-                            value={filters.to ?? ''}
-                            onChange={(value) =>
-                                navigate({ to: value === '' ? null : value })
-                            }
+                            value={current.to}
+                            onChange={(value) => apply({ to: value })}
                             placeholder="To"
                             className="w-[10.5rem]"
                         />
@@ -244,10 +278,11 @@ export default function PaymentIndex({
                             size="sm"
                             className="text-muted-foreground"
                             onClick={() =>
-                                navigate({
-                                    status: null,
-                                    from: null,
-                                    to: null,
+                                apply({
+                                    search: '',
+                                    status: '',
+                                    from: '',
+                                    to: '',
                                 })
                             }
                         >
@@ -322,6 +357,9 @@ export default function PaymentIndex({
                                             <TableHead className="text-xs tracking-wide text-muted-foreground uppercase">
                                                 Status
                                             </TableHead>
+                                            <TableHead className="text-xs tracking-wide text-muted-foreground uppercase">
+                                                Ledger
+                                            </TableHead>
                                             <TableHead className="sr-only text-right">
                                                 Actions
                                             </TableHead>
@@ -368,6 +406,39 @@ export default function PaymentIndex({
                                                         status={row.status}
                                                     />
                                                 </TableCell>
+                                                {/*
+                                                  The bridge from the receipt
+                                                  to the books. A draft has
+                                                  written nothing yet, so it
+                                                  shows a dash rather than an
+                                                  empty cell that reads as
+                                                  missing data.
+                                                */}
+                                                <TableCell className="font-mono text-xs">
+                                                    {row.journal_entry ? (
+                                                        <Link
+                                                            href={
+                                                                journalShow({
+                                                                    journalEntry:
+                                                                        row
+                                                                            .journal_entry
+                                                                            .id,
+                                                                }).url
+                                                            }
+                                                            className="underline underline-offset-4 hover:text-foreground"
+                                                        >
+                                                            {
+                                                                row
+                                                                    .journal_entry
+                                                                    .entry_number
+                                                            }
+                                                        </Link>
+                                                    ) : (
+                                                        <span className="text-muted-foreground">
+                                                            —
+                                                        </span>
+                                                    )}
+                                                </TableCell>
                                                 <TableCell className="text-right">
                                                     <RowActions
                                                         row={row}
@@ -391,9 +462,7 @@ export default function PaymentIndex({
                             variant="outline"
                             size="sm"
                             disabled={payments.current_page === 1}
-                            onClick={() =>
-                                navigate({ page: payments.current_page - 1 })
-                            }
+                            onClick={() => goPage(payments.current_page - 1)}
                         >
                             Previous
                         </Button>
@@ -406,9 +475,7 @@ export default function PaymentIndex({
                             disabled={
                                 payments.current_page === payments.last_page
                             }
-                            onClick={() =>
-                                navigate({ page: payments.current_page + 1 })
-                            }
+                            onClick={() => goPage(payments.current_page + 1)}
                         >
                             Next
                         </Button>

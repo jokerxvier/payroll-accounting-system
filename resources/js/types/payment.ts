@@ -76,6 +76,14 @@ export interface PaymentRow {
     cash_account_name: string | null;
     status: PaymentStatus;
     /**
+     * The ledger entry this payment wrote, or null until it is posted.
+     *
+     * Null is the honest answer for a draft — it has written nothing to the
+     * books yet — so the list shows a dash rather than an empty cell that
+     * looks like missing data.
+     */
+    journal_entry: { id: number; entry_number: string | null } | null;
+    /**
      * Per-row policy results, so the list renders only the actions that are
      * legal for this payment. Edit and delete are drafts-only; a posted
      * payment is undone by voiding.
@@ -142,6 +150,8 @@ export interface PaymentIndexProps {
     payments: Paginator<PaymentRow>;
     filters: {
         type: PaymentType;
+        /** Free text over reference, gateway reference, notes and payer name. */
+        search: string | null;
         status: PaymentStatus | null;
         /** Inclusive payment-date bounds, 'YYYY-MM-DD' or null. */
         from: string | null;

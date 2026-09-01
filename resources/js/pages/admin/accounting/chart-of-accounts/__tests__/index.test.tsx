@@ -31,6 +31,15 @@ vi.mock('@inertiajs/react', () => ({
     ),
     router: { delete: vi.fn() },
     usePage: () => ({ props: { auth: { user: null } } }),
+    // The import dialog renders with the page and runs two forms of its own.
+    useForm: (initial: Record<string, unknown>) => ({
+        data: initial,
+        setData: vi.fn(),
+        post: vi.fn(),
+        clearErrors: vi.fn(),
+        processing: false,
+        errors: {},
+    }),
 }));
 
 vi.mock('sonner', () => ({

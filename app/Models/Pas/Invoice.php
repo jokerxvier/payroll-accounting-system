@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models\Pas;
 
 use App\Actions\Accounting\ApproveInvoice;
+use App\Actions\Accounting\RecordOpeningItems;
 use App\Concerns\Auditable;
 use App\Concerns\BelongsToTenant;
 use App\Models\User;
@@ -60,6 +61,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?string $notes
  * @property ?string $terms
  * @property ?int $journal_entry_id
+ * @property bool $is_opening_item
  * @property ?CarbonImmutable $approved_at
  * @property ?int $approved_by_user_id
  * @property ?CarbonImmutable $sent_at
@@ -149,6 +151,7 @@ final class Invoice extends Model
         'notes',
         'terms',
         'journal_entry_id',
+        'is_opening_item',
         'approved_at',
         'approved_by_user_id',
         'sent_at',
@@ -181,6 +184,7 @@ final class Invoice extends Model
             'total_centavos' => 'integer',
             'amount_paid_centavos' => 'integer',
             'journal_entry_id' => 'integer',
+            'is_opening_item' => 'boolean',
             'approved_at' => 'immutable_datetime',
             'approved_by_user_id' => 'integer',
             'sent_at' => 'immutable_datetime',
@@ -318,6 +322,78 @@ final class Invoice extends Model
     public function scopeOutstanding(Builder $query): Builder
     {
         return $query->issued()->whereColumn('amount_paid_centavos', '<', 'total_centavos');
+    }
+
+    /**
+     * Free-text lookup across a document, its payer, and the student it is for.
+     *
+     * Four columns and one relation, and between them they cover how people
+     * actually look for an invoice: the number on the paper, the counterparty's
+     * own reference, the child the charges are for, and the family that pays.
+     *
+     * `student_name` is the one worth naming. It is denormalised onto the
+     * invoice — a snapshot of who was taught — so a school officer can find a
+     * document by the child's name without this touching the LMS at all.
+     *
+     * The payer's name is `orWhereHas`, not a join: a join would repeat the
+     * invoice once per matching contact row and the paginator would then
+     * report a total it does not render.
+     *
+     * The wrapping closure is load-bearing rather than stylistic. Without it
+     * the `orWhere` chain escapes the type, status and date predicates the
+     * caller has already applied, and a search among sales invoices would
+     * quietly return purchase bills.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeMatching(Builder $query, string $term): Builder
+    {
+        $term = trim($term);
+
+        if ($term === '') {
+            return $query;
+        }
+
+        $like = '%'.$term.'%';
+
+        return $query->where(function (Builder $inner) use ($like): void {
+            $inner->where('number', 'like', $like)
+                ->orWhere('reference', 'like', $like)
+                ->orWhere('student_name', 'like', $like)
+                ->orWhere('notes', 'like', $like)
+                ->orWhereHas(
+                    'contact',
+                    fn (Builder $contact) => $contact->where('name', 'like', $like),
+                );
+        });
+    }
+
+    /**
+     * Documents carried in from the school's previous books.
+     *
+     * These deliberately carry no journal entry — the money is already in the
+     * AR/AP control account via the cutover snapshot, and posting them would
+     * count it twice. See {@see RecordOpeningItems}.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeOpeningItems(Builder $query): Builder
+    {
+        return $query->where('is_opening_item', true);
+    }
+
+    /**
+     * Whether this document was transacted here rather than carried in.
+     *
+     * Read this rather than testing `journal_entry_id` for null. That column
+     * is null for a draft AND for an opening item, and the two mean opposite
+     * things: one has not been posted yet, the other never will be.
+     */
+    public function wasTransactedHere(): bool
+    {
+        return ! $this->is_opening_item;
     }
 
     /* ── Relations ──────────────────────────────────────────────────── */

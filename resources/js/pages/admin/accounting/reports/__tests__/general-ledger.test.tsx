@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import GeneralLedgerReport from '@/pages/admin/accounting/reports/general-ledger';
@@ -143,6 +143,22 @@ describe('general ledger report', () => {
 
         expect(
             screen.getByText(/No posted movement on this account/),
+        ).toBeInTheDocument();
+    });
+});
+
+describe('choosing the account', () => {
+    it('is searchable, because a seeded chart is already forty rows', () => {
+        renderPage(ledger());
+
+        const trigger = screen.getByRole('combobox');
+
+        expect(trigger).toHaveTextContent('Cash on Hand');
+
+        fireEvent.click(trigger);
+
+        expect(
+            screen.getByPlaceholderText(/search by code or name/i),
         ).toBeInTheDocument();
     });
 });

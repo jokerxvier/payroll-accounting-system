@@ -2,14 +2,17 @@ import { Head, router } from '@inertiajs/react';
 import {
     BookOpen,
     ChevronRight,
+    Download,
     Lock,
     Pencil,
     Plus,
     Trash2,
+    Upload,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ChartOfAccountEditSheet } from '@/components/admin/chart-of-account-edit-sheet';
+import { ChartOfAccountImportDialog } from '@/components/admin/chart-of-account-import-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import {
@@ -45,11 +48,14 @@ import {
     index as accountsIndex,
 } from '@/routes/admin/chart-of-accounts';
 import type { AccountOption, AccountType, ChartOfAccountRow } from '@/types';
+import type { ChartImportPreview } from '@/types/chart-of-account-import';
 
 interface Props {
     accounts: ChartOfAccountRow[];
     parentOptions: AccountOption[];
     can: { create: boolean };
+    /** Present only after an upload — its presence reopens the dialog. */
+    import?: ChartImportPreview | null;
 }
 
 /**
@@ -282,7 +288,29 @@ export default function ChartOfAccountsIndex({
     accounts,
     parentOptions,
     can,
+    import: importPreview,
 }: Props) {
+    /*
+     * The dialog reopens itself after an upload.
+     *
+     * Parsing needs the server — the file is diffed against the stored chart —
+     * so the preview arrives on a fresh page load, by which time the dialog
+     * has closed. Reopening it is what makes the modal flow work at all.
+     *
+     * Adjusted during render rather than in an effect, which is React's own
+     * advice for reacting to a prop change: an effect here would set state
+     * after paint and cascade a second render. The token is what makes it fire
+     * once — every upload mints a new one, so closing the dialog and reopening
+     * it manually does not get undone on the next keystroke.
+     */
+    const [importOpen, setImportOpen] = useState(false);
+    const [shownToken, setShownToken] = useState<string | null>(null);
+
+    if (importPreview && importPreview.token !== shownToken) {
+        setShownToken(importPreview.token);
+        setImportOpen(true);
+    }
+
     // `undefined` while creating; a row while editing. `sheetOpen` is kept
     // separate so the sheet can animate closed without the form blanking
     // mid-transition.
@@ -393,12 +421,38 @@ export default function ChartOfAccountsIndex({
                     description="Every account the ledger can post to, grouped as balance sheet then income statement. Locked accounts are used by the system and cannot be deleted."
                     actions={
                         can.create ? (
-                            <Button type="button" onClick={openCreate}>
-                                <Plus className="mr-1 h-4 w-4" />
-                                New account
-                            </Button>
+                            <div className="flex items-center gap-2">
+                                {/*
+                                  An <a>, not a Link: the response is a file,
+                                  and an Inertia visit cannot receive one.
+                                */}
+                                <Button asChild variant="outline">
+                                    <a href="/admin/chart-of-accounts/export">
+                                        <Download className="mr-1 h-4 w-4" />
+                                        Export
+                                    </a>
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setImportOpen(true)}
+                                >
+                                    <Upload className="mr-1 h-4 w-4" />
+                                    Import
+                                </Button>
+                                <Button type="button" onClick={openCreate}>
+                                    <Plus className="mr-1 h-4 w-4" />
+                                    New account
+                                </Button>
+                            </div>
                         ) : undefined
                     }
+                />
+
+                <ChartOfAccountImportDialog
+                    open={importOpen}
+                    onOpenChange={setImportOpen}
+                    preview={importPreview}
                 />
 
                 {accounts.length === 0 ? (

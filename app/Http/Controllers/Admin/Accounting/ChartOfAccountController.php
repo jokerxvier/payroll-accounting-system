@@ -67,7 +67,68 @@ final class ChartOfAccountController extends Controller
             'can' => [
                 'create' => Gate::allows('create', ChartOfAccount::class),
             ],
+            // The import preview lives in a dialog on this page rather than a
+            // page of its own — the chart is read as a whole, and sending
+            // somebody elsewhere to check a diff against it is the wrong
+            // shape. Present only after an upload, which is what reopens the
+            // dialog on the redirect back.
+            'import' => $this->importPreview(),
         ]);
+    }
+
+    /**
+     * @return array{
+     *     parsed: array<int, array<string, mixed>>,
+     *     token: string,
+     *     sourceFilename: string|null,
+     *     summary: array{row_count: int, create_count: int, update_count: int, unchanged_count: int, error_count: int},
+     * }|null
+     */
+    private function importPreview(): ?array
+    {
+        // Shown only on the render that follows an upload or a refusal. The
+        // parsed rows outlive that render — `confirm` needs them — but their
+        // presence must not be what opens the dialog, or an abandoned preview
+        // reopens it every time somebody opens the chart.
+        if (session(ChartOfAccountImportController::SHOW_PREVIEW_KEY) !== true) {
+            return null;
+        }
+
+        /** @var array<int, array<string, mixed>>|null $parsed */
+        $parsed = session('chart_import.parsed');
+        $token = session('chart_import.token');
+
+        if ($parsed === null || ! is_string($token)) {
+            return null;
+        }
+
+        $counts = ['create' => 0, 'update' => 0, 'unchanged' => 0];
+        $errors = 0;
+
+        foreach ($parsed as $row) {
+            $action = (string) ($row['action'] ?? 'create');
+
+            if (isset($counts[$action])) {
+                $counts[$action]++;
+            }
+
+            $errors += count((array) ($row['errors'] ?? []));
+        }
+
+        $filename = session('chart_import.source_filename');
+
+        return [
+            'parsed' => $parsed,
+            'token' => $token,
+            'sourceFilename' => is_string($filename) ? $filename : null,
+            'summary' => [
+                'row_count' => count($parsed),
+                'create_count' => $counts['create'],
+                'update_count' => $counts['update'],
+                'unchanged_count' => $counts['unchanged'],
+                'error_count' => $errors,
+            ],
+        ];
     }
 
     public function store(ChartOfAccountStoreRequest $request): RedirectResponse

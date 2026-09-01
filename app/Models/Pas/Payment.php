@@ -264,6 +264,47 @@ final class Payment extends Model
     }
 
     /**
+     * Free-text lookup across a payment and its payer.
+     *
+     * A payment carries no narration — unlike a journal entry, its story is in
+     * the columns — so the useful fields are the two references somebody reads
+     * off a deposit slip, the free-text note, and the payer's NAME, which lives
+     * on the related contact rather than here.
+     *
+     * The name match is `orWhereHas`, not a join: a join would multiply rows
+     * when a payment is allocated across several invoices, and the paginator
+     * would then report a count that does not match what it renders.
+     *
+     * The wrapping closure is load-bearing rather than stylistic. Without it
+     * the `orWhere` chain escapes the type, status and date predicates the
+     * caller has already applied, and a search inside receipts would quietly
+     * return disbursements.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeMatching(Builder $query, string $term): Builder
+    {
+        $term = trim($term);
+
+        if ($term === '') {
+            return $query;
+        }
+
+        $like = '%'.$term.'%';
+
+        return $query->where(function (Builder $inner) use ($like): void {
+            $inner->where('reference', 'like', $like)
+                ->orWhere('gateway_reference', 'like', $like)
+                ->orWhere('notes', 'like', $like)
+                ->orWhereHas(
+                    'contact',
+                    fn (Builder $contact) => $contact->where('name', 'like', $like),
+                );
+        });
+    }
+
+    /**
      * @param  Builder<self>  $query
      * @return Builder<self>
      */

@@ -678,18 +678,43 @@ later slice, and the decision they turn on is recorded below.
       different things to anyone reconciling them — so `CutoverNote` states it
       on both balance-bearing reports, and the Journal Report badges the
       snapshot so a thirty-line entry is not an unexplained bulk posting.
-- [ ] Open items — the unpaid invoices and bills behind the AR/AP control
-      balances. Deferred with Slice 8c's ageing reports, which are what would
-      consume them: until then the control account is right in total and has no
-      sub-ledger to reconcile against. The numbering decision is already taken
-      and is the reason this is a slice of its own rather than an extension of
-      the one above: a historical document carries **the number it was actually
-      issued under**, recorded as given, with `DocumentNumberAllocator` never
-      called. Drawing from the live counter would hand a historical document a
-      serial higher than invoices with later issue dates already issued from
-      that BIR-authorised range, which is an audit finding — and the allocator
-      cannot help, because it takes only a document type and has never seen a
-      date.
+- [x] Open items — the unpaid invoices and bills behind the AR/AP control
+      balances. **Shipped 2026-09-01**, once both reasons for deferring it had
+      expired: 8c's ageing report now exists to consume them, and
+      `DocumentNumberAllocator` — whose date-blindness was the other blocker —
+      was removed on 2026-08-30 for `InvoiceNumberAllocator`, which takes an
+      issue date. The numbering decision itself stands: a historical document
+      carries **the number it was actually issued under**, recorded as given by
+      `RecordOpeningItems` writing `Invoice::create()` directly, because
+      `CreateInvoiceDraft:49` allocates unconditionally and would overwrite it.
+
+      **An open item does not post to the ledger**, and everything else follows
+      from that. The cutover snapshot already debited AR for the total; posting
+      each document again would either double the control balance or — if it
+      credited income the way a live invoice does — report last year's trading
+      as this period's revenue, which is exactly what `OpeningBalanceImport`
+      refuses income rows for. So they carry `journal_entry_id = null` for
+      good, flagged `is_opening_item` because every reader until now took a
+      null entry to mean "not approved yet", and an approved-but-never-posted
+      row makes that inference wrong.
+
+      Like the snapshot before it, this needed **no arithmetic change
+      downstream**: `scopeOutstanding()` filters on status and the paid/total
+      comparison, never on `journal_entry_id`, so open items reached the ageing
+      buckets, the top-outstanding table and the payment allocation picker the
+      day they existed. `PaymentPostingService` credits AR from the *payment's*
+      contact rather than the invoice's entry, so a receipt against one draws
+      down the control balance the snapshot established — pinned by a test that
+      watches AR fall from ₱5,000 to ₱3,000.
+
+      The deliverable is really the **reconciliation**: `OpeningItemReconciliationService`
+      compares each control account as at the cutover against the documents
+      that explain it, on the preview *before* anyone commits. A difference
+      warns rather than refuses — it means the client's previous system did not
+      agree with itself, which is a finding they need, not a reason they cannot
+      migrate. `sent_at` is stamped at the cutover too, without which
+      `InvoiceBalanceService` would demote a document the school had chased for
+      months to `approved` the first time a payment against it was voided.
 
 #### Slice 10 — Online payments (PayMongo and Stripe)
 The app's first integration of any kind. Before this there were zero outbound
