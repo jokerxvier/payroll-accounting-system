@@ -25,7 +25,7 @@ describe('CutoverNote', () => {
         );
 
         expect(
-            screen.getByText(/carried into these books on 2026-06-30/i),
+            screen.getByText(/carried into these books on 30 Jun 2026/i),
         ).toBeInTheDocument();
     });
 

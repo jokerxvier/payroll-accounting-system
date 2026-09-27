@@ -1,4 +1,5 @@
 import { CalendarClock } from 'lucide-react';
+import { formatDate } from '@/lib/format-date';
 
 interface CutoverNoteProps {
     /** `books_opened_on` for the active school, or null if it has none. */
@@ -44,13 +45,14 @@ export function CutoverNote({ booksOpenedOn, from, to }: CutoverNoteProps) {
                 {beforeRange ? (
                     <>
                         Opening figures include the balances carried into these
-                        books on {booksOpenedOn}.
+                        books on {formatDate(booksOpenedOn)}.
                     </>
                 ) : (
                     <>
-                        This range spans {booksOpenedOn}, when the balances from
-                        the previous books were carried in. Movement on that
-                        date was brought forward, not transacted.
+                        This range spans {formatDate(booksOpenedOn)}, when the
+                        balances from the previous books were carried in.
+                        Movement on that date was brought forward, not
+                        transacted.
                     </>
                 )}
             </span>

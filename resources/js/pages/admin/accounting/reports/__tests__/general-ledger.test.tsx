@@ -1,15 +1,25 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import GeneralLedgerReport from '@/pages/admin/accounting/reports/general-ledger';
 import type { AccountLedger, AccountLedgerLine } from '@/types/ledger-report';
 
+const formGet = vi.fn();
+let transformed: Record<string, unknown> = {};
+
 vi.mock('@inertiajs/react', () => ({
     Head: () => null,
+    Link: ({ href, children }: { href: string; children: ReactNode }) => (
+        <a href={href}>{children}</a>
+    ),
     useForm: (initial: Record<string, unknown>) => ({
         data: initial,
         setData: vi.fn(),
-        get: vi.fn(),
+        transform: (callback: (data: unknown) => Record<string, unknown>) => {
+            transformed = callback(initial);
+        },
+        get: (url: string) => formGet(url, transformed),
         processing: false,
     }),
 }));
@@ -51,7 +61,10 @@ function ledger(overrides: Partial<AccountLedger> = {}): AccountLedger {
     };
 }
 
-function renderPage(value: AccountLedger | null) {
+function renderPage(
+    value: AccountLedger | null,
+    backHref: string | null = null,
+) {
     // The app wraps every page in TooltipProvider (app.tsx); a page rendered
     // in isolation has to do the same or Radix throws the moment one appears.
     return render(
@@ -72,6 +85,7 @@ function renderPage(value: AccountLedger | null) {
                     },
                 ]}
                 ledger={value}
+                backHref={backHref}
             />
         </TooltipProvider>,
     );
@@ -199,5 +213,37 @@ describe('contra accounts', () => {
         renderWithContra([]);
 
         expect(screen.queryByText(/more$/)).not.toBeInTheDocument();
+    });
+
+    it('offers a way back to the report it was opened from', () => {
+        const backHref = '/admin/reports/balance-sheet?as_at=2026-08-31';
+
+        renderPage(ledger(), backHref);
+
+        expect(screen.getByRole('link', { name: /Back/ })).toHaveAttribute(
+            'href',
+            backHref,
+        );
+    });
+
+    it('keeps the way back when the dates are changed', () => {
+        const backHref = '/admin/reports/balance-sheet?as_at=2026-08-31';
+
+        renderPage(ledger(), backHref);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+        expect(formGet).toHaveBeenCalledWith(
+            '/admin/reports/general-ledger',
+            expect.objectContaining({ return_to: backHref }),
+        );
+    });
+
+    it('has no back button when it was opened from the sidebar', () => {
+        renderPage(ledger());
+
+        expect(
+            screen.queryByRole('link', { name: /Back/ }),
+        ).not.toBeInTheDocument();
     });
 });

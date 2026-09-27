@@ -4,27 +4,22 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin\Accounting;
 
+use App\Concerns\ExportsLedgerReports;
 use App\Exports\GeneralLedgerExport;
 use App\Exports\JournalReportExport;
 use App\Exports\TrialBalanceExport;
-use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Controller;
 use App\Models\Pas\ChartOfAccount;
 use App\Models\Pas\JournalEntry;
-use App\Models\Pas\School;
 use App\Policies\Pas\JournalEntryPolicy;
 use App\Services\Accounting\Reports\LedgerReportService;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
-use Maatwebsite\Excel\Excel as ExcelWriter;
 use Maatwebsite\Excel\Facades\Excel;
-use Spatie\Multitenancy\Models\Tenant;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
@@ -44,8 +39,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 final class LedgerReportController extends Controller
 {
-    /** @var list<string> */
-    private const EXPORT_FORMATS = ['xlsx', 'csv', 'pdf'];
+    use ExportsLedgerReports;
 
     public function __construct(private readonly LedgerReportService $reports) {}
 
@@ -111,6 +105,7 @@ final class LedgerReportController extends Controller
                 ? null
                 : $this->reports->accountLedger($account, $from, $to)->toArray(),
             'booksOpenedOn' => $this->booksOpenedOn(),
+            'backHref' => $this->resolveReturnTo($request),
         ]);
     }
 
@@ -198,37 +193,6 @@ final class LedgerReportController extends Controller
     }
 
     /**
-     * The date this school's books were opened, if a cutover snapshot stands.
-     *
-     * Sent to the two balance-bearing reports so a reader can tell an opening
-     * column that was brought in from one that was traded. The figures
-     * themselves need no adjustment — `LedgerReportService` sweeps a
-     * backdated entry into the opening balance the same as any other posting
-     * — but "opening balance" and "opening balance carried in from the
-     * client's previous books" are different claims, and only the page can
-     * make the second one.
-     */
-    private function booksOpenedOn(): ?string
-    {
-        $school = Tenant::current();
-
-        return $school instanceof School
-            ? $school->books_opened_on?->toDateString()
-            : null;
-    }
-
-    /**
-     * Reading a report is reading the ledger. Authorizing against the journal
-     * policy rather than a private role list is what keeps the two from
-     * drifting — a report that showed figures the journal page hides would be
-     * the same disclosure by another route.
-     */
-    private function authorizeLedgerRead(): void
-    {
-        Gate::authorize('viewAny', JournalEntry::class);
-    }
-
-    /**
      * Flattened for the wire. The entry's own stored totals are sent rather
      * than re-summed from the lines: if the two ever disagree, the Trial
      * Balance is the report that says so, and quietly papering over it here
@@ -291,17 +255,6 @@ final class LedgerReportController extends Controller
     }
 
     /**
-     * @param  array<string, mixed>  $data
-     */
-    private function renderPdf(string $view, array $data, string $filename): HttpResponse
-    {
-        return Pdf::loadView($view, [
-            ...$data,
-            'generatedAt' => CarbonImmutable::now(),
-        ])->setPaper('a4', 'landscape')->download($filename);
-    }
-
-    /**
      * @return array{0: CarbonImmutable, 1: CarbonImmutable}
      */
     private function resolveDateRange(Request $request): array
@@ -320,30 +273,5 @@ final class LedgerReportController extends Controller
         }
 
         return [$from, $to];
-    }
-
-    /**
-     * Mirrors {@see ReportsController}: `xlsx` by
-     * default, and an unrecognised value is refused rather than silently
-     * falling back to one.
-     */
-    private function resolveExportFormat(Request $request): string
-    {
-        $format = strtolower(trim((string) $request->query('format', 'xlsx')));
-
-        if (! in_array($format, self::EXPORT_FORMATS, true)) {
-            abort(422, sprintf(
-                "Unsupported export format '%s'. Use one of: %s.",
-                $format,
-                implode(', ', self::EXPORT_FORMATS),
-            ));
-        }
-
-        return $format;
-    }
-
-    private function writerTypeFor(string $format): string
-    {
-        return $format === 'csv' ? ExcelWriter::CSV : ExcelWriter::XLSX;
     }
 }

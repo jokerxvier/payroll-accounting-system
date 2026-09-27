@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Payroll system built on the Laravel React Starter Kit. Uses Laravel 13 + Inertia.js v3 + React 19 + TypeScript. Authentication is handled by Laravel Fortify (login, registration, 2FA, email verification, password reset). Authorization uses Spatie Permission, with payroll roles assigned on first login by mapping LMS roles via `config/payroll.php`. Served locally by Laravel Herd at `payroll-system.test`. Note the toolchain split: the local runtime and CI (`.github/workflows/ci.yml`) both run PHP 8.4, but `composer.json` pins `config.platform.php` to 8.3.27, so Composer resolves dependencies as if on 8.3 — a package requiring 8.4 will refuse to install until that pin moves.
 
-Current phase: **Phase 5 — Invoicing & Accounting** (post-v1). Phase 1–4 *code* (payroll engine, batch processing, reports/audit) and multi-tenancy have merged to `main`, but Phase 4's launch tail is still open and unticked in `rules/PLAN.md`: Forge staging/production envs, client UAT, WCAG AA pass, cross-browser smoke, user documentation, and the production cutover. Those are client/infra dependencies, not code work. Phase 5 ships in slices; `main` carries Slices 1–8a (ledger foundation, journal entries, payroll→GL seam, contacts, sales invoices + supplier bills, payments/allocation, ledger reports) plus Slice 8b's `is_cash_equivalent` prerequisite (merged 2026-08-25). Outstanding: Slice 8b's four statements (Income Statement / Balance Sheet / Cash Flow / Equity — `rules/PLAN.md:486`), 8c (receivables and document reports — `rules/PLAN.md:490`), and credit notes / official receipts (blocked on Open Question 1). See `rules/PLAN.md` §5 for the slice-by-slice status with the reasoning behind each decision, and `rules/MILESTONES.md` for the client-facing gate view.
+Current phase: **Phase 5 — Invoicing & Accounting** (post-v1). Phase 1–4 *code* (payroll engine, batch processing, reports/audit) and multi-tenancy have merged to `main`, but Phase 4's launch tail is still open and unticked in `rules/PLAN.md`: Forge staging/production envs, client UAT, WCAG AA pass, cross-browser smoke, user documentation, and the production cutover. Those are client/infra dependencies, not code work. Phase 5 ships in slices; `main` carries Slices 1–8a (ledger foundation, journal entries, payroll→GL seam, contacts, sales invoices + supplier bills, payments/allocation, ledger reports), Slice 8b's `is_cash_equivalent` prerequisite, and Slices 9–13 (opening balances / backlog recording, online payments, parents as billing contacts, school logos on documents, recurring invoices). Slice 8b's Balance Sheet and Income Statement have shipped. Still unticked in `rules/PLAN.md`: Slice 8b's Cash Flow Statement and Statement of Changes in Equity, 8c (receivables and document reports), and credit notes / official receipts (blocked on Open Question 1). This paragraph goes stale quickly — the checkboxes in `rules/PLAN.md` are the source of truth, so grep the slice heading rather than trusting a status or line number quoted here. See `rules/PLAN.md` §5 for the slice-by-slice status with the reasoning behind each decision, and `rules/MILESTONES.md` for the client-facing gate view.
 
 ## Common Commands
 
@@ -25,7 +25,8 @@ php artisan pail              # Tail application logs
 php artisan test --compact                        # Run all tests
 php artisan test --compact --filter=testName       # Run specific test
 php artisan test --compact tests/Feature/Auth/     # Run test directory
-php artisan test --compact tests/Browser/          # Pest 4 browser suite (Dusk-backed)
+php artisan test --compact tests/Browser/          # Pest 4 browser suite (pest-plugin-browser, Playwright-backed)
+php artisan test --compact --testsuite=Architecture  # Suites: Unit, Feature, Architecture, Browser
 
 # Code quality
 vendor/bin/pint --dirty --format agent   # Format modified PHP files (run before finalizing)
@@ -48,6 +49,10 @@ npm run test:watch                       # Watch mode
 npx vitest run path/to/file.test.tsx     # Run a single Vitest file
 npx vitest run -t "name"                 # Run a single Vitest case by name
 
+# Package manager: use npm. package.json declares pnpm in `packageManager`, but
+# pnpm-lock.yaml is gitignored and CI runs `npm ci` against package-lock.json —
+# a dependency added with pnpm alone never reaches CI.
+
 # Scaffolding (always pass --no-interaction)
 php artisan make:model ModelName --no-interaction
 php artisan make:test --pest TestName --no-interaction
@@ -67,7 +72,7 @@ php artisan make:controller ControllerName --no-interaction
 - **Models** in `app/Models/` — `Pas/` for app-owned tables, `Lms/` for read-only LMS tables, `User.php` at root. LMS-connection models throw `app/Exceptions/LmsWriteException.php` on save/delete; the `tests/Feature/LmsReadOnlyTest.php` guardrail keeps this enforced.
 - **Policies** in `app/Policies/` — one per model (per coding standards)
 - **Concerns (Traits)** in `app/Concerns/` — shared validation rules (e.g., `ProfileValidationRules`, `PasswordValidationRules`)
-- **Actions** in `app/Actions/` — Fortify action classes for user creation, password reset
+- **Actions** in `app/Actions/` — single-purpose, state-changing operations grouped by context (`Payroll/`, `Accounting/`, `Payments/`, `Contacts/`, `Employee/`), plus the `Fortify/` classes for user creation and password reset. Payroll run transitions (generate → submit → approve → post → void) and every ledger posting are actions; services hold the computation and lookups they compose.
 - **Observers** in `app/Observers/` — model lifecycle hooks. `AuditObserver` writes to the audit log. `SchoolObserver` auto-clones default-school catalog rows onto each new School (see Multi-tenancy).
 - **Exports / Imports** in `app/Exports/` and `app/Imports/` — Maatwebsite Excel classes backing the reports and bulk-edit round-trip (`PayrollSummaryReportExport`, `EmployeeHistoryReportExport`, `AuditLogExport`, `StatutoryContributionExport`, `EmployeeBulkEditExport` → `EmployeeBulkEditImport`).
 - **Listeners** in `app/Listeners/` — `AssignPayrollRoleOnLogin` maps LMS roles → payroll roles on every login (idempotent via `syncRoles`; config in `config/payroll.php`). Payroll-native users (`lms_user_id IS NULL`, e.g. platform admins) are silently skipped — they manage their roles outside the LMS mapping.
@@ -75,7 +80,7 @@ php artisan make:controller ControllerName --no-interaction
 - **Middleware** — `HandleInertiaRequests` shares props globally (including `auth.user.roles` for React-side gating); `HandleAppearance` manages theme
 
 ### Accounting (Phase 5)
-The accounting module is a second bounded context layered on the same stack: `app/Actions/Accounting/`, `app/Services/Accounting/` (+ `Reports/`), `app/Http/Controllers/Admin/Accounting/`, `app/Models/Pas/{ChartOfAccount,TaxRate,AccountingPeriod,JournalEntry,JournalEntryLine,Contact,Invoice,InvoiceLine,Payment,PaymentAllocation}.php`, pages under `resources/js/pages/admin/accounting/`. Money stays integer centavos and tax rates integer basis points (12% = 1200) — never floats. Note the `tests/Architecture/PayrollFloatAuditTest.php` guard scans only `app/Actions/Payroll/` and `app/Services/Payroll/`, so nothing mechanically enforces this in accounting code; it is on you.
+The accounting module is a second bounded context layered on the same stack: `app/Actions/Accounting/`, `app/Services/Accounting/` (+ `Reports/`), `app/Http/Controllers/Admin/Accounting/`, `app/Models/Pas/{ChartOfAccount,TaxRate,AccountingPeriod,JournalEntry,JournalEntryLine,Contact,ContactStudent,Invoice,InvoiceLine,RecurringInvoice,RecurringInvoiceLine,RecurringInvoicePeriod,Payment,PaymentAllocation,PaymentGatewaySetting,GatewayWebhookEvent}.php`, pages under `resources/js/pages/admin/accounting/`. Money stays integer centavos and tax rates integer basis points (12% = 1200) — never floats. Note the `tests/Architecture/PayrollFloatAuditTest.php` guard scans only `app/Actions/Payroll/` and `app/Services/Payroll/`, so nothing mechanically enforces this in accounting code; it is on you.
 
 Invariants that span files — respect them rather than re-deriving them:
 - **One way into the ledger.** Every posting goes through `PostJournalEntry`, which asserts debits === credits in centavos and resolves the period via `AccountingPeriodGuard::resolveOpenPeriodFor()` inside the transaction. Never write `pas_journal_entry_lines` directly, and never re-check `AccountingPeriod::status` locally.
@@ -90,6 +95,8 @@ Invariants that span files — respect them rather than re-deriving them:
 - **Invoice numbers are derived, not administered.** The BIR series machinery (`pas_document_number_series`, `DocumentNumberAllocator`, Authority To Print, authorised ranges) was removed on 2026-08-30. `InvoiceNumberAllocator` replaces it: `INV-{year}-{00001}` / `BILL-{year}-{00001}`, read from the highest number already issued for that school, type and **issue-date year**, taken under `lockForUpdate` inside the creating transaction. Numbers are allocated **when a draft is created**, not at approval, and gaps are tolerated — an abandoned draft keeps its number. That is fine for an internal reference and would NOT be fine for a controlled serial, so reinstating BIR numbering means restoring a structurally gapless allocator rather than extending this one.
 - **Balances are derived, never stored ad hoc.** `InvoiceBalanceService` is the only place `amount_paid_centavos` comes from, and it counts allocations from **posted** payments only — that is what makes a void restore balances without deleting allocation rows.
 - **Control accounts resolve in one place.** `ControlAccountResolver` — a contact's AR/AP account is an override; null falls back to the school's `AR_CONTROL` / `AP_CONTROL` system account (`ChartOfAccount::SYSTEM_*`).
+- **The Balance Sheet's earnings are computed, never posted.** There is no year-end close, so `FinancialStatementService::balanceSheet()` folds earlier years' income less expense into Retained Earnings and prints this year's as its own line. A Balance Sheet that reads only equity accounts does not balance. Do not "fix" this by posting a closing entry from a report.
+- **A report's Back address is validated, never trusted.** `return_to` arrives in the query string; `ExportsLedgerReports::resolveReturnTo()` accepts it only as a path under `/admin/reports/`. Send a new drill-down through it rather than reading the parameter directly.
 - **Reports: keep raw and natural signing apart.** Dr/Cr columns use `debits − credits` (that is what makes a trial balance foot); anything directional goes through `ChartOfAccount::movementCentavos()`. Date ranges filter on the entry's own `date`, never `posted_at`, and must use `dayStart()`/`dayEnd()` — a bare `<= 'Y-m-d'` drops the last day under SQLite's string comparison.
 - **Payroll→GL mapping is config**, not code: `config/accounting.php` keys `PayrollLineItem` codes to chart-of-account codes, with per-bucket defaults so an unmapped statutory line lands visibly rather than unbalancing the entry.
 - **Roles come from one class.** `app/Policies/Pas/AccountingRoles.php` holds `MANAGE` / `VIEW` / `POST_LEDGER` / `CLOSE_PERIOD`; every accounting policy and the sidebar's `ACCOUNTING_ROLES` cite it. Note `accountant` is seeded but nothing maps to it yet — LMS roles 6/13 map to `payroll-officer`, so gating on `accountant` alone ships a module nobody can open (Open Question 3).
@@ -107,16 +114,16 @@ Invariants that span files — respect them rather than re-deriving them:
 - **Layouts** in `resources/js/layouts/` — `AppLayout` (sidebar + header), `AuthLayout`, `SettingsLayout`
 - **Components** in `resources/js/components/` — Radix UI primitives styled with Tailwind (shadcn/ui pattern), using `class-variance-authority` for variants
   - **Edit-sheet pattern** — `resources/js/components/edit-sheet.tsx` is the reusable CRUD sheet shell; domain wrappers (`allowance-edit-sheet.tsx`, etc.) compose it. Reach for it before building a new dialog/form from scratch.
-- **Hooks** in `resources/js/hooks/` — `use-clipboard`, `use-current-url`, `use-flash-toast`, `use-mobile-navigation`, `use-payroll-preview`, `use-table-filters`, `use-appearance`. Check here before writing a new hook.
-- **Types** in `resources/js/types/` — shared TypeScript interfaces, one module per domain (`auth`, `employee`, `payroll`, `payroll-run`, `payroll-preview`, `statutory-contribution`, `school`, `dashboard`, and the accounting set: `accounting`, `contact`, `invoice`, `journal`, `payment`, `ledger-report`), plus `pagination`, `navigation`, `ui`. Reuse these before adding new ones.
+- **Hooks** in `resources/js/hooks/` — check here before writing a new hook (`use-table-filters`, `use-flash-toast`, `use-payroll-preview` are the domain-bearing ones).
+- **Types** in `resources/js/types/` — shared TypeScript interfaces, one module per domain, plus `pagination`, `navigation`, `ui`. Reuse these before adding new ones.
 - **Role gating** — Spatie roles are merged into `auth.user.roles` on every render via `HandleInertiaRequests`. Gate UI by reading `auth.user.roles` from page props, not by refetching. Backend authorization still goes through Policies.
 - **Wayfinder** — auto-generated typed route functions in `resources/js/wayfinder/`; import from `@/actions/` (controllers) or `@/routes/` (named routes). The Vite plugin regenerates these on `vite dev` / `vite build`. If you add a backend route and TypeScript can't resolve it from `@/routes/...`, restart `npm run dev` (or run `npm run build`) to regenerate the bindings.
 
 ### Routes
-- `routes/web.php` — welcome, dashboard, employee directory
+- `routes/web.php` — the only file registered in `bootstrap/app.php`; it `require`s `settings.php` and `admin.php` at the bottom. Holds welcome, dashboard, the employee directory and its nested write-only resources (deductions, allowances, loans, adjustments), the payroll preview, and the guest-reachable `/schools/{slug}/pay/{token}` + `/schools/{slug}/webhooks/{provider}` routes
 - `routes/admin.php` — **most domain routes live here**, all under the `/admin` prefix and `admin.` name (payroll runs, pay periods, allowances, deduction types, schools, audit log, reports, contribution tables, employee bulk import, and the whole accounting module: chart of accounts, tax rates, accounting periods, journal, contacts, invoices, payments, opening balances, ledger reports). Static segments and action routes are registered before `{wildcard}` route-model-binding params (see the `contribution-tables/template` and `accounting-periods/{accountingPeriod}/close` comments) — keep that ordering when adding routes.
 - `routes/settings.php` — settings pages (profile, security, appearance)
-- `routes/console.php` — scheduled commands (e.g. `horizon:snapshot` every 5 min)
+- `routes/console.php` — scheduled commands: `horizon:snapshot` every 5 min, and `invoices:generate-recurring` daily at 19:00 UTC (03:00 Manila). The schedule stays in UTC on purpose and the command resolves "today" in Manila itself; the overlap mutex is pinned to redis via `Schedule::useCache('redis')` because the default cache store has no locks table. Read the comments there before changing either.
 - Auth routes registered by Fortify automatically; the Horizon dashboard is served at `/horizon`
 
 ### Database
@@ -124,13 +131,16 @@ Invariants that span files — respect them rather than re-deriving them:
 - App-owned tables carry the `pas_` prefix; LMS tables (`sm_*`, `users`, `roles`, etc.) are read-only
 - Redis-backed sessions, cache, and queue (configured to avoid colliding with LMS framework tables). Queues are processed by **Laravel Horizon** (`config/horizon.php`, dashboard at `/horizon`, authorized via a `viewHorizon` gate). `composer run dev` uses `queue:listen` for local work; run `php artisan horizon` to exercise the real supervisor. Activate the `configuring-horizon` skill for any Horizon change.
 - Two guardrail tests enforce DB safety; do not weaken or skip them, and run them after any migration or LMS-touching change: `tests/Feature/LmsReadOnlyTest.php` (no writes to LMS tables) and `tests/Feature/MigrationSafetyTest.php` (every migration is `pas_`-prefixed and reversible)
-- Never run `migrate:fresh` against the dev DB — it drops the LMS tables. Use incremental `migrate`, or `--env=testing` for a clean slate
-- Tests default to in-memory sqlite (configured in `phpunit.xml`). **Never override with `DB_CONNECTION=mysql php artisan test`** — `RefreshDatabase` against the dev MySQL connection wipes `payroll_db`'s LMS tables (`sm_*`, `users`, `roles`). If you need a real-MySQL test run, point at a separate database explicitly (e.g. `DB_DATABASE=payroll_db_test`), never the dev DB
+- **Never run `migrate:fresh`, `migrate:refresh`, `migrate:reset`, `migrate:rollback` or `db:wipe` — with or without `--env=testing`.** There is no `.env.testing` in this repo, so `--env=testing` falls back to `.env` and the command lands on the real `payroll_acct_db`. The sqlite `:memory:` settings in `phpunit.xml` apply to Pest/PHPUnit only, never to artisan. Use incremental `migrate` to move forward, `migrate:status` to inspect, and a Pest run to prove a migration works. If a task genuinely needs a rebuild, stop and ask the user to run it.
+- Tests default to in-memory sqlite (configured in `phpunit.xml`). **Never override with `DB_CONNECTION=mysql php artisan test`** — `RefreshDatabase` against the dev MySQL connection wipes it, LMS tables included (`sm_*`, `users`, `roles`). A real-MySQL test run is something to ask the user for, not to set up yourself.
+- The suite is not fully hermetic: the `lms` connection still points at the live MySQL `payroll_db` under test, and tests that read real LMS rows (`LmsReadOnlyTest`, `EmployeeRepositoryTest`, `BackfillPasUsersSeederTest`) depend on it. Tests that need LMS fixtures instead call `useLmsSqliteMirror()` (defined in `tests/Pest.php`) to re-point `lms` at the in-memory sqlite.
 
 ### Tests
-- `tests/` is split into `Architecture/`, `Feature/`, `Unit/`, and `Browser/` (Dusk). Feature tests are organized by domain (`Acceptance/`, `Admin/`, `Auth/`, `Console/`, `Employees/`, `Middleware/`, `Migrations/`, `Models/`, `Multitenancy/`, `Performance/`, `Policies/`, `Seeders/`, `Services/`, `Settings/`). Accounting coverage lives in `Feature/Admin/*ControllerTest.php` plus `Feature/Services/` (posting, balances, ledger reports) — there is no `Feature/Accounting/` directory.
+- `tests/` is split into `Architecture/`, `Feature/`, `Unit/`, and `Browser/` (Playwright via pest-plugin-browser). Feature tests are organized by domain. Accounting coverage is spread out: mostly `Feature/Admin/*ControllerTest.php` plus `Feature/Services/` (posting, balances, ledger reports); `Feature/Accounting/` holds only the recurring-invoice and invoice-email tests, and PDF rendering lives in `Feature/Invoices/` and `Feature/Payslips/`.
+- `tests/Pest.php` does real work in its `beforeEach` for `Feature` and `Browser`: `RefreshDatabase`, seeds `RoleSeeder` + `SchoolSeeder`, and calls `makeCurrent()` on the `slug=default` school — Spatie skips tenant auto-resolution in console, so without this `NeedsTenant` aborts every HTTP test. `Unit` and `Architecture` tests get none of it (no booted app in `Architecture`).
+- **Global test helpers must be unique across the whole suite.** A top-level `function foo()` in a Pest file is a plain global; a second file declaring the same name is a fatal "Cannot redeclare" that kills the full run with no output while each file passes alone. `tests/Architecture/TestHelperUniquenessTest.php` guards it. Shared helpers go in `tests/Pest.php`.
+- `database/migrations/testing/` holds sqlite stand-ins for LMS-owned tables (`users`, student tables), loaded only in the `testing` env by `TestingMigrationsServiceProvider`. They live outside `database/migrations/` so `MigrationSafetyTest`'s `pas_`-prefix rule does not flag them.
 - `tests/Architecture/PayrollFloatAuditTest.php` string-scans `app/{Actions,Services}/Payroll/` for `(float)`, `floatval`, and bare `round(` — extend its directory list if you want the same guarantee over `app/Services/Accounting/`.
-- `tests/Pest.php` configures the Pest base test case across `Feature` and `Browser`; `tests/TestCase.php` is the underlying TestCase.
 - Vitest config is at `vitest.config.ts`; setup file is `resources/js/__tests__/setup.ts` (jsdom + `@testing-library/jest-dom`). Frontend tests live next to their subjects under `resources/js/**/__tests__/`.
 
 ## Skills
@@ -174,7 +184,7 @@ See `.claude/agents/README.md` for the full routing table and document hierarchy
 
 ## Project Rules
 
-Before making changes, read the relevant rule files in `rules/`. Also see `AGENTS.md` at the repo root for the agent-facing condensed handbook (delegation routing, guardrails, working agreements) — it overlaps with this file but is the canonical reference for non-Claude agents.
+Before making changes, read the relevant rule files in `rules/`. `AGENTS.md` at the repo root is the Laravel Boost guidelines block only (the same text appended to this file, regenerated by `php artisan boost:update`) — it carries none of the project rules above, and `rules/AGENTS.md` is an older copy of it. Do not hand-edit anything inside `<laravel-boost-guidelines>`; it is overwritten on the next update.
 
 - `rules/PLAN.md` — 16-week phased delivery plan: scope and non-goals, phase breakdown (Foundation → Computation Engine → Batch Processing → Reports/Launch), acceptance gates, client dependencies, risk register, and what's deferred to v2 (general ledger, e-filing, year-end annualization)
 - `rules/CODING_STANDARDS_LARAVEL.md` — Backend architecture: Repository + Service + Action layered pattern, money as integer centavos via `Money` value object, double-entry accounting invariants, domain integrity (period locks, voiding instead of deleting), `declare(strict_types=1)` on every PHP file, Policy per model
@@ -219,6 +229,11 @@ Pass a base64 `data:` URI, and size it with an explicit `height` plus
 cannot find the file must return null, not throw: a missing logo must never
 take payroll's PDF generation down.
 
+### Pages never import from pages
+Every file under `resources/js/pages` is a lazy entry of the production build, and `app.blade.php` asks Vite for it by source path. A page imported by another page gains a second importer, the bundler folds it into a shared chunk, and its manifest key disappears: rendering it throws "Unable to locate file in Vite manifest" on the next fresh build, and only then. Anything two pages share goes in `resources/js/components`. `tests/Architecture/PageImportsTest.php` enforces it.
+
+For the same reason `resources/js/app.tsx` resolves pages itself rather than leaving it to the Inertia Vite plugin: the plugin's default glob cannot exclude `__tests__`, and a test is an importer too. Do not remove the `resolve` callback or the `!./pages/**/__tests__/**` pattern.
+
 ### Never wrap pages in AppLayout
 The global Inertia resolver in `resources/js/app.tsx` automatically wraps every authenticated page in `AppLayout`. Page components must NOT import or wrap with `<AppLayout>` themselves — doing so renders a second `SidebarProvider` inside the first, injecting a phantom 256 px gap that pushes all page content right by the sidebar width. The correct pattern is:
 
@@ -237,7 +252,7 @@ Page.layout = {
 };
 ```
 
-Settings pages are the only exception — they're routed through `[AppLayout, SettingsLayout]` and inherit the same rule (no manual `<AppLayout>` wrap). Reach for the static `Component.layout = { breadcrumbs }` to pass breadcrumbs into the resolved layout, mirroring `resources/js/pages/dashboard.tsx`.
+The resolver keys off the page name's prefix: `auth/` gets `AuthLayout`, `settings/` gets `[AppLayout, SettingsLayout]`, and `welcome` and `public/` get **no layout** — customer-facing pages draw their own chrome, because `AppLayout` reads `auth.user` and a guest paying an invoice has none. Put a new guest page under `resources/js/pages/public/`. Settings pages inherit the same rule (no manual `<AppLayout>` wrap). Reach for the static `Component.layout = { breadcrumbs }` to pass breadcrumbs into the resolved layout, mirroring `resources/js/pages/dashboard.tsx`.
 
 ===
 

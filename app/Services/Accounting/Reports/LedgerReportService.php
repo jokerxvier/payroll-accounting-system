@@ -84,7 +84,10 @@ final class LedgerReportService
                 }),
             )
             ->orderBy('code')
-            ->get(['id', 'code', 'name', 'type', 'normal_balance', 'is_active']);
+            ->get([
+                'id', 'code', 'name', 'type', 'normal_balance', 'is_active',
+                'subtype', 'cash_flow_category', 'system_code',
+            ]);
 
         $rows = [];
 
@@ -101,6 +104,10 @@ final class LedgerReportService
                 openingCreditCentavos: (int) ($sum->opening_credit ?? 0),
                 periodDebitCentavos: (int) ($sum->period_debit ?? 0),
                 periodCreditCentavos: (int) ($sum->period_credit ?? 0),
+                subtype: $account->subtype,
+                cashFlowCategory: $account->cash_flow_category,
+                systemCode: $account->system_code,
+                isActive: (bool) $account->is_active,
             );
 
             if ($includeEmpty || $row->isSignificant()) {
@@ -192,6 +199,90 @@ final class LedgerReportService
             ->orderBy('date')
             ->orderBy('id')
             ->get();
+    }
+
+    /**
+     * Per-account debit and credit sums for several date ranges at once — one
+     * pair of figures per column of a comparative statement.
+     *
+     * One query whatever the column count. A twelve-month Income Statement
+     * asked for as thirteen `trialBalance()` calls would be thirteen passes
+     * over the same lines; this is one, summed by account and day and then
+     * dealt into columns here. Dealing them out in PHP rather than in SQL is
+     * what lets ranges overlap — a custom comparison can, and the total
+     * column of a month-by-month statement always does — and keeps the
+     * statement free of date functions the two databases spell differently.
+     *
+     * The WHERE is a plain inequality over the envelope of every column, so
+     * the `(school_id, date)` index stays usable.
+     *
+     * @param  list<StatementColumn>  $columns
+     * @return array<int, list<array{debit: int, credit: int}>> by account id,
+     *                                                          then one pair per column in column order. An account that did
+     *                                                          not move inside the envelope is absent.
+     */
+    public function columnSums(array $columns): array
+    {
+        if ($columns === []) {
+            return [];
+        }
+
+        $earliest = $columns[0]->from;
+        $latest = $columns[0]->to;
+        $ranges = [];
+
+        foreach ($columns as $column) {
+            $earliest = $column->from->lessThan($earliest) ? $column->from : $earliest;
+            $latest = $column->to->greaterThan($latest) ? $column->to : $latest;
+            $ranges[] = [$column->from->toDateString(), $column->to->toDateString()];
+        }
+
+        $days = $this->postedLineQuery()
+            ->where('pas_journal_entries.date', '>=', self::dayStart($earliest))
+            ->where('pas_journal_entries.date', '<=', self::dayEnd($latest))
+            ->groupBy('pas_journal_entry_lines.account_id', 'pas_journal_entries.date')
+            ->select('pas_journal_entry_lines.account_id', 'pas_journal_entries.date')
+            ->selectRaw('COALESCE(SUM(pas_journal_entry_lines.debit_centavos), 0) AS debit')
+            ->selectRaw('COALESCE(SUM(pas_journal_entry_lines.credit_centavos), 0) AS credit')
+            ->get();
+
+        $empty = array_fill(0, count($ranges), ['debit' => 0, 'credit' => 0]);
+        $sums = [];
+
+        foreach ($days as $day) {
+            $accountId = (int) $day->account_id;
+            // MySQL answers `2026-08-31`, SQLite `2026-08-31 00:00:00`. The
+            // first ten characters are the date on both, and zero-padded
+            // dates compare correctly as strings.
+            $date = substr((string) $day->date, 0, 10);
+
+            $sums[$accountId] ??= $empty;
+
+            foreach ($ranges as $index => [$from, $to]) {
+                if ($date >= $from && $date <= $to) {
+                    $sums[$accountId][$index] = [
+                        'debit' => $sums[$accountId][$index]['debit'] + (int) $day->debit,
+                        'credit' => $sums[$accountId][$index]['credit'] + (int) $day->credit,
+                    ];
+                }
+            }
+        }
+
+        return $sums;
+    }
+
+    /**
+     * The date of the earliest posted entry, or null on an empty ledger.
+     *
+     * Where "since the books began" starts, for a link that has to name a
+     * first day. Not `books_opened_on`: that is the cutover date, and a
+     * school that never recorded a cutover still has a first entry.
+     */
+    public function firstPostedDate(): ?CarbonImmutable
+    {
+        $first = JournalEntry::query()->posted()->min('date');
+
+        return is_string($first) ? CarbonImmutable::parse($first)->startOfDay() : null;
     }
 
     /**

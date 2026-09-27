@@ -82,6 +82,7 @@ return [
     |       accounting.chart-of-accounts, accounting.journal,
     |       accounting.invoices, accounting.bills, accounting.payments,
     |       accounting.contacts, accounting.tax-rates, accounting.periods,
+    |       accounting.balance-sheet, accounting.income-statement,
     |       accounting.trial-balance, accounting.general-ledger,
     |       accounting.journal-report, accounting.opening-balances,
     |       accounting.payment-gateways

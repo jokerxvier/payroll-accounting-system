@@ -31,6 +31,8 @@ interface Props {
     accountOptions: LedgerAccountOption[];
     ledger: AccountLedger | null;
     booksOpenedOn?: string | null;
+    /** The report this ledger was opened from, when it was. */
+    backHref?: string | null;
 }
 
 /**
@@ -91,6 +93,7 @@ export default function GeneralLedgerReport({
     accountOptions,
     ledger,
     booksOpenedOn,
+    backHref,
 }: Props) {
     const form = useForm({
         from: filters.from,
@@ -100,6 +103,14 @@ export default function GeneralLedgerReport({
 
     const submit = (event: React.FormEvent) => {
         event.preventDefault();
+
+        // Carried along, or changing the dates would take away the way back
+        // to the report this ledger was opened from.
+        form.transform((data) => ({
+            ...data,
+            ...(backHref ? { return_to: backHref } : {}),
+        }));
+
         form.get(generalLedgerRoute().url, {
             preserveScroll: true,
             preserveState: true,
@@ -117,6 +128,7 @@ export default function GeneralLedgerReport({
                     eyebrow="FINANCIAL REPORTS"
                     title="General ledger"
                     description="One account's posted movement in date order, with the balance brought forward and a running balance on every line."
+                    backHref={backHref ?? undefined}
                     actions={
                         <ReportExportMenu
                             baseUrl={exportUrl}

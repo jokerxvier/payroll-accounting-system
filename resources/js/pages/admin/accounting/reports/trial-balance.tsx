@@ -1,4 +1,4 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { CheckCircle2, TriangleAlert } from 'lucide-react';
 import { CutoverNote } from '@/components/admin/cutover-note';
 import { ReportExportMenu } from '@/components/admin/report-export-menu';
@@ -18,7 +18,10 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { trialBalance as trialBalanceRoute } from '@/routes/admin/reports';
+import {
+    generalLedger,
+    trialBalance as trialBalanceRoute,
+} from '@/routes/admin/reports';
 import type {
     TrialBalanceRow,
     TrialBalanceTotals,
@@ -63,6 +66,16 @@ export default function TrialBalanceReport({
             preserveState: true,
         });
     };
+
+    // Where a drill-down comes back to: the trial balance as it is on
+    // screen, not as the form has since been changed.
+    const here = trialBalanceRoute({
+        query: {
+            from: filters.from,
+            to: filters.to,
+            include_empty: filters.include_empty ? '1' : '0',
+        },
+    }).url;
 
     const exportUrl = `${trialBalanceRoute().url}/export?from=${form.data.from}&to=${form.data.to}&include_empty=${form.data.include_empty ? 1 : 0}`;
 
@@ -269,7 +282,23 @@ export default function TrialBalanceReport({
                                                     {row.code}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {row.name}
+                                                    <Link
+                                                        href={
+                                                            generalLedger({
+                                                                query: {
+                                                                    account_id:
+                                                                        row.account_id,
+                                                                    from: filters.from,
+                                                                    to: filters.to,
+                                                                    return_to:
+                                                                        here,
+                                                                },
+                                                            }).url
+                                                        }
+                                                        className="underline-offset-4 hover:underline"
+                                                    >
+                                                        {row.name}
+                                                    </Link>
                                                     <span className="ml-2 text-xs text-muted-foreground capitalize">
                                                         {row.type}
                                                     </span>

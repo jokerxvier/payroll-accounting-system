@@ -545,15 +545,86 @@ subtotals what 8a returns; 8c reads invoices and payments rather than the ledger
       Verified by reconciliation, not just by unit tests: the dashboard, the
       trial balance and the summed monthly series agree to the centavo on the
       dev ledger (₱406,001.00 income, ₱858,770.00 expenses).
-- [ ] Income Statement, Balance Sheet, Cash Flow Statement, Statement of
-      Changes in Equity — the faces, exports and PDFs. The figures now exist;
-      what is missing is the presentation and the subtotal hierarchy.
+- [x] **Balance Sheet** (`/admin/reports/balance-sheet`) and **Income
+      Statement** (`/admin/reports/income-statement`) — faces, xlsx/csv/pdf
+      exports, and sidebar entries. `FinancialStatementService` classifies
+      what `LedgerReportService` returns; it adds no way of reading the ledger.
 
-      Note for whoever takes this: the Statement of Changes in Equity's
-      "Beginning Retained Earnings" now has a real source. Slice 9's cutover
-      snapshot is the first thing in the project to post to
-      `SYSTEM_RETAINED_EARNINGS`, so a school that opened its books carries an
-      opening figure there rather than the zero this line was written against.
+      **The Balance Sheet computes its earnings at read time, and posts
+      nothing.** There is no year-end close, so profit sits in income and
+      expense accounts for ever and a sheet reading only equity accounts is
+      short by exactly that much. One `trialBalance()` ranged from the start
+      of the fiscal year supplies both figures: the opening columns of income
+      less expense are earlier years' profit, folded into Retained Earnings;
+      the period columns are this year's, printed as "Current-year earnings".
+      If a close is ever built, its entries empty those accounts and the
+      folded part becomes nil with no change here.
+
+      Retained Earnings is **itemised when part of it is unclosed profit** —
+      "Ledger balance" and "Prior-year profit not yet closed" — because a
+      single figure linking to the account's ledger would open a page showing
+      a different number.
+
+      **Drill-down is a link, not a new view.** An account opens the General
+      Ledger for the dates the server names; a computed earnings figure opens
+      the Income Statement for the dates it was computed over.
+
+      **Comparison is columns.** None, the period before, the same period
+      last year, month by month, or dates the reader chooses all resolve to a
+      list of date ranges (`StatementColumnResolver`), summed in one query and
+      dealt into columns in PHP — which is what lets ranges overlap and keeps
+      SQLite and MySQL in agreement. Month by month is capped at twelve and
+      falls back to one column with a notice rather than truncating. "The
+      period before" is month-aligned for whole months: counting days would
+      compare February with 4–31 January.
+
+      Variance is signed by arithmetic and **coloured by whether it is good
+      news**, which differ for an expense. Percentages are integer basis
+      points (`App\Support\Centavos`); no float touches a figure.
+
+      Sections are grouped by `subtype`, with a default section per type for
+      an account that has none. **Open with the client's accountant:** a
+      `contra_asset` does not say which asset it reduces, so it is placed by
+      `cash_flow_category` — investing with non-current assets, anything else
+      with current. Right for the seeded chart, an inference beyond it. Total
+      assets are correct either way; only the two subtotals move. One method,
+      `StatementSectionMap::contraAssetSection()`.
+- [x] **Balance Sheet comparison.** A second date beside the first: the end
+      of last month, the end of last fiscal year, or a chosen date. Each date
+      is a whole statement — its own fiscal year for the earnings split, its
+      own proof that it balances — merged line by line, so an account that
+      held something on only one date is still printed. Variance is stated
+      and **not coloured**: more cash and a bigger loan are both just larger.
+- [x] **Drill-down comes back.** A report opened from another carries
+      `return_to`, and shows a Back button. The value is accepted only as a
+      path under `/admin/reports/` (`ExportsLedgerReports::resolveReturnTo()`)
+      — it arrives in the query string and a Back button is a link the reader
+      trusts. Trial Balance rows now open the General Ledger too.
+- [x] **Statement hardening.** `StatementFloatAuditTest` keeps float
+      arithmetic out of the statement code and its two PDF views;
+      `tests/Browser/FinancialStatementsTest.php` follows a figure from one
+      page to the next; print styles unpin and unclip wide tables.
+
+      Follow-up, not done: the older ledger exports and PDFs (Trial Balance,
+      General Ledger, Journal) still divide by 100 to print and are outside
+      the audit.
+- [x] **The invoice list was missing from every fresh build.** The Inertia
+      Vite plugin's default page glob swept `__tests__` into production, which
+      made each test a second importer of its page; `invoices/index.tsx`, also
+      imported by `invoices/show.tsx` for a badge, was folded into a shared
+      chunk with no manifest entry and returned a 500. `app.tsx` now resolves
+      pages itself and leaves tests out, the two status badges moved to
+      `components/admin/`, and `tests/Architecture/PageImportsTest.php` keeps
+      pages from importing pages.
+- [ ] Cash Flow Statement.
+- [ ] Statement of Changes in Equity.
+
+      Note for whoever takes this: "Beginning Retained Earnings" now has a
+      real source. Slice 9's cutover snapshot is the first thing in the
+      project to post to `SYSTEM_RETAINED_EARNINGS`, so a school that opened
+      its books carries an opening figure there rather than the zero this
+      line was written against. The Balance Sheet's unclosed prior-year
+      profit is the other half of that beginning figure.
 
 **8c — Receivables and document reports**
 - [x] **8c's figures shipped ahead of its reports**: the invoice dashboard

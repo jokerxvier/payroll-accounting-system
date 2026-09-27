@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import TrialBalanceReport from '@/pages/admin/accounting/reports/trial-balance';
 import type {
@@ -8,6 +9,9 @@ import type {
 
 vi.mock('@inertiajs/react', () => ({
     Head: () => null,
+    Link: ({ href, children }: { href: string; children: ReactNode }) => (
+        <a href={href}>{children}</a>
+    ),
     useForm: (initial: Record<string, unknown>) => ({
         data: initial,
         setData: vi.fn(),
@@ -140,5 +144,18 @@ describe('trial balance report', () => {
         expect(
             screen.getByText(/No account carried a balance or moved/),
         ).toBeInTheDocument();
+    });
+
+    it('links an account to its ledger for the range, with a way back', () => {
+        renderPage([row()]);
+
+        expect(
+            screen.getByRole('link', { name: 'Cash on Hand' }),
+        ).toHaveAttribute(
+            'href',
+            `/admin/reports/general-ledger?account_id=1&from=2026-08-01&to=2026-08-31&return_to=${encodeURIComponent(
+                '/admin/reports/trial-balance?from=2026-08-01&to=2026-08-31&include_empty=0',
+            )}`,
+        );
     });
 });

@@ -36,6 +36,13 @@ final readonly class TrialBalanceRow
         public int $openingCreditCentavos,
         public int $periodDebitCentavos,
         public int $periodCreditCentavos,
+        // Classification, for the statements that group these rows into
+        // sections. Deliberately absent from toArray(): the Trial Balance
+        // prints accounts in code order and has no use for them.
+        public ?string $subtype = null,
+        public ?string $cashFlowCategory = null,
+        public ?string $systemCode = null,
+        public bool $isActive = true,
     ) {}
 
     /** Opening balance as `debits − credits`, before any normal-balance signing. */

@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\Accounting\ChartOfAccountImportController;
 use App\Http\Controllers\Admin\Accounting\ContactController;
 use App\Http\Controllers\Admin\Accounting\ContactImportController;
 use App\Http\Controllers\Admin\Accounting\FinancialDashboardController;
+use App\Http\Controllers\Admin\Accounting\FinancialStatementController;
 use App\Http\Controllers\Admin\Accounting\GuardianImportController;
 use App\Http\Controllers\Admin\Accounting\InvoiceController;
 use App\Http\Controllers\Admin\Accounting\InvoicePrintController;
@@ -389,6 +390,18 @@ Route::middleware(['auth', 'verified'])
             ->name('reports.journal-report');
         Route::get('reports/journal-report/export', [LedgerReportController::class, 'journalExport'])
             ->name('reports.journal-report.export');
+
+        // Phase 5 Slice 8b — the financial statements. The same posted
+        // entries as the ledger reports above, classified and subtotalled,
+        // and authorised the same way.
+        Route::get('reports/balance-sheet', [FinancialStatementController::class, 'balanceSheet'])
+            ->name('reports.balance-sheet');
+        Route::get('reports/balance-sheet/export', [FinancialStatementController::class, 'balanceSheetExport'])
+            ->name('reports.balance-sheet.export');
+        Route::get('reports/income-statement', [FinancialStatementController::class, 'incomeStatement'])
+            ->name('reports.income-statement');
+        Route::get('reports/income-statement/export', [FinancialStatementController::class, 'incomeStatementExport'])
+            ->name('reports.income-statement.export');
 
         // Phase 3 W9 — dev/demo affordances. Class-level Gate enforces
         // super-admin + non-production; the controller carries a defense-

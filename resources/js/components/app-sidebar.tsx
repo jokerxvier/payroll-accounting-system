@@ -19,6 +19,7 @@ import {
     CreditCard,
     FileStack,
     FileUp,
+    Landmark,
     LayoutGrid,
     MinusCircle,
     Percent,
@@ -29,6 +30,7 @@ import {
     RotateCcw,
     ShieldCheck,
     Sigma,
+    TrendingUp,
     Users,
     Wallet,
 } from 'lucide-react';
@@ -75,7 +77,9 @@ import { index as adminPayrollRunsIndex } from '@/routes/admin/payroll-runs';
 import { index as adminRecurringInvoicesIndex } from '@/routes/admin/recurring-invoices';
 import {
     accountingDashboard as adminAccountingDashboard,
+    balanceSheet as adminBalanceSheetReport,
     generalLedger as adminGeneralLedgerReport,
+    incomeStatement as adminIncomeStatementReport,
     invoiceDashboard as adminInvoiceDashboard,
     journalReport as adminJournalReport,
     trialBalance as adminTrialBalanceReport,
@@ -326,6 +330,20 @@ const accountingNavGroups: NavSubGroup[] = [
                 hideKey: 'accounting.invoice-dashboard',
                 href: adminInvoiceDashboard(),
                 icon: ReceiptText,
+            },
+            // FinancialStatementController authorizes the same way, through
+            // the shared ExportsLedgerReports::authorizeLedgerRead().
+            {
+                title: 'Balance sheet',
+                hideKey: 'accounting.balance-sheet',
+                href: adminBalanceSheetReport(),
+                icon: Landmark,
+            },
+            {
+                title: 'Income statement',
+                hideKey: 'accounting.income-statement',
+                href: adminIncomeStatementReport(),
+                icon: TrendingUp,
             },
             {
                 title: 'Trial balance',

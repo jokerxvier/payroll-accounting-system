@@ -242,6 +242,24 @@
         break-after: page;
     }
 
+    /* A table wider than the screen scrolls inside its container, and a
+       printer cannot scroll: whatever is past the edge is cut off. Let the
+       container grow instead, and unpin the account column of a financial
+       statement — a pinned cell prints on top of the figures beside it. */
+    [data-slot='table-container'] {
+        overflow: visible !important;
+    }
+
+    [data-slot='table-container'] .sticky {
+        position: static !important;
+    }
+
+    /* A link is somewhere to click, and paper is not. */
+    [data-slot='table-container'] a {
+        color: inherit;
+        text-decoration: none;
+    }
+
     /* Keep tabular figures aligned in printed reports / payslips. */
     .tabular-nums {
         font-variant-numeric: tabular-nums;

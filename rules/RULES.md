@@ -374,7 +374,7 @@ Reports and payslips MUST print clean:
 - Pages without `<PageHeader>`
 - Mixing fixed and fluid containers on the same page
 - Custom margins outside the `space-y-*` / `gap-*` rhythm
-- Sticky elements other than the top bar and table headers in long lists
+- Sticky elements other than the top bar and table headers in long lists. One exception: the account column of a financial statement with four or more amount columns (`StatementTable`), so a figure in the ninth month can still be read against its account
 
 ---
 
