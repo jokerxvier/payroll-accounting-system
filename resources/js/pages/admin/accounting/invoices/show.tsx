@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { InvoiceStatusBadge } from '@/components/admin/invoice-status-badge';
 import InputError from '@/components/input-error';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
@@ -57,7 +58,6 @@ import {
 import { show as journalShow } from '@/routes/admin/journal-entries';
 import { show as paymentShow } from '@/routes/admin/payments';
 import type { InvoiceDetail } from '@/types';
-import { InvoiceStatusBadge } from './index';
 
 interface Props {
     invoice: InvoiceDetail;

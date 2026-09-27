@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { PaymentStatusBadge } from '@/components/admin/payment-status-badge';
 import { EmptyState } from '@/components/empty-state';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
@@ -23,7 +24,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -582,26 +582,6 @@ function RowActions({
             </Button>
         </div>
     );
-}
-
-export function PaymentStatusBadge({
-    status,
-}: {
-    status: PaymentRow['status'];
-}) {
-    if (status === 'posted') {
-        return (
-            <Badge className="bg-success/15 text-success hover:bg-success/15">
-                Posted
-            </Badge>
-        );
-    }
-
-    if (status === 'voided') {
-        return <Badge variant="secondary">Voided</Badge>;
-    }
-
-    return <Badge variant="outline">Draft</Badge>;
 }
 
 PaymentIndex.layout = {

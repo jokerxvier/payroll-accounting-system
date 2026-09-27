@@ -2,6 +2,7 @@ import { Head, Link, router } from '@inertiajs/react';
 import { ArrowLeft, Ban, CheckCircle2, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { PaymentStatusBadge } from '@/components/admin/payment-status-badge';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
 import {
@@ -41,7 +42,6 @@ import {
     voidMethod as paymentVoid,
 } from '@/routes/admin/payments';
 import type { PaymentDetail } from '@/types';
-import { PaymentStatusBadge } from './index';
 
 interface Props {
     payment: PaymentDetail;

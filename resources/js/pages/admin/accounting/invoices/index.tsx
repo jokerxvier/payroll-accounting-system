@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { InvoiceStatusBadge } from '@/components/admin/invoice-status-badge';
 import { EmptyState } from '@/components/empty-state';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
@@ -24,7 +25,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -565,41 +565,6 @@ function RowActions({
             </Button>
         </div>
     );
-}
-
-export function InvoiceStatusBadge({
-    status,
-}: {
-    status: InvoiceRow['status'];
-}) {
-    if (status === 'paid') {
-        return (
-            <Badge className="bg-success/15 text-success hover:bg-success/15">
-                Paid
-            </Badge>
-        );
-    }
-
-    if (status === 'partially_paid') {
-        return <Badge variant="outline">Partially paid</Badge>;
-    }
-
-    if (status === 'voided') {
-        return <Badge variant="secondary">Voided</Badge>;
-    }
-
-    if (status === 'draft') {
-        return <Badge variant="outline">Draft</Badge>;
-    }
-
-    // Reserved since Slice 5 and never reached until invoices could be emailed
-    // by hand — until then a sent invoice fell through and read as merely
-    // 'Approved', which is the one thing the operator already knew.
-    if (status === 'sent') {
-        return <Badge variant="outline">Sent</Badge>;
-    }
-
-    return <Badge variant="outline">Approved</Badge>;
 }
 
 InvoiceIndex.layout = {
