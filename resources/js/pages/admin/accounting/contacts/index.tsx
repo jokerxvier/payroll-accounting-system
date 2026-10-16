@@ -1,5 +1,13 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Download, Pencil, Plus, Trash2, Upload, Users } from 'lucide-react';
+import {
+    Download,
+    GraduationCap,
+    Pencil,
+    Plus,
+    Trash2,
+    Upload,
+    Users,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ContactEditSheet } from '@/components/admin/contact-edit-sheet';
@@ -151,11 +159,14 @@ export default function ContactsIndex({
                         can.create ? (
                             <div className="flex items-center gap-2">
                                 {/*
-                                  Parents live in the school records, not here.
-                                  Typing them in by hand is how a family ends
-                                  up as two contacts with half a receivable
-                                  each, so the import is offered beside the
-                                  manual button rather than buried.
+                                  Students and their payers live in the school
+                                  records, not here. The import walks the
+                                  student roster and makes each payer a
+                                  contact, one per family. Typing payers in by
+                                  hand is how a family ends up as two contacts
+                                  with half a receivable each, so the import is
+                                  offered beside the manual button rather than
+                                  buried.
                                 */}
                                 {/*
                                   Export carries the list's own filters, so
@@ -176,9 +187,9 @@ export default function ContactsIndex({
                                     </Link>
                                 </Button>
                                 <Button asChild variant="outline">
-                                    <Link href="/admin/contacts/import-guardians">
-                                        <Download className="mr-1 h-4 w-4" />
-                                        Import guardians
+                                    <Link href="/admin/contacts/import-students">
+                                        <GraduationCap className="mr-1 h-4 w-4" />
+                                        Import students
                                     </Link>
                                 </Button>
                                 <Button type="button" onClick={openCreate}>

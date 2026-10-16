@@ -16,10 +16,16 @@ interface StatCardProps {
 
 export function StatCard({ label, value, hint, className }: StatCardProps) {
     return (
-        <Card className={cn(className)}>
+        <Card className={cn('@container min-w-0', className)}>
             <CardHeader className="pb-2">
                 <CardDescription>{label}</CardDescription>
-                <CardTitle className="font-serif text-3xl tabular-nums">
+                {/*
+                  Sized by the card, not the viewport. A money figure never
+                  wraps, so a tile that is narrower than its number overflows
+                  the card edge; stepping the type down as the tile narrows
+                  keeps the whole figure inside however the grid packs them.
+                */}
+                <CardTitle className="font-serif text-xl tabular-nums @min-[14rem]:text-2xl @min-[16rem]:text-3xl">
                     {value}
                 </CardTitle>
             </CardHeader>

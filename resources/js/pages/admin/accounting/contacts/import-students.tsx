@@ -3,9 +3,9 @@ import {
     AlertCircle,
     ArrowLeft,
     Check,
+    GraduationCap,
     RefreshCw,
     UserPlus,
-    Users,
 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { PageHeader } from '@/components/page-header';
@@ -25,27 +25,24 @@ import { cn } from '@/lib/utils';
 import { index as contactsIndex } from '@/routes/admin/contacts';
 
 /**
- * Importing parents from the school records.
+ * Importing students from the school records.
  *
- * The preview is the whole point: it writes nothing, so someone can read a
- * list of every family and see exactly what would change before any of it
- * lands. Each row says which action it will take and why, and a row that
- * cannot be resolved says so rather than being quietly skipped.
+ * Parents are the payers and become the contacts; students are who the
+ * charges are for and get linked to their payer. The preview walks the
+ * student roster one row per student, so every active student is visible,
+ * including one with no parent record, which is shown as an error and
+ * skipped rather than quietly dropped. Nothing is written until confirmed.
  */
 
-interface ImportedStudent {
+interface StudentRow {
     lms_student_id: number;
-    name: string;
-}
-
-interface GuardianRow {
-    lms_parent_id: number;
-    name: string | null;
-    email: string | null;
-    phone: string | null;
-    address: string | null;
+    student_name: string;
+    lms_parent_id: number | null;
+    payer_name: string | null;
+    payer_email: string | null;
+    payer_phone: string | null;
+    payer_address: string | null;
     relationship: string | null;
-    students: ImportedStudent[];
     existing_contact_id: number | null;
     existing_contact_name: string | null;
     action: 'create' | 'link' | 'unchanged';
@@ -53,51 +50,50 @@ interface GuardianRow {
 }
 
 interface Props {
-    parsed?: GuardianRow[] | null;
+    parsed?: StudentRow[] | null;
     token?: string | null;
     summary?: {
-        create: number;
-        link: number;
+        students: number;
+        payers: number;
         unchanged: number;
         errors: number;
-        students: number;
     } | null;
 }
 
-const ACTION_LABELS: Record<GuardianRow['action'], string> = {
-    create: 'New contact',
-    link: 'Link students',
+const ACTION_LABELS: Record<StudentRow['action'], string> = {
+    create: 'New payer contact',
+    link: 'Link to payer',
     unchanged: 'Already imported',
 };
 
-export default function ImportGuardians({ parsed, token, summary }: Props) {
+export default function ImportStudents({ parsed, token, summary }: Props) {
     const scan = useForm({});
     const confirm = useForm({});
 
     const runScan = (e: FormEvent) => {
         e.preventDefault();
-        scan.post('/admin/contacts/import-guardians/preview');
+        scan.post('/admin/contacts/import-students/preview');
     };
 
     const runConfirm = (e: FormEvent) => {
         e.preventDefault();
 
         if (token) {
-            confirm.post(`/admin/contacts/import-guardians/confirm/${token}`);
+            confirm.post(`/admin/contacts/import-students/confirm/${token}`);
         }
     };
 
-    const applicable = (summary?.create ?? 0) + (summary?.link ?? 0);
+    const applicable = summary?.students ?? 0;
 
     return (
         <>
-            <Head title="Import guardians" />
+            <Head title="Import students" />
 
             <div className="space-y-6 p-4">
                 <PageHeader
                     eyebrow="ACCOUNTING"
-                    title="Import guardians"
-                    description="Bring the school's parents and guardians in as billing contacts, linked to the students they pay for. One contact per payer, however many children they have."
+                    title="Import students"
+                    description="Bring the school's students in, each linked to the parent or guardian who pays for them. The payer becomes the contact — one contact per family, however many children."
                     actions={
                         <Button asChild variant="outline">
                             <Link href={contactsIndex()}>
@@ -140,17 +136,17 @@ export default function ImportGuardians({ parsed, token, summary }: Props) {
                             <div className="flex flex-wrap gap-4 rounded-lg border p-4">
                                 <Stat
                                     icon={
-                                        <UserPlus className="size-4 text-muted-foreground" />
+                                        <GraduationCap className="size-4 text-muted-foreground" />
                                     }
-                                    label="New contacts"
-                                    value={summary.create}
+                                    label="Students to link"
+                                    value={summary.students}
                                 />
                                 <Stat
                                     icon={
-                                        <Users className="size-4 text-muted-foreground" />
+                                        <UserPlus className="size-4 text-muted-foreground" />
                                     }
-                                    label="Students linked"
-                                    value={summary.students}
+                                    label="New payer contacts"
+                                    value={summary.payers}
                                 />
                                 <Stat
                                     icon={
@@ -165,8 +161,9 @@ export default function ImportGuardians({ parsed, token, summary }: Props) {
                                 <Alert variant="destructive">
                                     <AlertCircle className="size-4" />
                                     <AlertTitle>
-                                        {summary.errors} record
+                                        {summary.errors} student
                                         {summary.errors === 1 ? '' : 's'} need
+                                        {summary.errors === 1 ? 's' : ''}{' '}
                                         attention
                                     </AlertTitle>
                                     <AlertDescription>
@@ -178,18 +175,20 @@ export default function ImportGuardians({ parsed, token, summary }: Props) {
 
                             {parsed.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">
-                                    No active students with a parent record were
-                                    found in the school system.
+                                    No active students were found in the school
+                                    system.
                                 </p>
                             ) : (
                                 <div className="rounded-md border">
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead>Parent</TableHead>
-                                                <TableHead>Contact</TableHead>
-                                                <TableHead>Students</TableHead>
-                                                <TableHead className="w-40">
+                                                <TableHead>Student</TableHead>
+                                                <TableHead>Payer</TableHead>
+                                                <TableHead>
+                                                    Contact details
+                                                </TableHead>
+                                                <TableHead className="w-44">
                                                     Action
                                                 </TableHead>
                                             </TableRow>
@@ -197,15 +196,19 @@ export default function ImportGuardians({ parsed, token, summary }: Props) {
                                         <TableBody>
                                             {parsed.map((row) => (
                                                 <TableRow
-                                                    key={row.lms_parent_id}
+                                                    key={row.lms_student_id}
                                                     className={cn(
                                                         row.errors.length > 0 &&
                                                             'bg-destructive/5',
                                                     )}
                                                 >
+                                                    <TableCell className="align-top font-medium">
+                                                        {row.student_name}
+                                                    </TableCell>
                                                     <TableCell className="align-top">
                                                         <div className="font-medium">
-                                                            {row.name ?? '—'}
+                                                            {row.payer_name ??
+                                                                '—'}
                                                         </div>
                                                         {row.relationship && (
                                                             <div className="text-xs text-muted-foreground">
@@ -226,24 +229,9 @@ export default function ImportGuardians({ parsed, token, summary }: Props) {
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="align-top text-sm text-muted-foreground">
-                                                        {row.email ??
-                                                            row.phone ??
+                                                        {row.payer_email ??
+                                                            row.payer_phone ??
                                                             '—'}
-                                                    </TableCell>
-                                                    <TableCell className="align-top">
-                                                        <ul className="space-y-0.5 text-sm">
-                                                            {row.students.map(
-                                                                (s) => (
-                                                                    <li
-                                                                        key={
-                                                                            s.lms_student_id
-                                                                        }
-                                                                    >
-                                                                        {s.name}
-                                                                    </li>
-                                                                ),
-                                                            )}
-                                                        </ul>
                                                     </TableCell>
                                                     <TableCell className="align-top">
                                                         <Badge
@@ -288,7 +276,7 @@ export default function ImportGuardians({ parsed, token, summary }: Props) {
                                 >
                                     {applicable === 0
                                         ? 'Nothing to import'
-                                        : `Import ${applicable} contact${applicable === 1 ? '' : 's'}`}
+                                        : `Import ${applicable} student${applicable === 1 ? '' : 's'}`}
                                 </Button>
                             </form>
                         </CardContent>
@@ -319,10 +307,10 @@ function Stat({
     );
 }
 
-ImportGuardians.layout = {
+ImportStudents.layout = {
     breadcrumbs: [
         { title: 'Accounting', href: '/admin/journal-entries' },
         { title: 'Contacts', href: '/admin/contacts' },
-        { title: 'Import guardians', href: '/admin/contacts/import-guardians' },
+        { title: 'Import students', href: '/admin/contacts/import-students' },
     ],
 };

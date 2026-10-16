@@ -31,7 +31,7 @@ use Throwable;
  *
  * **One family's broken schedule must not stop the other forty-one.** Every
  * schedule is isolated: a failure records a sentence on the row and the loop
- * moves on. The counts returned follow the shape `ImportLmsGuardians`
+ * moves on. The counts returned follow the shape `ImportLmsStudents`
  * established for "did some, not all".
  *
  * Assumes a tenant is current. The caller pivots — see

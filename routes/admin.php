@@ -9,7 +9,6 @@ use App\Http\Controllers\Admin\Accounting\ContactController;
 use App\Http\Controllers\Admin\Accounting\ContactImportController;
 use App\Http\Controllers\Admin\Accounting\FinancialDashboardController;
 use App\Http\Controllers\Admin\Accounting\FinancialStatementController;
-use App\Http\Controllers\Admin\Accounting\GuardianImportController;
 use App\Http\Controllers\Admin\Accounting\InvoiceController;
 use App\Http\Controllers\Admin\Accounting\InvoicePrintController;
 use App\Http\Controllers\Admin\Accounting\JournalEntryController;
@@ -20,6 +19,7 @@ use App\Http\Controllers\Admin\Accounting\PaymentController;
 use App\Http\Controllers\Admin\Accounting\PaymentGatewaySettingController;
 use App\Http\Controllers\Admin\Accounting\ReceivablesDashboardController;
 use App\Http\Controllers\Admin\Accounting\RecurringInvoiceController;
+use App\Http\Controllers\Admin\Accounting\StudentImportController;
 use App\Http\Controllers\Admin\Accounting\TaxRateController;
 use App\Http\Controllers\Admin\AllowanceController;
 use App\Http\Controllers\Admin\AuditLogController;
@@ -213,19 +213,19 @@ Route::middleware(['auth', 'verified'])
         // Contacts. Create and edit happen in a sheet on the index, so no
         // create/edit pages; `show` is excluded for the same reason as the
         // other accounting resources — the index is the listing surface.
-        // Bring the school's parents in as billing contacts. Static segments
-        // registered before the resource so they win against
-        // `contacts/{contact}`.
-        Route::get('contacts/import-guardians', [GuardianImportController::class, 'index'])
-            ->name('contacts.import-guardians.index');
-        Route::post('contacts/import-guardians/preview', [GuardianImportController::class, 'preview'])
-            ->name('contacts.import-guardians.preview');
-        Route::post('contacts/import-guardians/confirm/{token}', [GuardianImportController::class, 'confirm'])
-            ->name('contacts.import-guardians.confirm');
+        // Walk the student roster and bring each student's payer in as a
+        // billing contact. Static segments registered before the resource so
+        // they win against `contacts/{contact}`.
+        Route::get('contacts/import-students', [StudentImportController::class, 'index'])
+            ->name('contacts.import-students.index');
+        Route::post('contacts/import-students/preview', [StudentImportController::class, 'preview'])
+            ->name('contacts.import-students.preview');
+        Route::post('contacts/import-students/confirm/{token}', [StudentImportController::class, 'confirm'])
+            ->name('contacts.import-students.confirm');
 
         // The spreadsheet round trip: take the register out, correct it, put
         // it back. Static segments, registered before the resource for the
-        // same reason as the guardian import above.
+        // same reason as the student import above.
         Route::get('contacts/export', [ContactImportController::class, 'export'])
             ->name('contacts.export');
         Route::get('contacts/import', [ContactImportController::class, 'index'])

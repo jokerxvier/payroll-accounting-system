@@ -934,9 +934,13 @@ rather than followed.
       its own LMS database and the ids repeat, so parent 29 exists in every
       tenant. `lms_student_id` was deliberately NOT reused; a singular student
       pointer cannot express a parent paying for two children.
-- [x] `ImportLmsGuardians` — preview then confirm, no file, following
+- [x] `ImportLmsStudents` — preview then confirm, no file, following
       `OpeningBalanceController`'s shape minus the upload. De-duplication runs
       in confidence order: the source row's id, then email, then phone.
+      Reoriented on 2026-10-08 to walk the active student roster, one row per
+      student, so a student with no parent record is shown and refused rather
+      than silently dropped from a payer-grouped list — while the contact a
+      row creates is still the payer, never the student.
 
       The heuristics exist because **the LMS does not guarantee siblings share
       a parent row** — the demo data has `sm_students.id == sm_parents.id`

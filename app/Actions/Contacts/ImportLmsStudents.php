@@ -8,19 +8,30 @@ use App\Models\Lms\Guardian;
 use App\Models\Lms\Student;
 use App\Models\Pas\Contact;
 use App\Models\Pas\ContactStudent;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Brings the school's parents and guardians into the contact register as
- * billing counterparties, linked to the students they pay for.
+ * Walks the school's active student roster and brings each student's payer
+ * into the contact register, linked to the student they pay for.
+ *
+ * The import is oriented around students — one preview row per student — so
+ * that every enrolled student is visible to the person confirming it. A
+ * student whose parent record is missing appears as a row with an error and
+ * is refused, rather than silently dropped from a payer-grouped list where
+ * nobody would notice the absence.
+ *
+ * **Students are never contacts.** The contact created for a row is the
+ * student's parent or guardian: parents are the payers, students are who the
+ * charges are for, and `pas_contact_students` is the edge between them.
  *
  * **The rule this class exists to hold: one payer, one contact.** A parent
- * with three children gets one contact and three links — never three copies of
- * the same person. Duplicating a payer scatters a family's receivable across
- * several counterparties, breaks their statement, and counts them repeatedly in
- * Aged Receivables, so every path here either finds the existing contact or
- * creates exactly one.
+ * with three children appears on three rows and gets one contact and three
+ * links — never three copies of the same person. Duplicating a payer scatters
+ * a family's receivable across several counterparties, breaks their statement,
+ * and counts them repeatedly in Aged Receivables, so every row either finds
+ * the existing contact or creates exactly one. `apply()` re-resolves the
+ * payer per row inside the transaction so the second sibling finds the
+ * contact the first sibling's row just created.
  *
  * De-duplication runs in confidence order:
  *
@@ -40,7 +51,7 @@ use Illuminate\Support\Facades\DB;
  * `preview()` writes nothing — it is what the confirm screen renders. `apply()`
  * is the only method that touches the database.
  */
-final class ImportLmsGuardians
+final class ImportLmsStudents
 {
     public const ACTION_CREATE = 'create';
 
@@ -49,7 +60,8 @@ final class ImportLmsGuardians
     public const ACTION_UNCHANGED = 'unchanged';
 
     /**
-     * What importing would do, without doing any of it.
+     * What importing would do, without doing any of it. One row per active
+     * student, sorted by student name.
      *
      * @return list<array<string, mixed>>
      */
@@ -66,31 +78,24 @@ final class ImportLmsGuardians
             ->get()
             ->keyBy('id');
 
-        // Group students by their payer first, so a parent with three children
-        // is considered once with three students rather than three times.
-        $byGuardian = $students
-            ->filter(fn (Student $s): bool => $s->parent_id !== null && $guardians->has($s->parent_id))
-            ->groupBy(fn (Student $s): int => (int) $s->parent_id);
-
         $rows = [];
 
-        foreach ($byGuardian as $parentId => $theirStudents) {
-            $guardian = $guardians->get($parentId);
+        foreach ($students as $student) {
+            $guardian = $student->parent_id === null ? null : $guardians->get((int) $student->parent_id);
 
-            if (! $guardian instanceof Guardian) {
-                continue;
-            }
-
-            $rows[] = $this->describe((int) $parentId, $guardian, $theirStudents);
+            $rows[] = $this->describe($student, $guardian instanceof Guardian ? $guardian : null);
         }
 
-        usort($rows, static fn (array $a, array $b): int => strcmp((string) $a['name'], (string) $b['name']));
+        usort($rows, static fn (array $a, array $b): int => strcmp((string) $a['student_name'], (string) $b['student_name']));
 
         return $rows;
     }
 
     /**
      * Apply a previewed set. Rows carrying errors are skipped, not guessed at.
+     *
+     * `contacts_linked` counts each existing contact once however many of its
+     * children are on the list, and never counts a contact this run created.
      *
      * @param  list<array<string, mixed>>  $rows
      * @return array{contacts_created: int, contacts_linked: int, students_linked: int}
@@ -102,52 +107,58 @@ final class ImportLmsGuardians
         $studentsLinked = 0;
 
         DB::transaction(function () use ($rows, &$created, &$linked, &$studentsLinked): void {
+            /** @var array<int, true> $seen */
+            $seen = [];
+
             foreach ($rows as $row) {
                 if (! empty($row['errors']) || $row['action'] === self::ACTION_UNCHANGED) {
                     continue;
                 }
 
+                $parentId = (int) $row['lms_parent_id'];
+
+                // Resolved per row rather than from the preview, so a sibling
+                // later in the list finds the contact an earlier row created.
                 $contact = $this->resolveExisting(
-                    (int) $row['lms_parent_id'],
-                    $row['email'] ?? null,
-                    $row['phone'] ?? null,
+                    $parentId,
+                    $row['payer_email'] ?? null,
+                    $row['payer_phone'] ?? null,
                 );
 
                 if ($contact === null) {
                     $contact = Contact::create([
-                        'code' => $this->uniqueCode((int) $row['lms_parent_id']),
-                        'name' => (string) $row['name'],
+                        'code' => $this->uniqueCode($parentId),
+                        'name' => (string) $row['payer_name'],
                         'is_customer' => true,
                         'is_supplier' => false,
-                        'email' => $row['email'] ?? null,
-                        'phone' => $row['phone'] ?? null,
-                        'address' => $row['address'] ?? null,
-                        'lms_parent_id' => (int) $row['lms_parent_id'],
+                        'email' => $row['payer_email'] ?? null,
+                        'phone' => $row['payer_phone'] ?? null,
+                        'address' => $row['payer_address'] ?? null,
+                        'lms_parent_id' => $parentId,
                         'is_active' => true,
                     ]);
 
                     $created++;
+                    $seen[(int) $contact->getKey()] = true;
                 } else {
                     // Found by email or phone rather than by id — claim the
                     // pointer so the next run matches on the certain key.
                     if ($contact->lms_parent_id === null) {
-                        $contact->forceFill(['lms_parent_id' => (int) $row['lms_parent_id']])->save();
+                        $contact->forceFill(['lms_parent_id' => $parentId])->save();
                     }
 
-                    $linked++;
+                    if (! isset($seen[(int) $contact->getKey()])) {
+                        $linked++;
+                        $seen[(int) $contact->getKey()] = true;
+                    }
                 }
 
-                /** @var list<array<string, mixed>> $students */
-                $students = $row['students'] ?? [];
-
-                foreach ($students as $student) {
-                    $studentsLinked += $this->linkStudent(
-                        $contact,
-                        (int) $student['lms_student_id'],
-                        (string) $student['name'],
-                        $row['relationship'] ?? null,
-                    );
-                }
+                $studentsLinked += $this->linkStudent(
+                    $contact,
+                    (int) $row['lms_student_id'],
+                    (string) $row['student_name'],
+                    $row['relationship'] ?? null,
+                );
             }
         });
 
@@ -159,50 +170,52 @@ final class ImportLmsGuardians
     }
 
     /**
-     * @param  Collection<int, Student>  $students
      * @return array<string, mixed>
      */
-    private function describe(int $parentId, Guardian $guardian, Collection $students): array
+    private function describe(Student $student, ?Guardian $guardian): array
     {
-        $name = $guardian->billingName();
-        $email = $guardian->billingEmail();
-        $phone = $guardian->billingPhone();
+        $parentId = $student->parent_id === null ? null : (int) $student->parent_id;
+
+        $name = $guardian?->billingName();
+        $email = $guardian?->billingEmail();
+        $phone = $guardian?->billingPhone();
 
         $errors = [];
 
-        if ($name === null) {
+        if ($guardian === null) {
+            $errors[] = 'No parent or guardian record in the school system, so there is nobody to bill.';
+        } elseif ($name === null) {
             $errors[] = 'This parent record has no name on it, so there is nobody to bill.';
         }
 
         $existing = null;
 
-        try {
-            $existing = $this->resolveExisting($parentId, $email, $phone);
-        } catch (AmbiguousContactMatch $e) {
-            $errors[] = $e->getMessage();
+        if ($guardian !== null && $parentId !== null) {
+            try {
+                $existing = $this->resolveExisting($parentId, $email, $phone);
+            } catch (AmbiguousContactMatch $e) {
+                $errors[] = $e->getMessage();
+            }
         }
 
-        /** @var list<array<string, mixed>> $studentRows */
-        $studentRows = array_values($students->map(fn (Student $s): array => [
-            'lms_student_id' => (int) $s->getKey(),
-            'name' => $s->displayName(),
-        ])->all());
+        $lmsStudentId = (int) $student->getKey();
 
         $action = match (true) {
             $errors !== [] => self::ACTION_UNCHANGED,
             $existing === null => self::ACTION_CREATE,
-            $this->allStudentsAlreadyLinked($existing, $studentRows) => self::ACTION_UNCHANGED,
+            $this->alreadyLinked($existing, $lmsStudentId) => self::ACTION_UNCHANGED,
             default => self::ACTION_LINK,
         };
 
         return [
+            'lms_student_id' => $lmsStudentId,
+            'student_name' => $student->displayName(),
             'lms_parent_id' => $parentId,
-            'name' => $name,
-            'email' => $email,
-            'phone' => $phone,
-            'address' => $guardian->billingAddress(),
-            'relationship' => $guardian->guardians_relation,
-            'students' => $studentRows,
+            'payer_name' => $name,
+            'payer_email' => $email,
+            'payer_phone' => $phone,
+            'payer_address' => $guardian?->billingAddress(),
+            'relationship' => $guardian?->guardians_relation,
             'existing_contact_id' => $existing?->getKey(),
             'existing_contact_name' => $existing?->name,
             'action' => $action,
@@ -254,23 +267,12 @@ final class ImportLmsGuardians
         return null;
     }
 
-    /**
-     * @param  list<array<string, mixed>>  $students
-     */
-    private function allStudentsAlreadyLinked(Contact $contact, array $students): bool
+    private function alreadyLinked(Contact $contact, int $lmsStudentId): bool
     {
-        $linked = ContactStudent::query()
+        return ContactStudent::query()
             ->where('contact_id', $contact->getKey())
-            ->pluck('lms_student_id')
-            ->all();
-
-        foreach ($students as $student) {
-            if (! in_array((int) $student['lms_student_id'], array_map('intval', $linked), true)) {
-                return false;
-            }
-        }
-
-        return true;
+            ->forStudent($lmsStudentId)
+            ->exists();
     }
 
     /**

@@ -115,9 +115,11 @@ export default function AccountingDashboard({
                 {/*
                   Balances first, then the period figures. A reader scanning
                   left to right gets "what we hold" before "what we made",
-                  which is the order a governor asks in.
+                  which is the order a governor asks in. Three across at
+                  most: six tiles cannot hold a seven-figure peso amount at
+                  a readable size on any laptop-sized viewport.
                 */}
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <StatCard
                         label="Cash balance"
                         value={<Money amount={summary.cash_centavos / 100} />}

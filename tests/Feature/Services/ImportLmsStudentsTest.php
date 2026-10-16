@@ -2,20 +2,24 @@
 
 declare(strict_types=1);
 
-use App\Actions\Contacts\ImportLmsGuardians;
+use App\Actions\Contacts\ImportLmsStudents;
 use App\Models\Pas\Contact;
 use App\Models\Pas\ContactStudent;
 use App\Models\Pas\School;
 use Illuminate\Support\Facades\DB;
 
 /*
- * Importing parents as billing contacts.
+ * Importing students' payers as billing contacts.
+ *
+ * The import walks the student roster — one row per student — but the
+ * contact it creates is the student's parent. Students are who charges are
+ * for; parents are who pays.
  *
  * The property this whole file exists to hold: **one payer, one contact.** A
- * parent with three children gets one contact and three links, never three
- * copies of the same person — because duplicating a payer scatters a family's
- * receivable across several counterparties, breaks their statement, and counts
- * them repeatedly in Aged Receivables.
+ * parent with three children appears on three rows and gets one contact and
+ * three links, never three copies of the same person — because duplicating a
+ * payer scatters a family's receivable across several counterparties, breaks
+ * their statement, and counts them repeatedly in Aged Receivables.
  *
  * The live LMS cannot exercise any of this: it holds one student and one
  * parent, so the sibling case is unreachable. These tests run against the
@@ -53,7 +57,7 @@ function lmsGuardian(int $id, array $overrides = []): void
     ]);
 }
 
-function lmsStudent(int $id, int $parentId, string $name): void
+function lmsStudent(int $id, ?int $parentId, string $name): void
 {
     DB::connection('lms')->table('sm_students')->insert([
         'id' => $id,
@@ -64,28 +68,34 @@ function lmsStudent(int $id, int $parentId, string $name): void
     ]);
 }
 
-function importer(): ImportLmsGuardians
+function importer(): ImportLmsStudents
 {
-    return app(ImportLmsGuardians::class);
+    return app(ImportLmsStudents::class);
 }
 
 /* ── The rule ───────────────────────────────────────────────────────── */
 
-it('gives siblings one contact and two links, not two contacts', function (): void {
+it('gives siblings two rows, one contact and two links, not two contacts', function (): void {
     lmsGuardian(29);
     lmsStudent(1, 29, 'Francesca Inez');
     lmsStudent(2, 29, 'Mateo Inez');
 
     $rows = importer()->preview();
 
-    // Considered once, with both children beneath.
-    expect($rows)->toHaveCount(1)
-        ->and($rows[0]['students'])->toHaveCount(2)
-        ->and($rows[0]['action'])->toBe(ImportLmsGuardians::ACTION_CREATE);
+    // One row per student, both pointing at the same payer.
+    expect($rows)->toHaveCount(2)
+        ->and($rows[0]['student_name'])->toBe('Francesca Inez')
+        ->and($rows[1]['student_name'])->toBe('Mateo Inez')
+        ->and($rows[0]['lms_parent_id'])->toBe(29)
+        ->and($rows[1]['lms_parent_id'])->toBe(29)
+        ->and($rows[0]['action'])->toBe(ImportLmsStudents::ACTION_CREATE)
+        ->and($rows[1]['action'])->toBe(ImportLmsStudents::ACTION_CREATE);
 
     $result = importer()->apply($rows);
 
+    // The second row found the contact the first row created.
     expect($result['contacts_created'])->toBe(1)
+        ->and($result['contacts_linked'])->toBe(0)
         ->and($result['students_linked'])->toBe(2)
         ->and(Contact::query()->count())->toBe(1)
         ->and(ContactStudent::query()->count())->toBe(2);
@@ -100,11 +110,13 @@ it('merges two parent rows that are plainly the same person', function (): void 
     lmsStudent(1, 29, 'Francesca Inez');
     lmsStudent(2, 30, 'Mateo Inez');
 
-    importer()->apply(importer()->preview());
+    $result = importer()->apply(importer()->preview());
 
-    expect(Contact::query()->count())->toBe(1)
+    expect($result['contacts_created'])->toBe(1)
+        ->and($result['contacts_linked'])->toBe(0)
+        ->and(Contact::query()->count())->toBe(1)
         ->and(ContactStudent::query()->count())->toBe(2)
-        // The second row claimed the pointer, so the next run matches on the
+        // The first row claimed the pointer, so the next run matches on the
         // certain key rather than the heuristic.
         ->and(Contact::query()->sole()->lms_parent_id)->toBe(29);
 });
@@ -125,6 +137,23 @@ it('marks the first payer primary and leaves a second one as a sponsor', functio
         ->and($link->is_primary_payer)->toBeTrue();
 });
 
+it('counts an existing contact as linked once however many children it has', function (): void {
+    lmsGuardian(29);
+    lmsStudent(1, 29, 'Francesca Inez');
+    importer()->apply(importer()->preview());
+
+    lmsStudent(2, 29, 'Mateo Inez');
+    lmsStudent(3, 29, 'Sofia Inez');
+
+    $result = importer()->apply(importer()->preview());
+
+    expect($result['contacts_created'])->toBe(0)
+        ->and($result['contacts_linked'])->toBe(1)
+        ->and($result['students_linked'])->toBe(2)
+        ->and(Contact::query()->count())->toBe(1)
+        ->and(ContactStudent::query()->count())->toBe(3);
+});
+
 /* ── Idempotency ────────────────────────────────────────────────────── */
 
 it('changes nothing when run twice', function (): void {
@@ -135,11 +164,14 @@ it('changes nothing when run twice', function (): void {
 
     $second = importer()->preview();
 
-    expect($second[0]['action'])->toBe(ImportLmsGuardians::ACTION_UNCHANGED);
+    expect($second)->toHaveCount(1)
+        ->and($second[0]['action'])->toBe(ImportLmsStudents::ACTION_UNCHANGED)
+        ->and($second[0]['existing_contact_name'])->toBe('Zachary Roy');
 
     $result = importer()->apply($second);
 
     expect($result['contacts_created'])->toBe(0)
+        ->and($result['contacts_linked'])->toBe(0)
         ->and($result['students_linked'])->toBe(0)
         ->and(Contact::query()->count())->toBe(1)
         ->and(ContactStudent::query()->count())->toBe(1);
@@ -153,11 +185,20 @@ it('links a newly enrolled sibling to the payer who already exists', function ()
     lmsStudent(2, 29, 'Mateo Inez');
 
     $rows = importer()->preview();
-    expect($rows[0]['action'])->toBe(ImportLmsGuardians::ACTION_LINK);
 
-    importer()->apply($rows);
+    expect($rows)->toHaveCount(2)
+        ->and($rows[0]['student_name'])->toBe('Francesca Inez')
+        ->and($rows[0]['action'])->toBe(ImportLmsStudents::ACTION_UNCHANGED)
+        ->and($rows[1]['student_name'])->toBe('Mateo Inez')
+        ->and($rows[1]['action'])->toBe(ImportLmsStudents::ACTION_LINK)
+        ->and($rows[1]['existing_contact_id'])->toBe(Contact::query()->sole()->getKey());
 
-    expect(Contact::query()->count())->toBe(1)
+    $result = importer()->apply($rows);
+
+    expect($result['contacts_created'])->toBe(0)
+        ->and($result['contacts_linked'])->toBe(1)
+        ->and($result['students_linked'])->toBe(1)
+        ->and(Contact::query()->count())->toBe(1)
         ->and(ContactStudent::query()->count())->toBe(2);
 });
 
@@ -175,7 +216,8 @@ it('refuses to guess when two contacts already share an email', function (): voi
     // Merging the wrong two people into one payer is far harder to unpick
     // than importing nothing and saying why.
     expect($rows[0]['errors'])->not->toBeEmpty()
-        ->and($rows[0]['errors'][0])->toContain('share the email');
+        ->and($rows[0]['errors'][0])->toContain('share the email')
+        ->and($rows[0]['action'])->toBe(ImportLmsStudents::ACTION_UNCHANGED);
 
     importer()->apply($rows);
 
@@ -193,17 +235,49 @@ it('refuses a parent record with no name to bill', function (): void {
 
     $rows = importer()->preview();
 
-    expect($rows[0]['errors'][0])->toContain('nobody to bill');
+    expect($rows[0]['errors'][0])->toContain('nobody to bill')
+        ->and($rows[0]['payer_name'])->toBeNull();
 
     importer()->apply($rows);
 
     expect(Contact::query()->count())->toBe(0);
 });
 
-it('skips a student whose parent record has gone', function (): void {
+it('shows a student whose parent record has gone and refuses the row', function (): void {
     lmsStudent(1, 999, 'Orphaned Row');
 
-    expect(importer()->preview())->toBeEmpty();
+    $rows = importer()->preview();
+
+    // Visible rather than silently dropped: the person confirming the import
+    // should see that this student has nobody to bill.
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['student_name'])->toBe('Orphaned Row')
+        ->and($rows[0]['lms_parent_id'])->toBe(999)
+        ->and($rows[0]['payer_name'])->toBeNull()
+        ->and($rows[0]['action'])->toBe(ImportLmsStudents::ACTION_UNCHANGED)
+        ->and($rows[0]['errors'][0])->toContain('No parent or guardian record');
+
+    $result = importer()->apply($rows);
+
+    expect($result['contacts_created'])->toBe(0)
+        ->and($result['students_linked'])->toBe(0)
+        ->and(Contact::query()->count())->toBe(0)
+        ->and(ContactStudent::query()->count())->toBe(0);
+});
+
+it('shows a student with no parent pointer at all and refuses the row', function (): void {
+    lmsStudent(1, null, 'Unattached Row');
+
+    $rows = importer()->preview();
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['lms_parent_id'])->toBeNull()
+        ->and($rows[0]['action'])->toBe(ImportLmsStudents::ACTION_UNCHANGED)
+        ->and($rows[0]['errors'][0])->toContain('No parent or guardian record');
+
+    importer()->apply($rows);
+
+    expect(Contact::query()->count())->toBe(0);
 });
 
 it('ignores inactive students', function (): void {
@@ -219,7 +293,7 @@ it('ignores inactive students', function (): void {
 it('never links one school\'s student to another school\'s contact', function (): void {
     $other = School::factory()->create(['slug' => 'other', 'domain' => null]);
 
-    // The same LMS ids exist in every tenant database — student 29 is in both
+    // The same LMS ids exist in every tenant database — parent 29 is in both
     // — so a contact carrying lms_parent_id 29 for another school must not be
     // matched here.
     Contact::query()->create([
@@ -251,7 +325,24 @@ it('carries the billing details across', function (): void {
     ]);
     lmsStudent(1, 29, 'Francesca Inez');
 
-    importer()->apply(importer()->preview());
+    $rows = importer()->preview();
+
+    expect($rows[0])->toMatchArray([
+        'lms_student_id' => 1,
+        'student_name' => 'Francesca Inez',
+        'lms_parent_id' => 29,
+        'payer_name' => 'Zachary Roy',
+        'payer_email' => 'zach@example.test',
+        'payer_phone' => '+63 917 111 2222',
+        'payer_address' => '12 Mabini St, Cebu',
+        'relationship' => 'Father',
+        'existing_contact_id' => null,
+        'existing_contact_name' => null,
+        'action' => ImportLmsStudents::ACTION_CREATE,
+        'errors' => [],
+    ]);
+
+    importer()->apply($rows);
 
     $contact = Contact::query()->sole();
 
